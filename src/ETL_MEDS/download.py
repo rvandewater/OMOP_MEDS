@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from OmegaConf import DictConfig
+from omegaconf import DictConfig
 
 from .commands import run_command
 

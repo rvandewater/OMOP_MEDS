@@ -31,7 +31,6 @@ def run_command(
         >>> run_command(["echo", "hello"], runner_fn=fake_shell_succeed)
         echo hello
         >>> run_command(["echo", "hello"], runner_fn=fake_shell_fail)
-        echo hello
         Traceback (most recent call last):
             ...
         ValueError: Command failed with return code 1.
@@ -52,9 +51,9 @@ def run_command(
         do_profile = False
         seed = None
     else:
-        do_overwrite = cfg.get(do_overwrite, None)
-        do_profile = cfg.get(do_profile, False)
-        seed = cfg.get(seed, None)
+        do_overwrite = cfg.get("do_overwrite", None)
+        do_profile = cfg.get("do_profile", False)
+        seed = cfg.get("seed", None)
 
     if do_overwrite is not None:
         command_parts.append(f"do_overwrite={do_overwrite}")
