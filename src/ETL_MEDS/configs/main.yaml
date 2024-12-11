@@ -1,0 +1,12 @@
+defaults:
+  - self
+
+raw_input_dir: ???
+pre_MEDS_dir: ???
+MEDS_cohort_dir: ???
+
+stage_runner_fp: null
+
+do_download: True
+do_overwrite: False
+do_demo: False
