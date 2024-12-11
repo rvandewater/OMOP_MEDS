@@ -1,5 +1,5 @@
 defaults:
-  - self
+  - _self_
 
 raw_input_dir: ???
 pre_MEDS_dir: ???
