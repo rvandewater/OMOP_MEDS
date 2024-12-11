@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 import logging
+import os
 from pathlib import Path
 
 import hydra
-import os
 from omegaconf import DictConfig
 
 from . import ETL_CFG, EVENT_CFG, HAS_PRE_MEDS, MAIN_CFG, PRE_MEDS_PY, RUNNER_CFG
@@ -27,8 +27,12 @@ def main(cfg: DictConfig):
 
     # Step 0: Data downloading
     if cfg.do_download:  # pragma: no cover
-        logger.info("Downloading data.")
-        download_data(raw_input_dir, dataset_info)
+        if cfg.get("do_demo", False):
+            logger.info("Downloading demo data.")
+            download_data(raw_input_dir, dataset_info, do_demo=True)
+        else:
+            logger.info("Downloading data.")
+            download_data(raw_input_dir, dataset_info)
     else:  # pragma: no cover
         logger.info("Skipping data download.")
 
