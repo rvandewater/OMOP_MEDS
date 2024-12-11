@@ -3,7 +3,7 @@ output_dir: ???
 
 do_overwrite: false
 
-log_dir: ${cohort_dir}/.logs
+log_dir: ${output_dir}/.logs
 
 # Hydra
 hydra:
