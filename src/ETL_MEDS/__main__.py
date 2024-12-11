@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import hydra
+import os
 from omegaconf import DictConfig
 
 from . import ETL_CFG, EVENT_CFG, HAS_PRE_MEDS, MAIN_CFG, PRE_MEDS_PY, RUNNER_CFG
@@ -62,6 +63,9 @@ def main(cfg: DictConfig):
             f"pipeline_config_fp={str(ETL_CFG.resolve())}",
         ]
     )
+    if int(os.getenv("N_WORKERS", 1)) <= 1:
+        logger.info("Running in serial mode as N_WORKERS is not set.")
+        command_parts.append("~parallelize")
 
     if stage_runner_fp:
         command_parts.append(f"stage_runner_fp={stage_runner_fp}")
