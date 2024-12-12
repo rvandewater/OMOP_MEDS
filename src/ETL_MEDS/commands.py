@@ -56,9 +56,9 @@ def run_command(
         seed = cfg.get("seed", None)
 
     if do_overwrite is not None:
-        command_parts.append(f"do_overwrite={do_overwrite}")
+        command_parts.append(f"++do_overwrite={do_overwrite}")
     if seed is not None:
-        command_parts.append(f"seed={seed}")
+        command_parts.append(f"++seed={seed}")
     if do_profile:
         command_parts.append("++hydra.callbacks.profiler._target_=hydra_profiler.profiler.ProfilerCallback")
 
