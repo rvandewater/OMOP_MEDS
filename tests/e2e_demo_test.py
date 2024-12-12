@@ -8,19 +8,13 @@ def test_e2e():
 
         root = Path(temp_dir)
 
-        raw_input_dir = root / "raw_input_dir"
-        pre_MEDS_dir = root / "pre_MEDS_dir"
-        MEDS_cohort_dir = root / "MEDS_cohort_dir"
-
         do_overwrite = True
         do_demo = True
         do_download = True
 
         command_parts = [
             "MEDS_extract-sample_dataset",
-            f"raw_input_dir={str(raw_input_dir.resolve())}",
-            f"pre_MEDS_dir={str(pre_MEDS_dir.resolve())}",
-            f"MEDS_cohort_dir={str(MEDS_cohort_dir.resolve())}",
+            f"root_output_dir={str(root.resolve())}",
             f"do_download={do_download}",
             f"do_overwrite={do_overwrite}",
             f"do_demo={do_demo}",
