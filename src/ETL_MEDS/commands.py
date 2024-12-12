@@ -35,15 +35,15 @@ def run_command(
             ...
         ValueError: Command failed with return code 1.
         >>> run_command(["hello"], cfg={"do_overwrite": True}, runner_fn=fake_shell_succeed)
-        hello do_overwrite=True
+        hello ++do_overwrite=True
         >>> run_command(["hello"], cfg={"do_overwrite": False}, runner_fn=fake_shell_succeed)
-        hello do_overwrite=False
+        hello ++do_overwrite=False
         >>> run_command(["hello"], cfg={"do_profile": True}, runner_fn=fake_shell_succeed)
         hello ++hydra.callbacks.profiler._target_=hydra_profiler.profiler.ProfilerCallback
         >>> run_command(["hello"], cfg={"do_profile": False}, runner_fn=fake_shell_succeed)
         hello
         >>> run_command(["hello"], cfg={"seed": 42}, runner_fn=fake_shell_succeed)
-        hello seed=42
+        hello ++seed=42
     """
 
     if cfg is None:
