@@ -75,4 +75,4 @@ Insert badges like below:
     versions effectively!
 
 Example trusted publisher set-up:
-![PyPI Trusted Publisher](<>)
+![PyPI Trusted Publisher](https://github.com/mmcdermott/ETL_MEDS_Template/blob/main/static/pypi_trusted_publisher_example.png?raw=true)
