@@ -13,7 +13,7 @@ def test_e2e():
         do_download = True
 
         command_parts = [
-            "MEDS_extract-sample_dataset",
+            "MEDS_extract-MIMIC_IV",
             f"root_output_dir={str(root.resolve())}",
             f"do_download={do_download}",
             f"do_overwrite={do_overwrite}",
@@ -26,8 +26,28 @@ def test_e2e():
         stderr = command_out.stderr.decode()
         stdout = command_out.stdout.decode()
 
-        if command_out.returncode != 0:
-            print(f"Command failed with return code {command_out.returncode}.")
-            print(f"Command stdout:\n{stdout}")
-            print(f"Command stderr:\n{stderr}")
-            raise ValueError(f"Command failed with return code {command_out.returncode}.")
+        err_message = (
+            f"Command failed with return code {command_out.returncode}.\n"
+            f"Command stdout:\n{stdout}\n"
+            f"Command stderr:\n{stderr}"
+        )
+        assert command_out.returncode == 0, err_message
+
+        data_path = root / "MEDS_cohort" / "data"
+        data_files = list(data_path.glob("*.parquet")) + list(data_path.glob("**/*.parquet"))
+
+        all_files = [x for x in data_path.glob("**/*") if x.is_file()]
+
+        assert len(data_files) > 0, f"No data files found in {data_path}; found {all_files}"
+
+        metadata_path = root / "MEDS_cohort" / "metadata"
+        all_files = [x for x in metadata_path.glob("**/*") if x.is_file()]
+
+        dataset_metadata = metadata_path / "dataset.json"
+        assert dataset_metadata.exists(), f"Dataset metadata not found in {metadata_path}; found {all_files}"
+
+        codes_metadata = metadata_path / "codes.parquet"
+        assert codes_metadata.exists(), f"Codes metadata not found in {metadata_path}; found {all_files}"
+
+        subject_splits = metadata_path / "subject_splits.parquet"
+        assert subject_splits.exists(), f"Subject splits not found in {metadata_path}; found {all_files}"
