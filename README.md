@@ -37,7 +37,7 @@ A template repository for a MEDS-Transforms powered extraction pipeline for a cu
 Insert badges like below:
 
 ```markdown
-[![PyPI - Version](https://img.shields.io/pypi/v/REPO_NAME)](https://pypi.org/project/REPO_NAME/)
+[![PyPI - Version](https://img.shields.io/pypi/v/PACKAGE_NAME)](https://pypi.org/project/PACKAGE_NAME/)
 [![Documentation Status](https://readthedocs.org/projects/REPO_NAME/badge/?version=latest)](https://REPO_NAME.readthedocs.io/en/stable/?badge=stable)
 [![codecov](https://codecov.io/gh/mmcdermott/REPO_NAME/graph/badge.svg?token=REPO_TOKEN)](https://codecov.io/gh/mmcdermott/REPO_NAME)
 [![tests](https://github.com/mmcdermott/REPO_NAME/actions/workflows/tests.yaml/badge.svg)](https://github.com/mmcdermott/REPO_NAME/actions/workflows/tests.yml)
@@ -48,7 +48,7 @@ Insert badges like below:
 [![contributors](https://img.shields.io/github/contributors/mmcdermott/REPO_NAME.svg)](https://github.com/mmcdermott/REPO_NAME/graphs/contributors)
 ```
 
-### Other stuff
+#### `pyproject.toml`
 
 ### External Services
 
@@ -62,3 +62,17 @@ Insert badges like below:
     of the README, in place of the default link included above.
 4. It will now track the test coverage of your ETL, including running the full pipeline against the linked
     demo data you provide in `dataset.yaml`.
+
+#### PyPI
+
+1. Go to [PyPI](https://pypi.org/) and add make an account or log-in as needed.
+2. Go to your account settings and go to the "Publishing" settings.
+3. Set up a new "Trusted Publisher" for your GitHub Repository (e.g., see the image below). Ensure your
+    package name matches in the trusted publisher and in your `pyproject.toml` file!
+4. Now, if, on the local command line, you run `git tag 0.0.1`, then `git push origin 0.0.1`, it will push a
+    new, tagged version of your code as of the local commit when you ran the command both to a new GitHub
+    Release and to PyPI. This will allow you to install your package via `pip install PACKAGE_NAME` and to manage
+    versions effectively!
+
+Example trusted publisher set-up:
+![PyPI Trusted Publisher](<>)
