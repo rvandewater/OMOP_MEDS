@@ -46,11 +46,57 @@ In the `pyproject.toml` file, you will need to update the following fields:
     - `Homepage = "..."` Update the homepage to the URL of your GitHub repository.
     - `Issues = "..."` Update the issues URL to the URL of your GitHub repository issues page.
 
-#### `dataset.yaml`
+#### `src/.../dataset.yaml`
+
+In this file, you can add details about the dataset you are working with. This will be used to record metadata
+about the dataset and to provide links from which the dataset can be downloaded. You'll need to modify:
+
+1. `dataset_name`: The name of the dataset.
+2. `raw_dataset_version`: The version this version of your pipeline is designed to work with.
+3. `urls`: This block contains the URLs from which the dataset can be downloaded. This field requires
+    additional commentary, explored below.
+
+##### URLs:
+
+This field is an object and contains three sub-keys:
+
+1. `dataset`: The URLs for the full dataset.
+2. `demo`: The URLs for a smaller, open, demo version of the dataset.
+3. `common`: The URLs for shared metadata files or other shared resources.
+
+Each of these sub-keys should be a list of either strings (plain URLs) or dictionaries containing the URL (in
+the key `url`) and username and password authentication information (in the keys `username` and `password`).
+Note that we _strongly_ recommend that you _do not_ include your username and password in the raw file.
+Instead, leverage the OmegaConf resolvers to reference external environment variables or other secure methods
+of storing this information. In the example in this repository, we include one URL with the following
+configuration:
+
+```yaml
+  - url: EXAMPLE_CONTROLLED_URL
+    username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
+    password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
+```
+
+which would resolve to fill in the `username` and `password` from the environment variables
+`DATASET_DOWNLOAD_USERNAME` and `DATASET_DOWNLOAD_PASSWORD`, respectively.
 
 #### `pre_MEDS.py`
 
+This script should be generally modified to include any "pre-MEDS" steps that are necessary to prepare the
+dataset for MEDS-Transforms based extraction. Critically, these steps often include:
+
+1. De-compressing files or otherwise preparing the raw data for extraction at a technical level.
+2. Joining tables together so that all relevant rows include the unifying `subject_id`.
+3. Converting any offsets into timestamps.
+4. Any other modifications of interest.
+
+See [MEDS-Transforms](TODO) for more documentation on the appropriate construction of the pre-MEDS script.
+
 #### `event_configs.yaml`
+
+This file is the configuration file for mapping the rows in your various raw data tables to MEDS events via
+the MEDS-Transforms pipeline. See [MEDS-Transforms](TODO) for more documentation on the format and usage of
+this file.
 
 #### `README.md`
 
@@ -67,8 +113,6 @@ Insert badges like below:
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mmcdermott/REPO_NAME/pulls)
 [![contributors](https://img.shields.io/github/contributors/mmcdermott/REPO_NAME.svg)](https://github.com/mmcdermott/REPO_NAME/graphs/contributors)
 ```
-
-#### `pyproject.toml`
 
 ### External Services
 
