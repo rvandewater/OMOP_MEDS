@@ -13,9 +13,15 @@ A template repository for a MEDS-Transforms powered extraction pipeline for a cu
 ## How to use this repository
 
 1. Initialize a new repository using this template repository.
-2. Customize the following code points:
+2. Rename the directory after `src/` to the name of your package in python-friendly format (e.g.,
+    `MIMIC_IV_MEDS`).
+3. Customize the following code points:
 
-- [`src/.../dataset.yaml`](todo)
+- [`pyproject.toml`](#pyprojecttoml)
+- [`src/.../dataset.yaml`](#datasetyaml)
+- [`src/.../pre_MEDS.py`](#pre_medspy)
+- [`src/.../event_configs.yaml`](#event_configsyaml)
+- [`README.md`](#readmemd)
 
 1. Customize the following external services:
 
@@ -24,13 +30,35 @@ A template repository for a MEDS-Transforms powered extraction pipeline for a cu
 
 ### Code Points:
 
-#### `dataset.yaml`
+#### `pyproject.toml`
 
-#### `event_configs.yaml`
+In the `pyproject.toml` file, you will need to update the following fields:
+
+1. Under `[project]`:
+
+- `name = "ETL-MEDS"`: Update `ETL-MEDS` to the name of your package (e.g., `MIMIC-IV-MEDS`)
+- `authors = [...]`: Update the author information to your name and email.
+- `description = "..."`: Update the description to a brief description of your dataset.
+- `dependencies = [...]`: Update the dependencies to include the necessary packages for your ETL pipeline
+    (if any additional packages are needed).
+
+1. Under `[project.scripts]`
+
+- `MEDS_extract-sample_dataset = "ETL_MEDS.__main__:main"`: Update `MEDS_extract-sample_dataset` to the
+    name of your command-line pipeline (e.g., `MIMIC-IV_extract`) and update `ETL_MEDS` to the name of your
+    package that you would import in python (e.g., `MIMIC_IV_MEDS`). This will be the same as the directory
+    name between `src` and your actual code.
+
+1. Under `[project.urls]`
+
+- `Homepage = "..."` Update the homepage to the URL of your GitHub repository.
+- `Issues = "..."` Update the issues URL to the URL of your GitHub repository issues page.
+
+#### `dataset.yaml`
 
 #### `pre_MEDS.py`
 
-#### `download`
+#### `event_configs.yaml`
 
 #### `README.md`
 

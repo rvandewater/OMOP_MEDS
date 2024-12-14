@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "setuptools-scm>=8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ETL_MEDS"
+name = "ETL-MEDS"
 dynamic = ["version"]
 authors = [
   { name="Matthew McDermott", email="mattmcdermott8@gmail.com" },
