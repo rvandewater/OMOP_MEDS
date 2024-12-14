@@ -2,13 +2,12 @@ dataset_name: ???
 raw_dataset_version: ???
 dataset_description: ???
 
-dataset_download_username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
-
 urls:
   dataset:
     - EXAMPLE_OPEN_URL
     - url: EXAMPLE_CONTROLLED_URL
       username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
+      password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
   demo:
     - EXAMPLE_OPEN_URL
   common:

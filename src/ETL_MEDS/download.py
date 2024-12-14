@@ -1,8 +1,59 @@
+import logging
+import os
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
+import requests
+from bs4 import BeautifulSoup
 from omegaconf import DictConfig
 
 from .commands import run_command
+
+logger = logging.getLogger(__name__)
+
+
+def download_file(url, output_dir, session):
+    """Download a single file."""
+    response = session.get(url, stream=True)
+    if response.status_code != 200:
+        logger.error(f"Failed to download {url} in streaming download_file get: {response.status_code}")
+    response.raise_for_status()
+
+    parsed_url = urlparse(url)
+    filename = os.path.basename(parsed_url.path) or "index.html"
+    file_path = Path(output_dir) / filename
+
+    with open(file_path, "wb") as file:
+        for chunk in response.iter_content(chunk_size=8192):
+            file.write(chunk)
+    print(f"Downloaded: {file_path}")
+
+
+def crawl_and_download(base_url, output_dir, session):
+    """Recursively crawl and download files."""
+
+    if not base_url.endswith("/"):
+        download_file(base_url, output_dir, session)
+
+    response = session.get(base_url)
+
+    if response.status_code != 200:
+        logger.error(f"Failed to download {base_url} in initial get: {response.status_code}")
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
+        full_url = urljoin(base_url, href)
+        if not full_url.startswith(base_url):
+            continue
+
+        if full_url.endswith("/"):  # It's a directory
+            subdir = Path(output_dir) / href.strip("/")
+            subdir.mkdir(parents=True, exist_ok=True)
+            crawl_and_download(full_url, subdir, session)
+        else:
+            download_file(full_url, output_dir, session)
 
 
 def download_data(
@@ -46,7 +97,10 @@ def download_data(
         ValueError: Failed to download data from http://example.com/dataset
         >>> cfg = DictConfig({"urls": {"dataset": [{"url": "http://example.com/data", "username": "foo"}]}})
         >>> download_data(Path("data_out"), cfg, runner_fn=fake_shell_succeed)
-        wget -r -N -c -np -nH --directory-prefix data_out --user foo --ask-password http://example.com/data
+        wget -r -N -c -np -nH --directory-prefix data_out --user 'foo' http://example.com/data
+        >>> cfg = DictConfig({"urls": {"dataset": [{"url": "http://example.com/data", "password": "bar"}]}})
+        >>> download_data(Path("data_out"), cfg, runner_fn=fake_shell_succeed)
+        wget -r -N -c -np -nH --directory-prefix data_out --password 'bar' http://example.com/data
     """
 
     if do_demo:
@@ -54,26 +108,27 @@ def download_data(
     else:
         urls = dataset_info.urls.get("dataset", [])
 
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
     urls += dataset_info.urls.get("common", [])
 
     for url in urls:
+        session = requests.Session()
+
         if isinstance(url, (dict, DictConfig)):
             username = url.get("username", None)
+            password = url.get("password", None)
+            logger.info(f"Authenticating for {username}")
+            session.auth = (username, password)
+            session.headers.update(
+                {
+                    "User-Agent": "Wget/1.21.1 (linux-gnu)",
+                }
+            )
+
             url = url.url
-        else:
-            username = None
-
-        command_parts = ["wget -r -N -c -np -nH --directory-prefix", f"{output_dir}"]
-
-        url_parts = url[url.find("://") + 3 :].split("/")[1:]
-        if len(url_parts) > 1:
-            command_parts.append(f"--cut-dirs {len(url_parts) - 1}")
-
-        if username:
-            command_parts.append(f"--user {username} --ask-password")
-        command_parts.append(url)
 
         try:
-            runner_fn(command_parts)
+            crawl_and_download(url, output_dir, session)
         except ValueError as e:
             raise ValueError(f"Failed to download data from {url}") from e
