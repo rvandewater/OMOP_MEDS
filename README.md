@@ -80,6 +80,15 @@ configuration:
 which would resolve to fill in the `username` and `password` from the environment variables
 `DATASET_DOWNLOAD_USERNAME` and `DATASET_DOWNLOAD_PASSWORD`, respectively.
 
+###### What if my dataset doesn't support direct download/this style of downloading?
+
+That's no problem! You can simply turn off downloading entirely by setting `do_download=False` in the
+`configs/main.yaml` or on the command line when you run the pipeline and ensure that your data files are
+manually downloaded and placed in the appropriate directory (the `raw_input_dir` in the `configs/main.yaml`).
+If there is a technical issue with downloading the data through the format supported so far, you can also file
+a [GitHub Issue](https://github.com/mmcdermott/ETL_MEDS_Template/issues) outlining your issue and we can
+attempt to expand the supported libraries to cover your use case!
+
 #### `pre_MEDS.py`
 
 This script should be generally modified to include any "pre-MEDS" steps that are necessary to prepare the
