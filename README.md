@@ -8,7 +8,17 @@
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mmcdermott/ETL_MEDS_Template/pulls)
 [![contributors](https://img.shields.io/github/contributors/mmcdermott/ETL_MEDS_Template.svg)](https://github.com/mmcdermott/ETL_MEDS_Template/graphs/contributors)
 
-A template repository for a MEDS-Transforms powered extraction pipeline for a custom dataset.
+A template repository for a MEDS-Transforms powered extraction pipeline for a custom dataset. Once you have
+customized the repository to your dataset (see instructions below), you will be able to run your extraction
+pipeline with a few simple command-line commands, such as:
+
+```bash
+pip install PACKAGE_NAME # you can do this locally or via PyPI
+# Download your data or set download credentials
+COMMAND_NAME root_output_dir=$ROOT_OUTPUT_DIR
+```
+
+See the [MIMIC-IV MEDS Extraction ETL](https://github.com/mmcdermott/MIMIC_IV_MEDS) for an end to end example!
 
 ## How to use this repository
 
