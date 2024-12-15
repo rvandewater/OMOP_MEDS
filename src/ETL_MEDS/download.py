@@ -42,18 +42,23 @@ class MockSession:  # pragma: no cover
         self.return_contents = return_contents
         self.expect_url = expect_url
         self.headers = {}
+        self.auth = None
 
     def get(self, url: str, stream: bool = False):
         if self.expect_url is not None and url != self.expect_url:
             raise ValueError(f"Expected URL {self.expect_url}, got {url}")
         if isinstance(self.return_status, dict):
-            assert url in self.return_status
-            status = self.return_status[url]
+            if url in self.return_status:
+                status = self.return_status[url]
+            else:
+                status = 404
         else:
             status = self.return_status
         if isinstance(self.return_contents, dict):
-            assert url in self.return_contents
-            contents = self.return_contents[url]
+            if url in self.return_contents:
+                contents = self.return_contents[url]
+            else:
+                status = 404
         else:
             contents = self.return_contents
         return MockResponse(status_code=status, contents=contents)
@@ -92,12 +97,15 @@ def download_file(url: str, output_dir: Path, session: requests.Session):
         ...     download_file("http://example.com", Path(tmpdir), MockSession(return_status=404))
         Traceback (most recent call last):
             ...
-        requests.exceptions.HTTPError: 404
+        ValueError: Failed to download http://example.com
     """
-    response = session.get(url, stream=True)
-    if response.status_code != 200:
-        logger.error(f"Failed to download {url} in streaming download_file get: {response.status_code}")
-    response.raise_for_status()
+    try:
+        response = session.get(url, stream=True)
+        if response.status_code != 200:
+            logger.error(f"Failed to download {url} in streaming download_file get: {response.status_code}")
+        response.raise_for_status()
+    except Exception as e:
+        raise ValueError(f"Failed to download {url}") from e
 
     parsed_url = urlparse(url)
     filename = os.path.basename(parsed_url.path) or "index.html"
@@ -126,6 +134,7 @@ def crawl_and_download(base_url: str, output_dir: Path, session: requests.Sessio
         ...     "http://example.com/": (
         ...         "<a href='http://example.com/foo.csv'>foo</a>"
         ...         "<a href='bar/'>bar</a>"
+        ...         "<a href='http://example.com/bur/wor.csv'>bur/wor</a>"
         ...         "<div>hello world</div>"
         ...         "<a href='http://example3.com/not_captured.csv'>baz</a>"
         ...     ),
@@ -136,26 +145,31 @@ def crawl_and_download(base_url: str, output_dir: Path, session: requests.Sessio
         ...     ),
         ...     "http://example.com/bar/baz.csv": "7,8,9",
         ...     "http://example.com/bar/qux.csv": "10,11,12",
+        ...     "http://example.com/bur/wor.csv": "13,14,15",
         ... }
         >>> mock_session = MockSession(return_contents=pages)
         >>> with tempfile.TemporaryDirectory() as tmpdir:
         ...     tmpdir = Path(tmpdir)
         ...     crawl_and_download("http://example.com/", tmpdir, mock_session)
-        ...     got = list(Path(tmpdir).rglob("*.*"))
-        ...     assert len(got) == 3, f"want 3 files, got {[f.relative_to(tmpdir) for f in got]}"
-        ...     assert (Path(tmpdir) / "foo.csv").read_text() == "1,2,3,4,5,6", "foo.csv check"
-        ...     assert (Path(tmpdir) / "bar" / "baz.csv").read_text() == "7,8,9", "bar/baz.csv check"
-        ...     assert (Path(tmpdir) / "bar" / "qux.csv").read_text() == "10,11,12", "bar/qux.csv check"
+        ...     got = {str(f.relative_to(tmpdir)) for f in tmpdir.rglob("*.*")}
+        ...     want = {"foo.csv", "bar/baz.csv", "bar/qux.csv", "bur/wor.csv"}
+        ...     assert got == want, f"want {want}, got {got}"
+        ...     assert (tmpdir / "foo.csv").read_text() == "1,2,3,4,5,6", "foo.csv check"
+        ...     assert (tmpdir / "bar" / "baz.csv").read_text() == "7,8,9", "bar/baz.csv check"
+        ...     assert (tmpdir / "bar" / "qux.csv").read_text() == "10,11,12", "bar/qux.csv check"
+        ...     assert (tmpdir / "bur" / "wor.csv").read_text() == "13,14,15", "bur/wor.csv check"
     """
 
     if not base_url.endswith("/"):
         download_file(base_url, output_dir, session)
 
-    response = session.get(base_url)
-
-    if response.status_code != 200:
-        logger.error(f"Failed to download {base_url} in initial get: {response.status_code}")
-    response.raise_for_status()
+    try:
+        response = session.get(base_url)
+        if response.status_code != 200:
+            logger.error(f"Failed to download {base_url} in initial get: {response.status_code}")
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        raise ValueError(f"Failed to download data from {base_url}") from e
 
     soup = BeautifulSoup(response.text, "html.parser")
     for link in soup.find_all("a", href=True):
@@ -169,7 +183,10 @@ def crawl_and_download(base_url: str, output_dir: Path, session: requests.Sessio
             subdir.mkdir(parents=True, exist_ok=True)
             crawl_and_download(full_url, subdir, session)
         else:
-            download_file(full_url, output_dir, session)
+            filepath = output_dir / full_url.replace(base_url, "")
+            subdir = filepath.parent
+            subdir.mkdir(parents=True, exist_ok=True)
+            download_file(full_url, subdir, session)
 
 
 def download_data(
@@ -194,7 +211,7 @@ def download_data(
         >>> cfg = DictConfig({
         ...     "urls": {
         ...         "demo": ["http://example.com/demo.csv"],
-        ...         "dataset": ["http://example.com/dataset.csv"],
+        ...         "dataset": ["http://example.com/dataset/"],
         ...         "common": ["http://example.com/common.csv"],
         ...     }
         ... })
@@ -204,10 +221,57 @@ def download_data(
         >>> with tempfile.TemporaryDirectory() as tmpdir:
         ...     tmpdir = Path(tmpdir)
         ...     download_data(tmpdir, cfg, do_demo=True, session_factory=lambda: demo_session)
-        ...     got = list(tmpdir.iterdir())
-        ...     assert len(got) == 2, f"want 2 files, got {[f.relative_to(tmpdir) for f in got]}"
+        ...     got = {str(f.relative_to(tmpdir)) for f in tmpdir.rglob("*.*")}
+        ...     assert got == {"demo.csv", "common.csv"}, f"want {'demo.csv', 'common.csv'}, got {got}"
         ...     assert (tmpdir / "demo.csv").read_text() == "demo", "demo.csv check"
         ...     assert (tmpdir / "common.csv").read_text() == "common", "common.csv check"
+        >>> real_session = MockSession(return_contents={
+        ...     "http://example.com/dataset/": "<a href='http://example.com/dataset/foo.csv'>foo</a>",
+        ...     "http://example.com/common.csv": "common",
+        ...     "http://example.com/dataset/foo.csv": "1,2,3,4,5,6",
+        ... })
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     tmpdir = Path(tmpdir)
+        ...     download_data(tmpdir, cfg, do_demo=False, session_factory=lambda: real_session)
+        ...     assert real_session.headers == {}, "Headers check"
+        ...     assert real_session.auth is None, "Auth check"
+        ...     got = {str(f.relative_to(tmpdir)) for f in tmpdir.rglob("*.*")}
+        ...     assert got == {"foo.csv", "common.csv"}, f"want {'foo.csv', 'common.csv'}, got {got}"
+        ...     assert len(got) == 2, f"want 2 files, got {[f.relative_to(tmpdir) for f in got]}"
+        ...     assert (tmpdir / "foo.csv").read_text() == "1,2,3,4,5,6", "foo.csv check"
+        ...     assert (tmpdir / "common.csv").read_text() == "common", "common.csv check"
+        >>> cfg = DictConfig({
+        ...     "urls": {
+        ...         "dataset": [{"url": "http://example.com/dataset/", "username": "u", "password": "p"}],
+        ...     }
+        ... })
+        >>> real_session = MockSession(return_contents={
+        ...     "http://example.com/dataset/": "<a href='http://example.com/dataset/baz/bar.csv' />",
+        ...     "http://example.com/dataset/baz/bar.csv": "1,2,3,4,5,6",
+        ... })
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     tmpdir = Path(tmpdir)
+        ...     download_data(tmpdir, cfg, do_demo=False, session_factory=lambda: real_session)
+        ...     assert real_session.headers["User-Agent"] == "Wget/1.21.1 (linux-gnu)", "User-Agent check"
+        ...     assert real_session.auth == ("u", "p"), "Auth check"
+        ...     got = {str(f.relative_to(tmpdir)) for f in tmpdir.rglob("*.*")}
+        ...     assert got == {"baz/bar.csv"}, f"want {'baz/bar.csv'}, got {got}"
+        ...     assert (tmpdir / "baz/bar.csv").read_text() == "1,2,3,4,5,6", "foo.csv check"
+
+    If the internal download fails, a ValueError is raised:
+        >>> cfg = DictConfig({
+        ...     "urls": {
+        ...         "demo": ["http://example.com/demo.csv"],
+        ...         "dataset": ["http://example.com/dataset/"],
+        ...         "common": ["http://example.com/common.csv"],
+        ...     }
+        ... })
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     tmpdir = Path(tmpdir)
+        ...     download_data(tmpdir, cfg, do_demo=True, session_factory=lambda: real_session)
+        Traceback (most recent call last):
+            ...
+        ValueError: Failed to download data from http://example.com/demo.csv
     """
 
     if do_demo:
