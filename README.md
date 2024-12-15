@@ -21,6 +21,7 @@ A template repository for a MEDS-Transforms powered extraction pipeline for a cu
     - [`src/.../pre_MEDS.py`](#pre_medspy)
     - [`src/.../event_configs.yaml`](#event_configsyaml)
     - [`README.md`](#readmemd)
+    - [`tests/e2e_demo_test.py`](#testse2e_demo_testpy)
 4. Customize the following external services:
     - CodeCov
     - PyPI
@@ -122,6 +123,23 @@ Insert badges like below:
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mmcdermott/REPO_NAME/pulls)
 [![contributors](https://img.shields.io/github/contributors/mmcdermott/REPO_NAME.svg)](https://github.com/mmcdermott/REPO_NAME/graphs/contributors)
 ```
+
+#### `tests/e2e_demo_test.py`
+
+If your dataset does not have an open demo version, you can remove this file, as there is no way to set up
+automated testing of the end-to-end pipeline in a safe manner without a demo dataset.
+
+If you do have a demo dataset, ensure that it is included in your `dataset.yaml` file and update the
+`e2e_demo_test.py` file as follows:
+
+1. Update the command in the `command_parts` variable to match the command you set in your `pyproject.toml`
+    file for the executable for your pipeline (e.g., `MIMIC-IV_extract`).
+2. Remove the `pytest.mark.skip` decorator from the test function so that it runs successfully!
+
+The test file (and the internal doctests, which can help unittest your `pre-MEDS` file) can then be run via
+`pytest --doctest-modules -s` from the root directory to ensure correctness of your pipeline. These tests will
+also be run on pull requests or pushes to the `main` branch of your repository via GitHub Actions, and test
+code coverage will be tracked via CodeCov.
 
 ### External Services
 
