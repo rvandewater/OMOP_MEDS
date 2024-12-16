@@ -27,9 +27,10 @@ See the [MIMIC-IV MEDS Extraction ETL](https://github.com/mmcdermott/MIMIC_IV_ME
     `MIMIC_IV_MEDS`).
 3. Customize the following code points:
     - [`pyproject.toml`](#pyprojecttoml)
-    - [`src/.../dataset.yaml`](#datasetyaml)
-    - [`src/.../pre_MEDS.py`](#pre_medspy)
-    - [`src/.../event_configs.yaml`](#event_configsyaml)
+    - [`src/.../__init__.py`](#srcinitpy)
+    - [`src/.../dataset.yaml`](#srcdatasetyaml)
+    - [`src/.../pre_MEDS.py`](#srcpre_medspy)
+    - [`src/.../event_configs.yaml`](#srcevent_configsyaml)
     - [`README.md`](#readmemd)
     - [`tests/e2e_demo_test.py`](#testse2e_demo_testpy)
 4. Customize the following external services:
@@ -56,6 +57,11 @@ In the `pyproject.toml` file, you will need to update the following fields:
 3. Under `[project.urls]`
     - `Homepage = "..."` Update the homepage to the URL of your GitHub repository.
     - `Issues = "..."` Update the issues URL to the URL of your GitHub repository issues page.
+
+#### `src/.../__init__.py`
+
+In this file, you simply need to update the `__package_name__ = "ETL_MEDS"` line to refer not to `ETL_MEDS`
+but to your new package import name (e.g., `MIMIC_IV_MEDS`)
 
 #### `src/.../dataset.yaml`
 
