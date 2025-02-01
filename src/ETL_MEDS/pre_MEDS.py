@@ -1,20 +1,9 @@
-#!/usr/bin/env python
+"""Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
-"""Performs pre-MEDS data wrangling for MIMIC-IV."""
-
-
-import hydra
-from omegaconf import DictConfig
-
-from . import PRE_MEDS_CFG
+from pathlib import Path
 
 
-@hydra.main(version_base=None, config_path=str(PRE_MEDS_CFG.parent), config_name=PRE_MEDS_CFG.stem)
-def main(cfg: DictConfig):
+def main(input_dir: Path, output_dir: Path, do_overwrite: bool | None = None):
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
-    raise NotImplementedError("Please implement the pre_MEDS.py script for your dataset.")
-
-
-if __name__ == "__main__":
-    main()
+    raise NotImplementedError("Please write the pre_MEDS:main function for your dataset.")  # pragma: no cover
