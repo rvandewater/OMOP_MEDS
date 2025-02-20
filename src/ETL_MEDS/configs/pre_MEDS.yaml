@@ -1,0 +1,23 @@
+# OUTPUT DATA cols should never contain case_id or patient_id
+admission_id: ""
+case_id: ""
+raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
+
+cases:
+  # Column that contains the offset
+  offset_col:
+    [
+      "AdmissionYear",
+    ]
+  # Output column that contains the pseudotime computed from offset
+  pseudotime_col:
+    [
+      "AdmissionYear",
+    ]
+  # Column that contains ID's to concepts
+  reference_col:
+    [
+        "ReferenceOrder",
+    ]
+
+
