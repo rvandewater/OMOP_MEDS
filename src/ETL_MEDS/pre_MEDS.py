@@ -9,16 +9,16 @@ from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig, OmegaConf
 
-from ETL_MEDS import DATASET_CFG, PRE_MEDS_CFG
+from ETL_MEDS import dataset_info, premeds_cfg
 
 # Name of the dataset
-DATASET_NAME = DATASET_CFG.dataset_name
+DATASET_NAME = dataset_info.dataset_name
 # Column name for admission ID associated with this particular admission
-ADMISSION_ID = PRE_MEDS_CFG.admission_id
+ADMISSION_ID = premeds_cfg.admission_id
 # Column name for subject ID
-SUBJECT_ID = PRE_MEDS_CFG.subject_id
+SUBJECT_ID = premeds_cfg.subject_id
 # List of file extensions to be processed
-DATA_FILE_EXTENSIONS = PRE_MEDS_CFG.raw_data_extensions
+DATA_FILE_EXTENSIONS = premeds_cfg.raw_data_extensions
 # List of tables to be ignored during processing
 IGNORE_TABLES = []
 
