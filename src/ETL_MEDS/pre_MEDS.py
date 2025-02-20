@@ -1,11 +1,15 @@
 """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
+
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+
 import polars as pl
 from loguru import logger
-from omegaconf import DictConfig, OmegaConf
-from ETL_MEDS import PRE_MEDS_CFG, DATASET_CFG
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
+from omegaconf import DictConfig, OmegaConf
+
+from ETL_MEDS import DATASET_CFG, PRE_MEDS_CFG
 
 # Name of the dataset
 DATASET_NAME = DATASET_CFG.dataset_name
@@ -17,7 +21,6 @@ SUBJECT_ID = PRE_MEDS_CFG.subject_id
 DATA_FILE_EXTENSIONS = PRE_MEDS_CFG.raw_data_extensions
 # List of tables to be ignored during processing
 IGNORE_TABLES = []
-
 
 
 def get_patient_link(df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
@@ -149,7 +152,7 @@ def join_and_get_pseudotime_fntr(
         # Join the patient table to the data table, INSPIRE only has subject_id as key
         joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
         if len(reference_col) > 0:
-            joined = joined.join(references_df, left_on=reference_col, right_on=)
+            joined = joined.join(references_df, left_on=reference_col, right_on="REPLACE_ME")
         return joined.select(SUBJECT_ID, ADMISSION_ID, *pseudotimes, *output_data_cols)
 
     return fn
@@ -158,6 +161,7 @@ def join_and_get_pseudotime_fntr(
 def load_raw_file(fp: Path) -> pl.LazyFrame:
     """Loads a raw file into a Polars DataFrame."""
     return pl.scan_csv(fp)
+
 
 def main(cfg: DictConfig) -> None:
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""

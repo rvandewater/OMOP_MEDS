@@ -5,19 +5,8 @@ raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
 
 cases:
   # Column that contains the offset
-  offset_col:
-    [
-      "AdmissionYear",
-    ]
+  offset_col: ["REPLACE_ME"]
   # Output column that contains the pseudotime computed from offset
-  pseudotime_col:
-    [
-      "AdmissionYear",
-    ]
+  pseudotime_col: ["REPLACE_ME"]
   # Column that contains ID's to concepts
-  reference_col:
-    [
-        "ReferenceOrder",
-    ]
-
-
+  reference_col: ["REPLACE_ME"]
