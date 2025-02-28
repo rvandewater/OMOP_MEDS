@@ -1,12 +1,69 @@
 # OUTPUT DATA cols should never contain case_id or patient_id
-admission_id: ""
-case_id: ""
-raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
+subject_id: "person_id"
+admission_id: "visit_occurrence_id"
+raw_data_extensions: [ "*.parquet", "*.csv", "*.csv.gz" ]
 
-cases:
-  # Column that contains the offset
-  offset_col: ["REPLACE_ME"]
-  # Output column that contains the pseudotime computed from offset
-  pseudotime_col: ["REPLACE_ME"]
+person:
+  # No offset in OMOP
+  offset_col: [ ]
+  # No pseudotime in OMOP
+  pseudotime_col: [ ]
   # Column that contains ID's to concepts
-  reference_col: ["REPLACE_ME"]
+  reference_col: [ "gender_concept_id", "race_concept_id", "ethnicity_concept_id", ]
+  output_data_cols: [
+    "year_of_birth",
+    "month_of_birth",
+    "day_of_birth",
+    "birth_datetime",
+    "race_concept_id",
+    #    "ethnicity_concept_id",
+    "location_id",
+    "provider_id",
+    "care_site_id",
+    "person_source_value",
+    "gender_source_value",
+    #    "gender_source_concept_id",
+    "race_source_value",
+    #    "race_source_concept_id",
+    "ethnicity_source_value",
+    #    "ethnicity_source_concept_id"
+  ]
+observation:
+  reference_col: ["observation_type_concept_id"]
+  output_data_cols: [
+    "observation_id",
+    "observation_concept_id",
+    "observation_date",
+    "observation_datetime",
+    "observation_type_concept_id",
+    "value_as_number",
+    "value_as_string",
+    "value_as_concept_id",
+    "qualifier_concept_id",
+    "unit_concept_id",
+    "provider_id",
+#    "visit_occurrence_id",
+#    "visit_detail_id",
+    "observation_source_value",
+    "observation_source_concept_id",
+    "unit_source_value",
+    "qualifier_source_value",]
+#TODO: how to handle source
+#concept:
+#  offset_col: [ ]
+#  pseudotime_col: [ ]
+#  reference_col: [ "concept_id" ]
+#  output_data_cols: [
+#    "concept_name",
+#    "domain_id",
+#    "vocabulary_id",
+#    "concept_class_id",
+#    "standard_concept",
+#    "concept_code",
+#    "valid_start_DATE",
+#    "valid_end_DATE",
+#    "invalid_reason", ]
+
+#death:
+#  reference_col: [ "death_type_concept_id", "cause_concept_id", "cause_source_concept_id", "cause_source_value" ]
+#  output_data_cols: [ "death_date", "death_datetime", ]

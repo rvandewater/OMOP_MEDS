@@ -8,7 +8,7 @@ from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig, OmegaConf
 
-from ETL_MEDS import premeds_cfg
+from . import premeds_cfg
 
 from src.OMOP_MEDS.pre_meds_utils import DATASET_NAME, SUBJECT_ID, get_patient_link, join_and_get_pseudotime_fntr, \
     load_raw_file
@@ -25,8 +25,8 @@ IGNORE_TABLES = []
 def main(cfg: DictConfig) -> None:
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
-    logger.info(f"Loading table preprocessors from {PRE_MEDS_CFG}...")
-    preprocessors = OmegaConf.load(PRE_MEDS_CFG)
+    logger.info(f"Loading table preprocessors from {premeds_cfg}...")
+    preprocessors = premeds_cfg #OmegaConf.load(premeds_cfg)
     functions = {}
 
     input_dir = Path(cfg.raw_input_dir)
@@ -47,40 +47,44 @@ def main(cfg: DictConfig) -> None:
         all_fps.extend(input_dir.rglob(f"{ext}"))
 
     for table_name, preprocessor_cfg in preprocessors.items():
-        logger.info(f"  Adding preprocessor for {table_name}:\n{OmegaConf.to_yaml(preprocessor_cfg)}")
-        functions[table_name] = join_and_get_pseudotime_fntr(table_name=table_name, **preprocessor_cfg)
+        if table_name not in ["subject_id" , "admission_id", "raw_data_extensions"]:
+            logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
+            functions[table_name] = join_and_get_pseudotime_fntr(table_name=table_name, **preprocessor_cfg)
 
     unused_tables = {}
-    patient_out_fp = MEDS_input_dir / ""
-    references_out_fp = MEDS_input_dir / ""
-    link_out_fp = MEDS_input_dir / ""
+    person_out_fp = MEDS_input_dir / "person.parquet"
+    visit_out_fp = MEDS_input_dir / "visits.parquet"
+    concept_out_fp = MEDS_input_dir / "concept.parquet"
+    # link_out_fp = MEDS_input_dir / ""
 
-    if patient_out_fp.is_file() and link_out_fp.is_file():
-        logger.info(f"Reloading processed patient df from {str(patient_out_fp.resolve())}")
-        patient_df = pl.read_parquet(patient_out_fp, use_pyarrow=True)
-        link_df = pl.read_parquet(link_out_fp, use_pyarrow=True)
+    if person_out_fp.is_file() and visit_out_fp.is_file():
+        logger.info(f"Reloading processed patient df from {str(person_out_fp.resolve())}")
+        patient_df = pl.read_parquet(person_out_fp, use_pyarrow=True)
+        visit_df = pl.read_parquet(visit_out_fp, use_pyarrow=True)
     else:
         logger.info("Processing patient table...")
 
-        admissions_fp = Path("")
-        logger.info(f"Loading {str(admissions_fp.resolve())}...")
-        raw_admissions_df = load_raw_file(admissions_fp)
+        person_df = load_raw_file(input_dir / "person.csv")
+        death_df = load_raw_file(input_dir / "death.csv")
+        visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
 
-        patient_df, link_df = get_patient_link(raw_admissions_df)
-        write_lazyframe(patient_df, patient_out_fp)
-        write_lazyframe(link_df, link_out_fp)
+        # logger.info(f"Loading {str(admissions_fp.resolve())}...")
+        # person_df = load_raw_file(admissions_fp)
 
-    if references_out_fp.is_file():
-        logger.info(f"Reloading processed references df from {str(references_out_fp.resolve())}")
-        references_df = pl.read_parquet(references_out_fp, use_pyarrow=True).lazy()
+        patient_df, visit_df = get_patient_link(person_df=person_df, death_df=death_df, visit_df=visit_df)
+        write_lazyframe(patient_df, person_out_fp)
+        write_lazyframe(visit_df, visit_out_fp)
+
+
+    if concept_out_fp.is_file():
+        logger.info(f"Reloading processed concepts df from {str(visit_out_fp.resolve())}")
+        references_df = pl.read_parquet(visit_out_fp, use_pyarrow=True).lazy()
     else:
-        logger.info("Processing references table first...")
-        references_fp = Path("")
-        logger.info(f"Loading {str(references_fp.resolve())}...")
-        references_df = load_raw_file(references_fp)
-        write_lazyframe(references_df, references_out_fp)
+        logger.info("Processing concepts table first...")
+        references_df = load_raw_file(input_dir / "concept.csv")
+        write_lazyframe(references_df, visit_out_fp)
 
-    patient_df = patient_df.join(link_df, on=SUBJECT_ID)
+    patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
 
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
@@ -111,6 +115,7 @@ def main(cfg: DictConfig) -> None:
             f"patient_df schema: {patient_df.collect_schema()}, "
             f"processed_df schema: {processed_df.collect_schema()}"
         )
+
         processed_df.sink_parquet(out_fp)
         logger.info(f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}")
 

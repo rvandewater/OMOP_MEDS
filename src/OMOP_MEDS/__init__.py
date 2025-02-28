@@ -3,7 +3,7 @@ from importlib.resources import files
 
 from omegaconf import OmegaConf
 
-__package_name__ = "ETL_MEDS"
+__package_name__ = "OMOP_MEDS"
 try:
     __version__ = version(__package_name__)
 except PackageNotFoundError:  # pragma: no cover
