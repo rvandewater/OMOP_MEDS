@@ -10,7 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from ETL_MEDS import premeds_cfg
 
-from src.ETL_MEDS.pre_meds_utils import DATASET_NAME, SUBJECT_ID, get_patient_link, join_and_get_pseudotime_fntr, \
+from src.OMOP_MEDS.pre_meds_utils import DATASET_NAME, SUBJECT_ID, get_patient_link, join_and_get_pseudotime_fntr, \
     load_raw_file
 
 # Name of the dataset
