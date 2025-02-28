@@ -4,10 +4,42 @@ person:
   death_time: # Relative Time, The time for death
     code: MEDS_DEATH
     time: col(date_of_death)
+    time_format: "%Y-%m-%d %H:%M:%S"
   age: # Number, Age of the patient on the operation date
     code:
       - MEDS_BIRTH
     time: col(date_of_birth)
+    time_format: "%Y-%m-%d %H:%M:%S"
+
+observation:
+    observation:
+        code:
+        - col(vocabulary_id)
+        - col(concept_code)
+        time: col(observation_datetime)
+        time_format: "%Y-%m-%d %H:%M:%S"
+        value: col(value_as_number)
+        value_unit: col(unit_concept_id)
+        value_text: col(value_as_string)
+#        value_concept: col(value_as_concept_id)
+#        qualifier_concept: col(qualifier_concept_id)
+#        provider_id: provider_id
+#        observation_source: col(observation_source_value)
+#        observation_source_concept: col(observation_source_concept_id)
+#        unit_source: col(unit_source_value)
+#        qualifier_source: col(qualifier_source_value)
+#        vocabulary: col(vocabulary_id)
+
+measurement:
+    measurement:
+        code:
+        - col(vocabulary_id)
+        - col(concept_code)
+        time: col(measurement_datetime)
+        time_format: "%Y-%m-%d %H:%M:%S"
+        value: col(value_as_number)
+        value_unit: col(unit_concept_id)
+#        value_text: col(value_as_string)
 
 #hosp/admissions:
 #  ed_registration:

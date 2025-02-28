@@ -84,7 +84,7 @@ def main(cfg: DictConfig) -> None:
         references_df = load_raw_file(input_dir / "concept.csv")
         write_lazyframe(references_df, visit_out_fp)
 
-    patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
+    # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
 
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
@@ -108,9 +108,28 @@ def main(cfg: DictConfig) -> None:
         df = load_raw_file(in_fp)
 
         fn = functions[pfx]
-        processed_df = fn(df, patient_df, references_df)
+        processed_df = fn(df, references_df)
 
-        # Sink throws errors, so we use collect instead
+        # if "visit_occurrence_id" in schema.names():
+        #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
+        # unit_columns = []
+        # if "unit_source_value" in schema.names():
+        #     unit_columns.append(pl.col("unit_source_value"))
+        # if "unit_concept_id" in schema.names():
+        #     unit_columns.append(
+        #         pl.col("unit_concept_id").replace_strict(concept_id_map, return_dtype=pl.Utf8(), default=None))
+        # if unit_columns:
+        #     metadata["unit"] = pl.coalesce(unit_columns)
+        #
+        # if "load_table_id" in schema.names():
+        #     metadata["clarity_table"] = pl.col("load_table_id")
+        #
+        # if "note_id" in schema.names():
+        #     metadata["note_id"] = pl.col("note_id")
+        #
+        # if (table_name + "_end_datetime") in schema.names():
+        #     end = cast_to_datetime(schema, table_name + "_end_datetime", move_to_end_of_day=True)
+        #     metadata["end"] = end
         logger.info(
             f"patient_df schema: {patient_df.collect_schema()}, "
             f"processed_df schema: {processed_df.collect_schema()}"

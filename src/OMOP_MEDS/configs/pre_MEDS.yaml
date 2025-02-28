@@ -29,13 +29,16 @@ person:
     #    "ethnicity_source_concept_id"
   ]
 observation:
-  reference_col: ["observation_type_concept_id"]
+  offset_col: [ ]
+  # No pseudotime in OMOP
+  pseudotime_col: [ ]
+  reference_col: ["observation_source_concept_id"]
   output_data_cols: [
     "observation_id",
     "observation_concept_id",
     "observation_date",
     "observation_datetime",
-    "observation_type_concept_id",
+#    "observation_type_concept_id",
     "value_as_number",
     "value_as_string",
     "value_as_concept_id",
@@ -45,9 +48,36 @@ observation:
 #    "visit_occurrence_id",
 #    "visit_detail_id",
     "observation_source_value",
-    "observation_source_concept_id",
+#    "observation_source_concept_id",
     "unit_source_value",
-    "qualifier_source_value",]
+    "qualifier_source_value",
+    "vocabulary_id"]
+
+measurement:
+  offset_col: [ ]
+  reference_col: ["measurement_source_concept_id"]
+  output_data_cols: [
+    "measurement_id",
+    "measurement_concept_id",
+    "measurement_date",
+    "measurement_datetime",
+    "measurement_time",
+    "measurement_type_concept_id",
+    "operator_concept_id",
+    "value_as_number",
+    "value_as_concept_id",
+    "unit_concept_id",
+    "range_low",
+    "range_high",
+    "provider_id",
+    "visit_occurrence_id",
+    "visit_detail_id",
+    "measurement_source_value",
+    "measurement_source_concept_id",
+    "unit_source_value",
+    "value_source_value",
+    "vocabulary_id" ]
+
 #TODO: how to handle source
 #concept:
 #  offset_col: [ ]

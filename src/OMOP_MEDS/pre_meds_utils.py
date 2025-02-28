@@ -81,9 +81,11 @@ def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) 
     # date_of_death = pl.col("death_datetime")
     date_of_death = (pl.when(pl.col("death_datetime").is_not_null())
     .then(cast_to_datetime(death_df.collect_schema(), "death_datetime")))
+    death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
 
     return (
         person_df.sort(by=date_of_birth)
+        .with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
         .group_by(SUBJECT_ID)
         .first()
         .join(death_df, on=SUBJECT_ID, how="left")
@@ -92,9 +94,8 @@ def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) 
             date_of_birth.alias("date_of_birth"),
             # admission_time.alias("first_admitted_at_time"),
             date_of_death.alias("date_of_death"),
-        ).collect().lazy(), # We get an error if we don't collect here
+        ).collect().lazy(), # We get parquet sink error if we don't collect here
         visit_df.select(SUBJECT_ID, ADMISSION_ID),
-        # df.select(SUBJECT_ID, ADMISSION_ID),
     )
 
 
@@ -174,7 +175,7 @@ def join_and_get_pseudotime_fntr(
             f"{set(offset_col) & set(output_data_cols) | set(pseudotime_col) & set(output_data_cols)}"
         )
 
-    def fn(df: pl.LazyFrame, patient_df: pl.LazyFrame, references_df: pl.LazyFrame) -> pl.LazyFrame:
+    def fn(df: pl.LazyFrame, references_df: pl.LazyFrame) -> pl.LazyFrame:
         f"""Takes the {table_name} table and converts it to a form that includes pseudo-timestamps.
 
         The output of this process is ultimately converted to events via the `{table_name}` key in the
@@ -187,23 +188,26 @@ def join_and_get_pseudotime_fntr(
         Returns:
             The processed {table_name} data.
         """
-        pseudotimes = [
-            (pl.col("first_admitted_at_time") + pl.duration(seconds=pl.col(offset))).alias(pseudotime)
-            for pseudotime, offset in zip(pseudotime_col, offset_col)
-        ]
-        if warning_items:
-            warning_lines = [
-                f"NOT SURE ABOUT THE FOLLOWING for {table_name} table. Check with the {DATASET_NAME} team:",
-                *(f"  - {item}" for item in warning_items),
-            ]
-            logger.warning("\n".join(warning_lines))
-        logger.info(f"Joining {table_name} to patient table...")
-        logger.info(df.collect_schema())
-        # Join the patient table to the data table, INSPIRE only has subject_id as key
-        joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
+        # pseudotimes = [
+        #     (pl.col("first_admitted_at_time") + pl.duration(seconds=pl.col(offset))).alias(pseudotime)
+        #     for pseudotime, offset in zip(pseudotime_col, offset_col)
+        # ]
+        # if warning_items:
+        #     warning_lines = [
+        #         f"NOT SURE ABOUT THE FOLLOWING for {table_name} table. Check with the {DATASET_NAME} team:",
+        #         *(f"  - {item}" for item in warning_items),
+        #     ]
+        #     logger.warning("\n".join(warning_lines))
+        # logger.info(f"Joining {table_name} to patient table...")
+        # logger.info(df.collect_schema())
+        # # Join the patient table to the data table, INSPIRE only has subject_id as key
+        # joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
+        # collected = df.collect()
+        df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
         if len(reference_col) > 0:
-            joined = joined.join(references_df, left_on=reference_col, right_on="concept_id")
-        return joined.select(SUBJECT_ID, ADMISSION_ID, *pseudotimes, *output_data_cols)
+            joined = df.join(references_df, left_on=reference_col, right_on="concept_id")
+        # collected = joined.collect()
+        return joined #.select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
 
@@ -222,9 +226,9 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
     The first list contains all the csv files. The second list contains all parquet files.
     """
     if fp.suffixes == [".csv", ".gz"]:
-        return pl.scan_csv(fp, compression="gzip")
+        return pl.scan_csv(fp, compression="gzip", infer_schema=False)
     elif fp.suffix == ".csv":
-        return pl.scan_csv(fp)
+        return pl.scan_csv(fp, infer_schema=False)
     elif fp.suffix == ".parquet":
         return pl.scan_parquet(fp)
     else:
