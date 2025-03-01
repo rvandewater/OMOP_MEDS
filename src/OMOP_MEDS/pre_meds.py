@@ -53,14 +53,21 @@ def main(cfg: DictConfig) -> None:
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person.parquet"
-    visit_out_fp = MEDS_input_dir / "visits.parquet"
+    # visit_out_fp = MEDS_input_dir / "visits.parquet"
     concept_out_fp = MEDS_input_dir / "concept.parquet"
     # link_out_fp = MEDS_input_dir / ""
+    if concept_out_fp.is_file():
+        logger.info(f"Reloading processed concepts df from {str(visit_out_fp.resolve())}")
+        concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
+    else:
+        logger.info("Processing concepts table first...")
+        concept_df = load_raw_file(input_dir / "concept.csv")
+        write_lazyframe(concept_df, concept_out_fp)
 
     if person_out_fp.is_file() and visit_out_fp.is_file():
         logger.info(f"Reloading processed patient df from {str(person_out_fp.resolve())}")
-        patient_df = pl.read_parquet(person_out_fp, use_pyarrow=True)
-        visit_df = pl.read_parquet(visit_out_fp, use_pyarrow=True)
+        patient_df = pl.scan_parquet(person_out_fp)
+        visit_df = pl.scan_parquet(visit_out_fp)
     else:
         logger.info("Processing patient table...")
 
@@ -71,18 +78,9 @@ def main(cfg: DictConfig) -> None:
         # logger.info(f"Loading {str(admissions_fp.resolve())}...")
         # person_df = load_raw_file(admissions_fp)
 
-        patient_df, visit_df = get_patient_link(person_df=person_df, death_df=death_df, visit_df=visit_df)
+        patient_df = get_patient_link(person_df=person_df, death_df=death_df, visit_df=visit_df)
         write_lazyframe(patient_df, person_out_fp)
-        write_lazyframe(visit_df, visit_out_fp)
-
-
-    if concept_out_fp.is_file():
-        logger.info(f"Reloading processed concepts df from {str(visit_out_fp.resolve())}")
-        references_df = pl.read_parquet(visit_out_fp, use_pyarrow=True).lazy()
-    else:
-        logger.info("Processing concepts table first...")
-        references_df = load_raw_file(input_dir / "concept.csv")
-        write_lazyframe(references_df, visit_out_fp)
+        # write_lazyframe(visit_df, visit_out_fp)
 
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
 
@@ -108,7 +106,7 @@ def main(cfg: DictConfig) -> None:
         df = load_raw_file(in_fp)
 
         fn = functions[pfx]
-        processed_df = fn(df, references_df)
+        processed_df = fn(df, concept_df)
 
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)

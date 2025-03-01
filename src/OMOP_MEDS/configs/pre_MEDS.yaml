@@ -9,53 +9,53 @@ person:
   # No pseudotime in OMOP
   pseudotime_col: [ ]
   # Column that contains ID's to concepts
-  reference_col: [ "gender_concept_id", "race_concept_id", "ethnicity_concept_id", ]
+  reference_col: [ ]
   output_data_cols: [
     "year_of_birth",
     "month_of_birth",
     "day_of_birth",
     "birth_datetime",
     "race_concept_id",
-    #    "ethnicity_concept_id",
+    "ethnicity_concept_id",
     "location_id",
     "provider_id",
     "care_site_id",
     "person_source_value",
     "gender_source_value",
-    #    "gender_source_concept_id",
+    "gender_source_concept_id",
     "race_source_value",
-    #    "race_source_concept_id",
+    "race_source_concept_id",
     "ethnicity_source_value",
-    #    "ethnicity_source_concept_id"
+    "ethnicity_source_concept_id"
   ]
 observation:
   offset_col: [ ]
   # No pseudotime in OMOP
   pseudotime_col: [ ]
-  reference_col: ["observation_source_concept_id"]
+  reference_col: [ "observation_source_concept_id" ]
   output_data_cols: [
     "observation_id",
     "observation_concept_id",
     "observation_date",
     "observation_datetime",
-#    "observation_type_concept_id",
+    #    "observation_type_concept_id",
     "value_as_number",
     "value_as_string",
     "value_as_concept_id",
     "qualifier_concept_id",
     "unit_concept_id",
     "provider_id",
-#    "visit_occurrence_id",
-#    "visit_detail_id",
+    #    "visit_occurrence_id",
+    #    "visit_detail_id",
     "observation_source_value",
-#    "observation_source_concept_id",
+    #    "observation_source_concept_id",
     "unit_source_value",
     "qualifier_source_value",
-    "vocabulary_id"]
+    "vocabulary_id" ]
 
 measurement:
   offset_col: [ ]
-  reference_col: ["measurement_source_concept_id"]
+  reference_col: [ "measurement_source_concept_id" ]
   output_data_cols: [
     "measurement_id",
     "measurement_concept_id",
@@ -77,6 +77,30 @@ measurement:
     "unit_source_value",
     "value_source_value",
     "vocabulary_id" ]
+
+visit_occurrence:
+  offset_col: [ ]
+  pseudotime_col: [ ]
+  reference_col: [ "visit_type_source_concept_id" ]
+  output_data_cols: [
+    "visit_occurrence_id",
+    "visit_concept_id",
+    "visit_start_date",
+    "visit_start_datetime",
+    "visit_end_date",
+    "visit_end_datetime",
+    "visit_type_concept_id",
+    "provider_id",
+    "care_site_id",
+    "visit_source_value",
+    "visit_source_concept_id",
+    "admitting_source_concept_id",
+    "admitting_source_value",
+    "discharge_to_concept_id",
+    "discharge_to_source_value",
+    "preceding_visit_occurrence_id",
+    "vocabulary_id" ]
+
 
 #TODO: how to handle source
 #concept:

@@ -11,6 +11,7 @@ person:
     time: col(date_of_birth)
     time_format: "%Y-%m-%d %H:%M:%S"
 
+
 observation:
     observation:
         code:
@@ -40,7 +41,20 @@ measurement:
         value: col(value_as_number)
         value_unit: col(unit_concept_id)
 #        value_text: col(value_as_string)
-
+visit_occurrence:
+    visit:
+        code:
+        - col(vocabulary_id)
+        - col(visit_type_concept_id)
+        time: col(visit_start_datetime)
+        time_format: "%Y-%m-%d %H:%M:%S"
+#        end_time: col(visit_end_datetime)
+    visit_end:
+        code:
+        - col(vocabulary_id)
+        - col(concept_code)
+        time: col(visit_end_datetime)
+        time_format: "%Y-%m-%d %H:%M:%S"
 #hosp/admissions:
 #  ed_registration:
 #    code: ED_REGISTRATION

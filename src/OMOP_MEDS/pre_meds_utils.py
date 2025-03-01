@@ -95,7 +95,7 @@ def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) 
             # admission_time.alias("first_admitted_at_time"),
             date_of_death.alias("date_of_death"),
         ).collect().lazy(), # We get parquet sink error if we don't collect here
-        visit_df.select(SUBJECT_ID, ADMISSION_ID),
+        visit_df,
     )
 
 
