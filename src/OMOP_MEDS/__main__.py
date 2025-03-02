@@ -54,7 +54,7 @@ def main(cfg: DictConfig):
     # First we need to set some environment variables
     command_parts = [
         f"DATASET_NAME={dataset_info.dataset_name}",
-        f"DATASET_VERSION={dataset_info.raw_dataset_version}:{PKG_VERSION}",
+        f"DATASET_VERSION={dataset_info.raw_dataset_version}:{PKG_VERSION}:OMOP_{dataset_info.omop_version}",
         f"EVENT_CONVERSION_CONFIG_FP={str(EVENT_CFG.resolve())}",
         f"PRE_MEDS_DIR={str(pre_MEDS_dir.resolve())}",
         f"MEDS_COHORT_DIR={str(MEDS_cohort_dir.resolve())}",

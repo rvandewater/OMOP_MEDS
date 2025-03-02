@@ -1,5 +1,6 @@
-dataset_name: "OMOP"
-raw_dataset_version: 5.4
+dataset_name: "MIMIC_IV_OMOP"
+raw_dataset_version: 1.0
+omop_version: 5.3
 
 urls:
   dataset:

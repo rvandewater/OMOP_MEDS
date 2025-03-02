@@ -6,12 +6,16 @@ from pathlib import Path
 import polars as pl
 from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
-from . import premeds_cfg
+from src.OMOP_MEDS.pre_meds_utils import (
+    DATASET_NAME,
+    get_patient_link,
+    join_and_get_pseudotime_fntr,
+    load_raw_file,
+)
 
-from src.OMOP_MEDS.pre_meds_utils import DATASET_NAME, SUBJECT_ID, get_patient_link, join_and_get_pseudotime_fntr, \
-    load_raw_file
+from . import dataset_info, premeds_cfg
 
 # Name of the dataset
 # Column name for admission ID associated with this particular admission
@@ -26,9 +30,10 @@ def main(cfg: DictConfig) -> None:
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
     logger.info(f"Loading table preprocessors from {premeds_cfg}...")
-    preprocessors = premeds_cfg #OmegaConf.load(premeds_cfg)
+    preprocessors = premeds_cfg  # OmegaConf.load(premeds_cfg)
     functions = {}
-
+    omop_version = str(dataset_info.omop_version)
+    logger.info(f"Expecting OMOP version: {omop_version}")
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
@@ -47,7 +52,7 @@ def main(cfg: DictConfig) -> None:
         all_fps.extend(input_dir.rglob(f"{ext}"))
 
     for table_name, preprocessor_cfg in preprocessors.items():
-        if table_name not in ["subject_id" , "admission_id", "raw_data_extensions"]:
+        if table_name not in ["subject_id", "admission_id", "raw_data_extensions"]:
             logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
             functions[table_name] = join_and_get_pseudotime_fntr(table_name=table_name, **preprocessor_cfg)
 
@@ -57,17 +62,17 @@ def main(cfg: DictConfig) -> None:
     concept_out_fp = MEDS_input_dir / "concept.parquet"
     # link_out_fp = MEDS_input_dir / ""
     if concept_out_fp.is_file():
-        logger.info(f"Reloading processed concepts df from {str(visit_out_fp.resolve())}")
+        logger.info(f"Reloading processed concepts df from {str(concept_out_fp.resolve())}")
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing concepts table first...")
         concept_df = load_raw_file(input_dir / "concept.csv")
         write_lazyframe(concept_df, concept_out_fp)
 
-    if person_out_fp.is_file() and visit_out_fp.is_file():
+    if person_out_fp.is_file():  # and visit_out_fp.is_file():
         logger.info(f"Reloading processed patient df from {str(person_out_fp.resolve())}")
         patient_df = pl.scan_parquet(person_out_fp)
-        visit_df = pl.scan_parquet(visit_out_fp)
+        # visit_df = pl.scan_parquet(visit_out_fp)
     else:
         logger.info("Processing patient table...")
 
@@ -115,7 +120,8 @@ def main(cfg: DictConfig) -> None:
         #     unit_columns.append(pl.col("unit_source_value"))
         # if "unit_concept_id" in schema.names():
         #     unit_columns.append(
-        #         pl.col("unit_concept_id").replace_strict(concept_id_map, return_dtype=pl.Utf8(), default=None))
+        #         pl.col("unit_concept_id").replace_strict(concept_id_map,
+        #         return_dtype=pl.Utf8(), default=None))
         # if unit_columns:
         #     metadata["unit"] = pl.coalesce(unit_columns)
         #

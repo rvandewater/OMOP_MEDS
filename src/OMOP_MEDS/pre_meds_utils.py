@@ -1,16 +1,16 @@
-import os
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable
+from typing import Any
 
 import polars as pl
-from loguru import logger
-from . import premeds_cfg, dataset_info
-from typing import Iterable, Tuple, Any
+
+from . import dataset_info, premeds_cfg
 
 DATASET_NAME = dataset_info.dataset_name
 ADMISSION_ID = premeds_cfg.admission_id
 SUBJECT_ID = premeds_cfg.subject_id
 OMOP_TIME_FORMATS: Iterable[str] = ("%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d")
+
 
 def parse_time(time: pl.Expr, time_formats: Iterable[str]) -> pl.Expr:
     return pl.coalesce(
@@ -28,7 +28,9 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
             time = pl.col(column)
             time = pl.coalesce(
                 time.str.to_datetime("%Y-%m-%d %H:%M:%S%.f", strict=False, time_unit="us"),
-                time.str.to_datetime("%Y-%m-%d", strict=False, time_unit="us").dt.offset_by("1d").dt.offset_by("-1s"),
+                time.str.to_datetime("%Y-%m-%d", strict=False, time_unit="us")
+                .dt.offset_by("1d")
+                .dt.offset_by("-1s"),
             )
             return time
     elif schema[column] == pl.Date():
@@ -41,7 +43,10 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
     else:
         raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
-def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) -> (pl.LazyFrame, pl.LazyFrame):
+
+def get_patient_link(
+    person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame
+) -> (pl.LazyFrame, pl.LazyFrame):
     """
     Process the operations table to get the patient table and the link table.
 
@@ -67,20 +72,23 @@ def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) 
     #                 time_unit="us",
     #             ),
     #         )
-    date_of_birth = (pl.when(pl.col("birth_datetime").is_not_null())
-    .then(cast_to_datetime(person_df.collect_schema(), "birth_datetime"))
-    .otherwise(
-        pl.datetime(
-            pl.col("year_of_birth"),
-            pl.col("month_of_birth").fill_null(1),
-            pl.col("day_of_birth").fill_null(1),
-            time_unit="us",
+    date_of_birth = (
+        pl.when(pl.col("birth_datetime").is_not_null())
+        .then(cast_to_datetime(person_df.collect_schema(), "birth_datetime"))
+        .otherwise(
+            pl.datetime(
+                pl.col("year_of_birth"),
+                pl.col("month_of_birth").fill_null(1),
+                pl.col("day_of_birth").fill_null(1),
+                time_unit="us",
+            )
         )
-    ))
+    )
     # admission_time = pl.col("admission_time")
     # date_of_death = pl.col("death_datetime")
-    date_of_death = (pl.when(pl.col("death_datetime").is_not_null())
-    .then(cast_to_datetime(death_df.collect_schema(), "death_datetime")))
+    date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
+        cast_to_datetime(death_df.collect_schema(), "death_datetime")
+    )
     death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
 
     return (
@@ -94,7 +102,9 @@ def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) 
             date_of_birth.alias("date_of_birth"),
             # admission_time.alias("first_admitted_at_time"),
             date_of_death.alias("date_of_death"),
-        ).collect().lazy(), # We get parquet sink error if we don't collect here
+        )
+        .collect()
+        .lazy(),  # We get parquet sink error if we don't collect here
         visit_df,
     )
 
@@ -207,13 +217,13 @@ def join_and_get_pseudotime_fntr(
         if len(reference_col) > 0:
             joined = df.join(references_df, left_on=reference_col, right_on="concept_id")
         # collected = joined.collect()
-        return joined #.select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
+        return joined  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
 
 
 def load_raw_file(fp: Path) -> pl.LazyFrame:
-    """Retrieve all .csv/.csv.gz/.parquet files for the OMOP table given by `table_name` in `path_to_src_omop_dir`
+    """Retrieve all .csv/.csv.gz/.parquet files for the OMOP table given by fp
 
     Because OMOP tables can be quite large for datasets comprising millions
     of subjects, those tables are often split into compressed shards. So
@@ -254,4 +264,3 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
     #     return path_to_table + ".parquet"
     # else:
     #     raise
-
