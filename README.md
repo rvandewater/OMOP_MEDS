@@ -19,7 +19,6 @@ OMOP_MEDS root_output_dir=$ROOT_OUTPUT_DIR
 
 ```
 
-See the [MIMIC-IV MEDS Extraction ETL](https://github.com/rvamdewater/MIMIC_IV_MEDS) for an end to end example!
 Example config:
 
 ```yaml
