@@ -66,9 +66,8 @@ def main(cfg: DictConfig) -> None:
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person.parquet"
-    # visit_out_fp = MEDS_input_dir / "visits.parquet"
     concept_out_fp = MEDS_input_dir / "concept.parquet"
-    # link_out_fp = MEDS_input_dir / ""
+
     if concept_out_fp.is_file():
         logger.info(f"Reloading processed concepts df from {str(concept_out_fp.resolve())}")
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()

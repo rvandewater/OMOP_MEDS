@@ -18,9 +18,10 @@ observation:
       - col(concept_code)
     time: col(observation_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
-    value: col(value_as_number)
-    value_unit: col(unit_concept_id)
-    value_text: col(value_as_string)
+    numeric_value: col(value_as_number)
+    unit: col(unit_concept_id)
+    text_value: col(value_as_string)
+    visit_occurrence_id: col(visit_occurrence_id)
 
 measurement:
   measurement:
@@ -29,8 +30,10 @@ measurement:
       - col(concept_code)
     time: col(measurement_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
-    value: col(value_as_number)
-    value_unit: col(unit_concept_id)
+    numeric_value: col(value_as_number)
+    unit: col(unit_concept_id)
+    visit_occurrence_id: col(visit_occurrence_id)
+
 #        value_text: col(value_as_string)
 visit_occurrence:
   visit:
@@ -40,6 +43,9 @@ visit_occurrence:
       - col(visit_type_concept_id)
     time: col(visit_start_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    visit_occurrence_id: col(visit_occurrence_id)
+    end: col(visit_end_datetime)
+
   #        end_time: col(visit_end_datetime)
   visit_end:
     code:
@@ -48,6 +54,8 @@ visit_occurrence:
       - col(concept_code)
     time: col(visit_end_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    visit_occurrence_id: col(visit_occurrence_id)
+
 
 observation_period:
   observation_period:
@@ -56,6 +64,7 @@ observation_period:
       - col(period_type_concept_id)
     time: col(observation_period_start_date)
     time_format: "%Y-%m-%d %H:%M:%S"
+    end: col(observation_period_end_date)
   observation_period_end:
     code:
       - observation_period_end
@@ -71,7 +80,11 @@ drug_exposure:
       - col(vocabulary_id)
       - col(drug_concept_id)
     time: col(drug_exposure_start_datetime)
+    numeric_value: col(quantity)
     time_format: "%Y-%m-%d %H:%M:%S"
+    visit_occurrence_id: col(visit_occurrence_id)
+    end: col(drug_exposure_end_datetime)
+
   drug_exposure_end:
     code:
       - drug_exposure_end
@@ -79,6 +92,8 @@ drug_exposure:
       - col(drug_concept_id)
     time: col(drug_exposure_end_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    visit_occurrence_id: col(visit_occurrence_id)
+
 
 specimen:
   specimen:
@@ -87,6 +102,9 @@ specimen:
       - col(specimen_concept_id)
     time: col(specimen_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(quantity)
+    unit: col(unit_concept_id)
+
 
 device_exposure:
   device_exposure:
@@ -96,13 +114,20 @@ device_exposure:
       - col(device_concept_id)
     time: col(device_exposure_start_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(quantity)
+    visit_occurrence_id: col(visit_occurrence_id)
+    end: col(device_exposure_end_datetime)
+
   device_exposure_end:
     code:
       - device_exposure_end
       - col(vocabulary_id)
       - col(device_concept_id)
     time: col(device_exposure_end_datetime)
+    numeric_value: col(quantity)
     time_format: "%Y-%m-%d %H:%M:%S"
+    visit_occurrence_id: col(visit_occurrence_id)
+
 
 dose_era:
   dose_era:
@@ -111,12 +136,17 @@ dose_era:
       - col(drug_concept_id)
     time: col(dose_era_start_date)
     time_format: "%Y-%m-%d %H:%M:%S"
+    end: col(dose_era_end_date)
+    numeric_value: col(dose_value)
+    unit: col(unit_concept_id)
   dose_era_end:
     code:
       - dose_era_end
       - col(drug_concept_id)
     time: col(dose_era_end_date)
     time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(dose_value)
+    unit: col(unit_concept_id)
 
 condition_occurrence:
   condition_occurrence:
@@ -126,6 +156,8 @@ condition_occurrence:
       - col(condition_concept_id)
     time: col(condition_start_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    visit_occurrence_id: col(visit_occurrence_id)
+    end: col(condition_end_datetime)
   condition_end:
     code:
       - condition_end
@@ -133,6 +165,7 @@ condition_occurrence:
       - col(condition_concept_id)
     time: col(condition_end_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    visit_occurrence_id: col(visit_occurrence_id)
 
 drug_era:
   drug_era:
@@ -142,6 +175,8 @@ drug_era:
       - col(drug_concept_id)
     time: col(drug_era_start_date)
     time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(drug_exposure_count)
+    end: col(drug_era_end_date)
   drug_era_end:
     code:
       - drug_era_end
@@ -149,6 +184,7 @@ drug_era:
       - col(drug_concept_id)
     time: col(drug_era_end_date)
     time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(drug_exposure_count)
 
 procedure_occurrence:
   procedure_occurrence:
@@ -158,6 +194,9 @@ procedure_occurrence:
       - col(procedure_concept_id)
     time: col(procedure_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(quantity)
+    visit_occurrence_id: col(visit_occurrence_id)
+
 # only available in OMOP 5.4
 #    procedure_end:
 #        code:
@@ -175,6 +214,8 @@ condition_era:
       - col(condition_concept_id)
     time: col(condition_era_start_date)
     time_format: "%Y-%m-%d %H:%M:%S"
+    numeric_value: col(condition_occurrence_count)
+    end: col(condition_era_end_date)
   condition_era_end:
     code:
       - condition_era_end_date
@@ -182,326 +223,4 @@ condition_era:
       - col(condition_concept_id)
     time: col(condition_era_end_date)
     time_format: "%Y-%m-%d %H:%M:%S"
-#hosp/admissions:
-#  ed_registration:
-#    code: ED_REGISTRATION
-#    time: col(edregtime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#  ed_out:
-#    code: ED_OUT
-#    time: col(edouttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#  admission:
-#    code:
-#      - HOSPITAL_ADMISSION
-#      - col(admission_type)
-#      - col(admission_location)
-#    time: col(admittime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    insurance: insurance
-#    language: language
-#    marital_status: marital_status
-#    race: race
-#    hadm_id: hadm_id
-#  discharge:
-#    code:
-#      - HOSPITAL_DISCHARGE
-#      - col(discharge_location)
-#    time: col(dischtime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#  # We omit the death event here as it is joined to the data in the subjects table in the pre-MEDS step.
-#
-#hosp/diagnoses_icd:
-#  diagnosis:
-#    code:
-#      - DIAGNOSIS
-#      - ICD
-#      - col(icd_version)
-#      - col(icd_code)
-#    hadm_id: hadm_id
-#    time: col(hadm_discharge_time)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    _metadata:
-#      hosp/d_icd_diagnoses:
-#        description: "long_title"
-#        parent_codes: "ICD{icd_version}CM/{norm_icd_code}" # Single strings are templates of columns.
-#
-#hosp/drgcodes:
-#  drg:
-#    code:
-#      - DRG
-#      - col(drg_type)
-#      - col(drg_code)
-#      - col(description)
-#    hadm_id: hadm_id
-#    time: col(hadm_discharge_time)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    drg_severity: drg_severity
-#    drg_mortality: drg_mortality
-#
-#hosp/emar:
-#  medication:
-#    code:
-#      - MEDICATION
-#      - col(medication)
-#      - col(event_txt)
-#    time: col(charttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    emar_id: emar_id
-#    emar_seq: emar_seq
-#
-#hosp/hcpcsevents:
-#  hcpcs:
-#    code:
-#      - HCPCS
-#      - col(short_description)
-#    hadm_id: hadm_id
-#    time: col(chartdate)
-#    time_format: "%Y-%m-%d"
-#    _metadata:
-#      # These are not all CPT codes, unfortunately
-#      hosp/d_hcpcs:
-#        description: "long_description"
-#        possibly_cpt_code: "code"
-#
-#hosp/labevents:
-#  lab:
-#    code:
-#      - LAB
-#      - col(itemid)
-#      - col(valueuom)
-#    hadm_id: hadm_id
-#    time: col(charttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    numeric_value: valuenum
-#    text_value: value
-#    priority: priority
-#    _metadata:
-#      d_labitems_to_loinc:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#        valueuom: "valueuom"
-#
-#hosp/omr:
-#  omr:
-#    code: col(result_name)
-#    text_value: col(result_value)
-#    time: col(chartdate)
-#    time_format: "%Y-%m-%d"
-#
-#hosp/patients:
-#  gender:
-#    code:
-#      - GENDER
-#      - col(gender)
-#    time: null
-#  dob:
-#    code: MEDS_BIRTH # This is the MEDS official code for birth.
-#    time: col(year_of_birth)
-#    time_format: "%Y"
-#  death:
-#    code: MEDS_DEATH # This is the MEDS official code for death.
-#    time: col(dod)
-#    time_format:
-#      - "%Y-%m-%d %H:%M:%S"
-#      - "%Y-%m-%d"
-#
-#hosp/pharmacy:
-#  medication_start:
-#    code:
-#      - MEDICATION
-#      - START
-#      - col(medication)
-#    time: col(starttime)
-#    route: route
-#    frequency: frequency
-#    doses_per_24_hrs: doses_per_24_hrs
-#    poe_id: poe_id
-#    time_format:
-#      - "%Y-%m-%d %H:%M:%S"
-#      - "%Y-%m-%d"
-#  medication_stop:
-#    code:
-#      - MEDICATION
-#      - STOP
-#      - col(medication)
-#    time: col(stoptime)
-#    poe_id: poe_id
-#    time_format:
-#      - "%Y-%m-%d %H:%M:%S"
-#      - "%Y-%m-%d"
-#
-#hosp/procedures_icd:
-#  procedure:
-#    code:
-#      - PROCEDURE
-#      - ICD
-#      - col(icd_version)
-#      - col(icd_code)
-#    hadm_id: hadm_id
-#    time: col(chartdate)
-#    time_format: "%Y-%m-%d"
-#    _metadata:
-#      hosp/d_icd_procedures:
-#        description: "long_title"
-#        parent_codes: # List of objects are string labels mapping to filters to be evaluated.
-#          - "ICD{icd_version}Proc/{norm_icd_code}": { icd_version: "9" }
-#          - "ICD{icd_version}PCS/{norm_icd_code}": { icd_version: "10" }
-#
-#hosp/transfers:
-#  transfer:
-#    code:
-#      - TRANSFER_TO
-#      - col(eventtype)
-#      - col(careunit)
-#    time: col(intime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#
-#icu/icustays:
-#  icu_admission:
-#    code:
-#      - ICU_ADMISSION
-#      - col(first_careunit)
-#    time: col(intime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#  icu_discharge:
-#    code:
-#      - ICU_DISCHARGE
-#      - col(last_careunit)
-#    time: col(outtime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#
-#icu/chartevents:
-#  event:
-#    code:
-#      - LAB
-#      - col(itemid)
-#      - col(valueuom)
-#    time: col(charttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    numeric_value: valuenum
-#    text_value: value
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#    _metadata:
-#      # TODO: make this work even with missing valueuom
-#      #meas_chartevents_main:
-#      #  description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#      #  itemid: "itemid (omop_source_code)"
-#      #  parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#      # TODO: I don't know if this is necessary...
-#      d_labitems_to_loinc:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#        valueuom: "valueuom"
-#
-#icu/procedureevents:
-#  start:
-#    code:
-#      - PROCEDURE
-#      - START
-#      - col(itemid)
-#    time: col(starttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#    _metadata:
-#      proc_datetimeevents:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#      proc_itemid:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#  end:
-#    code:
-#      - PROCEDURE
-#      - END
-#      - col(itemid)
-#    time: col(endtime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#    _metadata:
-#      proc_datetimeevents:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#      proc_itemid:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#
-#icu/inputevents:
-#  input_start:
-#    code:
-#      - INFUSION_START
-#      - col(itemid)
-#    time: col(starttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#    order_id: orderid
-#    link_order_id: linkorderid
-#    numeric_value: rate
-#    unit: rateuom
-#    ordercategorydescription: ordercategorydescription
-#    _metadata:
-#      inputevents_to_rxnorm:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#  input_end:
-#    code:
-#      - INFUSION_END
-#      - col(itemid)
-#    time: col(endtime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#    order_id: orderid
-#    link_order_id: linkorderid
-#    numeric_value: amount
-#    ordercategorydescription: ordercategorydescription
-#    statusdescription: statusdescription
-#    unit: amountuom
-#    _metadata:
-#      inputevents_to_rxnorm:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
-#  subject_weight:
-#    code:
-#      - SUBJECT_WEIGHT_AT_INFUSION
-#      - KG
-#    time: col(starttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    numeric_value: patientweight
-#
-#icu/outputevents:
-#  output:
-#    code:
-#      - SUBJECT_FLUID_OUTPUT
-#      - col(itemid)
-#      - col(valueuom)
-#    time: col(charttime)
-#    time_format: "%Y-%m-%d %H:%M:%S"
-#    hadm_id: hadm_id
-#    icustay_id: stay_id
-#    numeric_value: value
-#    _metadata:
-#      outputevents_to_loinc:
-#        description: ["omop_concept_name", "label"] # List of strings are columns to be collated
-#        itemid: "itemid (omop_source_code)"
-#        valueuom: "unitname"
-#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
+    numeric_value: col(condition_occurrence_count)
