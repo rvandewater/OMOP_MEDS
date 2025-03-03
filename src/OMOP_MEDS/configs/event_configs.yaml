@@ -50,114 +50,114 @@ visit_occurrence:
     time_format: "%Y-%m-%d %H:%M:%S"
 
 observation_period:
-    observation_period:
-        code:
-          - observation_period_start
-          - col(period_type_concept_id)
-        time: col(observation_period_start_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
-    observation_period_end:
-        code:
-          - observation_period_end
-          - observation_period_start
-          - col(period_type_concept_id)
-        time: col(observation_period_end_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  observation_period:
+    code:
+      - observation_period_start
+      - col(period_type_concept_id)
+    time: col(observation_period_start_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
+  observation_period_end:
+    code:
+      - observation_period_end
+      - observation_period_start
+      - col(period_type_concept_id)
+    time: col(observation_period_end_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 drug_exposure:
-    drug_exposure:
-        code:
-          - drug_exposure_start
-          - col(vocabulary_id)
-          - col(drug_concept_id)
-        time: col(drug_exposure_start_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
-    drug_exposure_end:
-        code:
-          - drug_exposure_end
-          - col(vocabulary_id)
-          - col(drug_concept_id)
-        time: col(drug_exposure_end_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  drug_exposure:
+    code:
+      - drug_exposure_start
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+    time: col(drug_exposure_start_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
+  drug_exposure_end:
+    code:
+      - drug_exposure_end
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+    time: col(drug_exposure_end_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 specimen:
-    specimen:
-        code:
-          - specimen
-          - col(specimen_concept_id)
-        time: col(specimen_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  specimen:
+    code:
+      - specimen
+      - col(specimen_concept_id)
+    time: col(specimen_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 device_exposure:
-    device_exposure:
-        code:
-          - device_exposure_start
-          - col(vocabulary_id)
-          - col(device_concept_id)
-        time: col(device_exposure_start_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
-    device_exposure_end:
-        code:
-          - device_exposure_end
-          - col(vocabulary_id)
-          - col(device_concept_id)
-        time: col(device_exposure_end_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  device_exposure:
+    code:
+      - device_exposure_start
+      - col(vocabulary_id)
+      - col(device_concept_id)
+    time: col(device_exposure_start_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
+  device_exposure_end:
+    code:
+      - device_exposure_end
+      - col(vocabulary_id)
+      - col(device_concept_id)
+    time: col(device_exposure_end_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 dose_era:
-    dose_era:
-        code:
-          - dose_era_start
-          - col(drug_concept_id)
-        time: col(dose_era_start_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
-    dose_era_end:
-        code:
-          - dose_era_end
-          - col(drug_concept_id)
-        time: col(dose_era_end_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  dose_era:
+    code:
+      - dose_era_start
+      - col(drug_concept_id)
+    time: col(dose_era_start_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
+  dose_era_end:
+    code:
+      - dose_era_end
+      - col(drug_concept_id)
+    time: col(dose_era_end_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 condition_occurrence:
-    condition_occurrence:
-        code:
-          - condition_occurrence
-          - col(vocabulary_id)
-          - col(condition_concept_id)
-        time: col(condition_start_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
-    condition_end:
-        code:
-          - condition_end
-          - col(vocabulary_id)
-          - col(condition_concept_id)
-        time: col(condition_end_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  condition_occurrence:
+    code:
+      - condition_occurrence
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+    time: col(condition_start_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
+  condition_end:
+    code:
+      - condition_end
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+    time: col(condition_end_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 drug_era:
-    drug_era:
-        code:
-          - drug_era_start
-          - col(vocabulary_id)
-          - col(drug_concept_id)
-        time: col(drug_era_start_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
-    drug_era_end:
-        code:
-          - drug_era_end
-          - col(vocabulary_id)
-          - col(drug_concept_id)
-        time: col(drug_era_end_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  drug_era:
+    code:
+      - drug_era_start
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+    time: col(drug_era_start_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
+  drug_era_end:
+    code:
+      - drug_era_end
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+    time: col(drug_era_end_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
 
 procedure_occurrence:
-    procedure_occurrence:
-        code:
-          - procedure_occurrence
-          - col(vocabulary_id)
-          - col(procedure_concept_id)
-        time: col(procedure_datetime)
-        time_format: "%Y-%m-%d %H:%M:%S"
+  procedure_occurrence:
+    code:
+      - procedure_occurrence
+      - col(vocabulary_id)
+      - col(procedure_concept_id)
+    time: col(procedure_datetime)
+    time_format: "%Y-%m-%d %H:%M:%S"
 # only available in OMOP 5.4
 #    procedure_end:
 #        code:
@@ -168,21 +168,20 @@ procedure_occurrence:
 #        time_format: "%Y-%m-%d %H:%M:%S"
 
 condition_era:
-    condition_era:
-        code:
-          - condition_era_start_date
-          - col(vocabulary_id)
-          - col(condition_concept_id)
-        time: col(condition_era_start_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
-    condition_era_end:
-        code:
-          - condition_era_end_date
-          - col(vocabulary_id)
-          - col(condition_concept_id)
-        time: col(condition_era_end_date)
-        time_format: "%Y-%m-%d %H:%M:%S"
-
+  condition_era:
+    code:
+      - condition_era_start_date
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+    time: col(condition_era_start_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
+  condition_era_end:
+    code:
+      - condition_era_end_date
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+    time: col(condition_era_end_date)
+    time_format: "%Y-%m-%d %H:%M:%S"
 #hosp/admissions:
 #  ed_registration:
 #    code: ED_REGISTRATION

@@ -44,9 +44,7 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
         raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
-def get_patient_link(
-        person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame
-) -> (pl.LazyFrame):
+def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) -> pl.LazyFrame:
     """
     Process the operations table to get the patient table and the link table.
 
@@ -91,25 +89,32 @@ def get_patient_link(
     )
     death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
     # TODO: join with location, provider, care_site,
-    return (person_df.sort(by=date_of_birth)
-            .with_columns(pl.col(SUBJECT_ID).cast(pl.Int64)).group_by(
-        SUBJECT_ID).first().join(death_df, on=SUBJECT_ID, how="left").select(
-        SUBJECT_ID,
-        date_of_birth.alias("date_of_birth"),
-        # admission_time.alias("first_admitted_at_time"),
-        date_of_death.alias("date_of_death"),
-    ).collect().lazy())  # We get parquet sink error if we don't collect here
+    return (
+        person_df.sort(by=date_of_birth)
+        .with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        .group_by(SUBJECT_ID)
+        .first()
+        .join(death_df, on=SUBJECT_ID, how="left")
+        .select(
+            SUBJECT_ID,
+            date_of_birth.alias("date_of_birth"),
+            # admission_time.alias("first_admitted_at_time"),
+            date_of_death.alias("date_of_death"),
+        )
+        .collect()
+        .lazy()
+    )  # We get parquet sink error if we don't collect here
     # visit_df,
 
 
 def join_concept_and_process_psuedotime(
-        table_name: str,
-        offset_col: str | list[str] | None = None,
-        pseudotime_col: str | list[str] | None = None,
-        reference_col: str | list[str] | None = None,
-        output_data_cols: list[str] | None = None,
-        concept_cols: list[str] | None = None,
-        warning_items: list[str] | None = None,
+    table_name: str,
+    offset_col: str | list[str] | None = None,
+    pseudotime_col: str | list[str] | None = None,
+    reference_col: str | list[str] | None = None,
+    output_data_cols: list[str] | None = None,
+    concept_cols: list[str] | None = None,
+    warning_items: list[str] | None = None,
 ) -> Callable[[pl.LazyFrame, pl.LazyFrame], pl.LazyFrame]:
     """Returns a function that joins a dataframe to the `patient` table and adds pseudotimes.
     Also raises specified warning strings via the logger for uncertain columns.

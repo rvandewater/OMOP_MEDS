@@ -60,7 +60,9 @@ def main(cfg: DictConfig) -> None:
                     preprocessor_cfg = preprocessor_cfg[omop_version]
                 else:
                     raise ValueError(f"OMOP version {omop_version} not supported for {table_name}.")
-            functions[table_name] = join_concept_and_process_psuedotime(table_name=table_name,**preprocessor_cfg)
+            functions[table_name] = join_concept_and_process_psuedotime(
+                table_name=table_name, **preprocessor_cfg
+            )
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person.parquet"
