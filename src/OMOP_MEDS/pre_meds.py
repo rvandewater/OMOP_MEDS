@@ -11,7 +11,7 @@ from omegaconf import DictConfig
 from src.OMOP_MEDS.pre_meds_utils import (
     DATASET_NAME,
     get_patient_link,
-    join_and_get_pseudotime_fntr,
+    join_concept_and_process_psuedotime,
     load_raw_file,
 )
 
@@ -32,7 +32,8 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Loading table preprocessors from {premeds_cfg}...")
     preprocessors = premeds_cfg  # OmegaConf.load(premeds_cfg)
     functions = {}
-    omop_version = str(dataset_info.omop_version)
+    omop_version = float(dataset_info.omop_version)
+    supported_omop_versions = [5.3, 5.4]
     logger.info(f"Expecting OMOP version: {omop_version}")
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
@@ -54,7 +55,12 @@ def main(cfg: DictConfig) -> None:
     for table_name, preprocessor_cfg in preprocessors.items():
         if table_name not in ["subject_id", "admission_id", "raw_data_extensions"]:
             logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
-            functions[table_name] = join_and_get_pseudotime_fntr(table_name=table_name, **preprocessor_cfg)
+            if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
+                if omop_version in preprocessor_cfg:
+                    preprocessor_cfg = preprocessor_cfg[omop_version]
+                else:
+                    raise ValueError(f"OMOP version {omop_version} not supported for {table_name}.")
+            functions[table_name] = join_concept_and_process_psuedotime(table_name=table_name,**preprocessor_cfg)
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person.parquet"

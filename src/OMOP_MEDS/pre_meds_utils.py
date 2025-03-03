@@ -45,8 +45,8 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
 
 
 def get_patient_link(
-    person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame
-) -> (pl.LazyFrame, pl.LazyFrame):
+        person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame
+) -> (pl.LazyFrame):
     """
     Process the operations table to get the patient table and the link table.
 
@@ -90,32 +90,26 @@ def get_patient_link(
         cast_to_datetime(death_df.collect_schema(), "death_datetime")
     )
     death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
-
-    return (
-        person_df.sort(by=date_of_birth)
-        .with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
-        .group_by(SUBJECT_ID)
-        .first()
-        .join(death_df, on=SUBJECT_ID, how="left")
-        .select(
-            SUBJECT_ID,
-            date_of_birth.alias("date_of_birth"),
-            # admission_time.alias("first_admitted_at_time"),
-            date_of_death.alias("date_of_death"),
-        )
-        .collect()
-        .lazy(),  # We get parquet sink error if we don't collect here
-        visit_df,
-    )
+    # TODO: join with location, provider, care_site,
+    return (person_df.sort(by=date_of_birth)
+            .with_columns(pl.col(SUBJECT_ID).cast(pl.Int64)).group_by(
+        SUBJECT_ID).first().join(death_df, on=SUBJECT_ID, how="left").select(
+        SUBJECT_ID,
+        date_of_birth.alias("date_of_birth"),
+        # admission_time.alias("first_admitted_at_time"),
+        date_of_death.alias("date_of_death"),
+    ).collect().lazy())  # We get parquet sink error if we don't collect here
+    # visit_df,
 
 
-def join_and_get_pseudotime_fntr(
-    table_name: str,
-    offset_col: str | list[str] | None = None,
-    pseudotime_col: str | list[str] | None = None,
-    reference_col: str | list[str] | None = None,
-    output_data_cols: list[str] | None = None,
-    warning_items: list[str] | None = None,
+def join_concept_and_process_psuedotime(
+        table_name: str,
+        offset_col: str | list[str] | None = None,
+        pseudotime_col: str | list[str] | None = None,
+        reference_col: str | list[str] | None = None,
+        output_data_cols: list[str] | None = None,
+        concept_cols: list[str] | None = None,
+        warning_items: list[str] | None = None,
 ) -> Callable[[pl.LazyFrame, pl.LazyFrame], pl.LazyFrame]:
     """Returns a function that joins a dataframe to the `patient` table and adds pseudotimes.
     Also raises specified warning strings via the logger for uncertain columns.
@@ -133,7 +127,7 @@ def join_and_get_pseudotime_fntr(
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
 
     Examples:
-        >>> func = join_and_get_pseudotime_fntr(
+        >>> func = join_concept_and_process_psuedotime(
         ...     "operations",
         ...     ["admission_time", "icuin_time", "icuout_time", "orin_time", "orout_time",
         ...      "opstart_time", "opend_time", "discharge_time", "anstart_time", "anend_time",
@@ -166,6 +160,9 @@ def join_and_get_pseudotime_fntr(
 
     if pseudotime_col is None:
         pseudotime_col = []
+
+    if concept_cols is None:
+        concept_cols = []
 
     if isinstance(offset_col, str):
         offset_col = [offset_col]
@@ -215,9 +212,9 @@ def join_and_get_pseudotime_fntr(
         # collected = df.collect()
         df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
         if len(reference_col) > 0:
-            joined = df.join(references_df, left_on=reference_col, right_on="concept_id")
+            df = df.join(references_df, left_on=reference_col, right_on="concept_id", how="left")
         # collected = joined.collect()
-        return joined  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
+        return df  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
 
