@@ -33,7 +33,8 @@ person:
 observation:
   5.3:
     reference_col: ["observation_source_concept_id"]
-    output_data_cols: [
+    output_data_cols:
+      [
         "observation_id",
         "observation_concept_id",
         "observation_date",
@@ -55,7 +56,8 @@ observation:
     concept_cols: ["vocabulary_id"]
   5.4:
     reference_col: ["observation_source_concept_id"]
-    output_data_cols: [
+    output_data_cols:
+      [
         "observation_id",
         "observation_concept_id",
         "observation_date",

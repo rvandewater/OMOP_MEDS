@@ -56,7 +56,6 @@ visit_occurrence:
     time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
 
-
 observation_period:
   observation_period:
     code:
@@ -94,7 +93,6 @@ drug_exposure:
     time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
 
-
 specimen:
   specimen:
     code:
@@ -104,7 +102,6 @@ specimen:
     time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(quantity)
     unit: col(unit_concept_id)
-
 
 device_exposure:
   device_exposure:
@@ -127,7 +124,6 @@ device_exposure:
     numeric_value: col(quantity)
     time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
-
 
 dose_era:
   dose_era:
