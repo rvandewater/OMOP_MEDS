@@ -73,7 +73,11 @@ def main(cfg: DictConfig) -> None:
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing concepts table first...")
-        concept_df = load_raw_file(input_dir / "concept.csv")
+        if (input_dir / "concept.csv").is_file():
+            concept_df = load_raw_file(input_dir / "concept.csv")
+        # For some reason this is the concept table in the downloaded data
+        elif (input_dir / "2b_concept.csv").is_file():
+            concept_df = load_raw_file(input_dir / "2b_concept.csv")
         write_lazyframe(concept_df, concept_out_fp)
 
     if person_out_fp.is_file():  # and visit_out_fp.is_file():
@@ -85,12 +89,12 @@ def main(cfg: DictConfig) -> None:
 
         person_df = load_raw_file(input_dir / "person.csv")
         death_df = load_raw_file(input_dir / "death.csv")
-        visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
+        # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
 
         # logger.info(f"Loading {str(admissions_fp.resolve())}...")
         # person_df = load_raw_file(admissions_fp)
 
-        patient_df = get_patient_link(person_df=person_df, death_df=death_df, visit_df=visit_df)
+        patient_df = get_patient_link(person_df=person_df, death_df=death_df)
         write_lazyframe(patient_df, person_out_fp)
         # write_lazyframe(visit_df, visit_out_fp)
 
@@ -145,7 +149,7 @@ def main(cfg: DictConfig) -> None:
             f"patient_df schema: {patient_df.collect_schema()}, "
             f"processed_df schema: {processed_df.collect_schema()}"
         )
-
+        processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
         processed_df.sink_parquet(out_fp)
         logger.info(f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}")
 

@@ -44,7 +44,7 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
         raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
-def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) -> pl.LazyFrame:
+def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.LazyFrame:
     """
     Process the operations table to get the patient table and the link table.
 
@@ -101,6 +101,7 @@ def get_patient_link(person_df: pl.LazyFrame, visit_df, death_df: pl.LazyFrame) 
             # admission_time.alias("first_admitted_at_time"),
             date_of_death.alias("date_of_death"),
         )
+        .with_columns(table_name=pl.lit("person"))
         .collect()
         .lazy()
     )  # We get parquet sink error if we don't collect here

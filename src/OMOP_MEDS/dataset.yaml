@@ -1,14 +1,10 @@
 dataset_name: "MIMIC_IV_OMOP"
-raw_dataset_version: 1.0
+raw_dataset_version: 0.9
 omop_version: 5.3
 
 urls:
   dataset:
-    - https://physionet.org/content/mimic-iv-demo-omop/0.9/
-    - url: EXAMPLE_CONTROLLED_URL
-      username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
-      password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
+    - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/
   demo:
-    - https://physionet.org/content/mimic-iv-demo-omop/0.9/
-  common:
-    - EXAMPLE_SHARED_URL # Often used for shared metadata files
+    - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/
+
