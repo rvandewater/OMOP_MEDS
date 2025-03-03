@@ -21,8 +21,9 @@ OMOP_MEDS root_output_dir=$ROOT_OUTPUT_DIR
 
 See the [MIMIC-IV MEDS Extraction ETL](https://github.com/rvamdewater/MIMIC_IV_MEDS) for an end to end example!
 Example config:
+
 ```yaml
-dataset_name: "MIMIC_IV_OMOP"
+dataset_name: MIMIC_IV_OMOP
 raw_dataset_version: 1.0
 omop_version: 5.3
 
