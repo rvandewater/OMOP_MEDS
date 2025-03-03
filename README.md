@@ -1,12 +1,12 @@
 # MEDS OMOP ETL with MEDS-Transforms
 
-[![codecov](https://codecov.io/gh/rvamdewater/OMOP_MEDS/graph/badge.svg?token=RW6JXHNT0W)](https://codecov.io/gh/rvamdewater/OMOP_MEDS)
-[![tests](https://github.com/rvamdewater/OMOP_MEDS/actions/workflows/tests.yaml/badge.svg)](https://github.com/rvamdewater/OMOP_MEDS/actions/workflows/tests.yml)
-[![code-quality](https://github.com/rvamdewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/rvamdewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml)
+[![codecov](https://codecov.io/gh/rvandewater/OMOP_MEDS/graph/badge.svg?token=RW6JXHNT0W)](https://codecov.io/gh/rvandewater/OMOP_MEDS)
+[![tests](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yml)
+[![code-quality](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml)
 ![python](https://img.shields.io/badge/-Python_3.11-blue?logo=python&logoColor=white)
-[![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/rvamdewater/OMOP_MEDS#license)
-[![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rvamdewater/OMOP_MEDS/pulls)
-[![contributors](https://img.shields.io/github/contributors/rvamdewater/OMOP_MEDS.svg)](https://github.com/rvamdewater/OMOP_MEDS/graphs/contributors)
+[![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/rvandewater/OMOP_MEDS#license)
+[![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rvandewater/OMOP_MEDS/pulls)
+[![contributors](https://img.shields.io/github/contributors/rvandewater/OMOP_MEDS.svg)](https://github.com/rvandewater/OMOP_MEDS/graphs/contributors)
 
 An ETL pipeline for transforming OMOP datasets into the MEDS format using the MEDS-Transforms library.
 Thanks to the first OMOP MEDS ETL, which can be found here: https://github.com/Medical-Event-Data-Standard/meds_etl.
