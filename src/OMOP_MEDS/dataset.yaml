@@ -7,4 +7,3 @@ urls:
     - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/
   demo:
     - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/
-

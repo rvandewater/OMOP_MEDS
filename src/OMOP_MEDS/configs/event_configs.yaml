@@ -25,6 +25,11 @@ observation:
     text_value: col(value_as_string)
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
+#    _metadata:
+#      observation:
+#        code: col(concept_code)
+#        description: col(concept_name) # List of strings are columns to be collated
+#        parent_codes: "{omop_vocabulary_id}/{omop_concept_code}"
 
 measurement:
   measurement:

@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 
 from src.OMOP_MEDS.pre_meds_utils import (
     DATASET_NAME,
+    extract_metadata,
     get_patient_link,
     join_concept_and_process_psuedotime,
     load_raw_file,
@@ -67,6 +68,7 @@ def main(cfg: DictConfig) -> None:
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person.parquet"
     concept_out_fp = MEDS_input_dir / "concept.parquet"
+    concept_relationship_out_fp = MEDS_input_dir / "concept_relationship.parquet"
 
     if concept_out_fp.is_file():
         logger.info(f"Reloading processed concepts df from {str(concept_out_fp.resolve())}")
@@ -97,8 +99,21 @@ def main(cfg: DictConfig) -> None:
         patient_df = get_patient_link(person_df=person_df, death_df=death_df)
         write_lazyframe(patient_df, person_out_fp)
         # write_lazyframe(visit_df, visit_out_fp)
+    if concept_relationship_out_fp.is_file():
+        logger.info(
+            f"Reloading processed concept_relationship df from {str(concept_relationship_out_fp.resolve())}"
+        )
+        concept_relationship_df = pl.scan_parquet(concept_relationship_out_fp)
+    else:
+        logger.info("Processing concept_relationship table first...")
+        concept_relationship_fp = input_dir / "concept_relationship.csv"
+        logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
+        concept_relationship_df = load_raw_file(concept_relationship_fp)
+        write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
 
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
+    metadata = extract_metadata(concept_df, concept_relationship_df)
+    metadata.sink_parquet(MEDS_input_dir / "codes.parquet")
 
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)

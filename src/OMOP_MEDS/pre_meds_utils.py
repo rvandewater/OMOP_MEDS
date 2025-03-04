@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+from loguru import logger
 
 from . import dataset_info, premeds_cfg
 
@@ -267,3 +268,91 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
     #     return path_to_table + ".parquet"
     # else:
     #     raise
+
+
+def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyFrame) -> pl.LazyFrame:
+    # concept_id_map: Dict[int, str] = {}  # [key] concept_id -> [value] concept_code
+    # concept_name_map: Dict[int, str] = {}  # [key] concept_id -> [value] concept_name
+    # code_metadata: Dict[str, Any] = {}  # [key] concept_code -> [value] metadata
+
+    # Read in the OMOP `CONCEPT` table from disk
+    # (see https://ohdsi.github.io/TheBookOfOhdsi/StandardizedVocabularies.html#concepts)
+    # and use it to generate metadata file as well as populate maps
+    # from (concept ID -> concept code) and (concept ID -> concept name)
+    # for concept_file in tqdm(itertools.chain(*get_table_files(path_to_src_omop_dir, "concept")),
+    #                          total=len(get_table_files(path_to_src_omop_dir, "concept")[0]) +
+    #                          len(get_table_files(path_to_src_omop_dir, "concept")[1]),
+    #                          desc="Generating metadata from OMOP `concept` table"):
+    #     # Note: Concept table is often split into gzipped shards by default
+    #     if verbose:
+    #         print(concept_file)
+    #     with load_file(path_to_decompressed_dir, concept_file) as f:
+    # Read the contents of the `concept` table shard
+    # `load_file` will unzip the file into `path_to_decompressed_dir` if needed
+    logger.info("Generating codes metadata from OMOP `concept` table and `concept_relationship` table")
+    concept = concept_df
+    concept_id = pl.col("concept_id").cast(pl.Int64)
+    code = pl.col("vocabulary_id") + "/" + pl.col("concept_code")
+    logger.info(concept.collect_schema())
+    # Convert the table into a dictionary
+    result = concept.select(concept_id=concept_id, code=code, name=pl.col("concept_name"))
+    concept_relationship_df = concept_relationship_df.with_columns(
+        pl.col("concept_id_1").cast(pl.Int64), pl.col("concept_id_2").cast(pl.Int64)
+    )
+    # Take the parents of the concepts
+    parent_codes = concept_relationship_df.filter(pl.col("relationship_id") == "Maps to")
+    parent_codes = parent_codes.with_columns(
+        pl.col("concept_id_2").alias("parent_codes").cast(pl.List(pl.Int64))
+    )
+    result = result.join(parent_codes, left_on="concept_id", right_on="concept_id_1", how="left")
+    code_metadata = result.select("code", "name", "parent_codes")
+
+    # result = result.to_dict(as_series=False)
+
+    # Update our running dictionary with the concepts we read in from
+    # the concept table shard
+    # concept_id_map |= dict(zip(result["concept_id"], result["code"]))
+    # concept_name_map |= dict(zip(result["concept_id"], result["name"]))
+
+    # Assuming custom concepts have concept_id > 2000000000 we create a
+    # record for them in `code_metadata` with no parent codes. Such a
+    # custom code could be eg `STANFORD_RACE/Black or African American`
+    # with `concept_id` 2000039197
+    # custom_concepts = (
+    #     concept.filter(concept_id > CUSTOMER_CONCEPT_ID_START)
+    #     .select(concept_id=concept_id, code=code, description=pl.col("concept_name"))
+    #     .to_dict()
+    # )
+    # for i in range(len(custom_concepts["code"])):
+    #     code_metadata[custom_concepts["code"][i]] = {
+    #         "code": custom_concepts["code"][i],
+    #         "description": custom_concepts["description"][i],
+    #         "parent_codes": [],
+    #     }
+
+    # Include map from custom concepts to normalized (ie standard ontology)
+    # parent concepts, where possible, in the code_metadata dictionary
+    # for concept_relationship_file in tqdm(itertools.chain(
+    # *get_table_files(path_to_src_omop_dir, "concept_relationship")),
+    #   total=len(get_table_files(path_to_src_omop_dir, "concept_relationship")[0]) +
+    #   len(get_table_files(path_to_src_omop_dir, "concept_relationship")[1]),
+    #   desc="Generating metadata from OMOP `concept_relationship` table"):
+    #     with load_file(path_to_decompressed_dir, concept_relationship_file) as f:
+    # This table has `concept_id_1`, `concept_id_2`, `relationship_id` columns
+
+    # custom_relationships = (
+    #     concept_relationship.filter(
+    #         concept_id_1 > CUSTOMER_CONCEPT_ID_START,
+    #         pl.col("relationship_id") == "Maps to",
+    #         concept_id_1 != concept_id_2,
+    #     )
+    #     .select(concept_id_1=concept_id_1, concept_id_2=concept_id_2)
+    #     .to_dict(as_series=False)
+    # )
+
+    # for concept_id_1, concept_id_2 in zip(
+    #     custom_relationships["concept_id_1"], custom_relationships["concept_id_2"]
+    # ):
+    #     if concept_id_1 in concept_id_map and concept_id_2 in concept_id_map:
+    #         code_metadata[concept_id_map[concept_id_1]]["parent_codes"].append(concept_id_map[concept_id_2])
+    return code_metadata  # concept_id_map, concept_name_map
