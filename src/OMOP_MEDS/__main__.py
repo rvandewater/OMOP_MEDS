@@ -14,8 +14,7 @@ from . import dataset_info
 from .commands import run_command
 from .download import download_data
 
-if HAS_PRE_MEDS:
-    from .pre_meds import main as pre_MEDS_transform
+from .pre_meds import main as pre_MEDS_transform
 
 logger = logging.getLogger(__name__)
 
