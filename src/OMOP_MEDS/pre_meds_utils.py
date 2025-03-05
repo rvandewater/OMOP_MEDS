@@ -95,6 +95,7 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
                 SUBJECT_ID: [],
                 "date_of_death": [None] * 0
                 }).lazy()
+        date_of_death = death_df.select("date_of_death")
     # TODO: join with location, provider, care_site,
     return (
         person_df.sort(by=date_of_birth)
