@@ -85,10 +85,16 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     )
     # admission_time = pl.col("admission_time")
     # date_of_death = pl.col("death_datetime")
-    date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
-        cast_to_datetime(death_df.collect_schema(), "death_datetime")
-    )
-    death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+    if death_df is not None:
+        date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
+            cast_to_datetime(death_df.collect_schema(), "death_datetime")
+        )
+        death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+    else:
+        date_of_death = pl.DataFrame({
+                SUBJECT_ID: [],
+                "date_of_death": [None] * 0
+                }).lazy()
     # TODO: join with location, provider, care_site,
     return (
         person_df.sort(by=date_of_birth)

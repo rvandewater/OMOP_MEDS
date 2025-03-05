@@ -104,8 +104,15 @@ def main(cfg: DictConfig) -> None:
     else:
         logger.info("Processing patient table...")
 
-        person_df = load_raw_file(input_dir / "person.csv")
-        death_df = load_raw_file(input_dir / "death.csv")
+        if (input_dir / "person.csv").is_file():
+            person_df = load_raw_file(input_dir / "person.csv")
+        else:
+            raise FileNotFoundError("No person table found in the input directory.")
+
+        if (input_dir / "death.csv").is_file():
+            death_df = load_raw_file(input_dir / "death.csv")
+        else:
+            death_df = None
         # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
 
         # logger.info(f"Loading {str(admissions_fp.resolve())}...")
