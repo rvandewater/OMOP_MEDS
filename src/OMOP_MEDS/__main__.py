@@ -46,10 +46,10 @@ def main(cfg: DictConfig):
         logger.info("Skipping data download.")
 
     # Step 1: Pre-MEDS Data Wrangling
-    if HAS_PRE_MEDS:
-        pre_MEDS_transform(cfg)
-    else:
-        pre_MEDS_dir = raw_input_dir
+    # if HAS_PRE_MEDS:
+    pre_MEDS_transform(cfg)
+    # else:
+    #     pre_MEDS_dir = raw_input_dir
 
     # Step 2: MEDS Cohort Creation
     # First we need to set some environment variables
