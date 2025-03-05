@@ -8,7 +8,7 @@ from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig
 
-from src.OMOP_MEDS.pre_meds_utils import (
+from .pre_meds_utils import (
     DATASET_NAME,
     extract_metadata,
     get_patient_link,
