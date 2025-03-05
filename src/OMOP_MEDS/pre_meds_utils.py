@@ -91,7 +91,7 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
         )
         death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
     else:
-        date_of_death = pl.DataFrame({
+        death_df = pl.DataFrame({
                 SUBJECT_ID: [],
                 "date_of_death": [None] * 0
                 }).lazy()
