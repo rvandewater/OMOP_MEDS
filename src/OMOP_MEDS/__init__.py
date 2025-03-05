@@ -16,9 +16,11 @@ RUNNER_CFG = files(__package_name__).joinpath("configs/runner.yaml")
 PRE_MEDS_PY = files(__package_name__).joinpath("pre_MEDS.py")
 PRE_MEDS_CFG = files(__package_name__).joinpath("configs/pre_MEDS.yaml")
 DATASET_CFG = files(__package_name__).joinpath("dataset.yaml")
+OMOP_CFG = files(__package_name__).joinpath("configs/OMOP.yaml")
 
 dataset_info = OmegaConf.load(DATASET_CFG)
 premeds_cfg = OmegaConf.load(PRE_MEDS_CFG)
+omop_cfg = OmegaConf.load(OMOP_CFG)
 
 HAS_PRE_MEDS = PRE_MEDS_PY.exists()
 

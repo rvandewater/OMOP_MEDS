@@ -16,7 +16,7 @@ from src.OMOP_MEDS.pre_meds_utils import (
     load_raw_file,
 )
 
-from . import dataset_info, premeds_cfg
+from . import dataset_info, omop_cfg, premeds_cfg
 
 # Name of the dataset
 # Column name for admission ID associated with this particular admission
@@ -36,6 +36,7 @@ def main(cfg: DictConfig) -> None:
     omop_version = float(dataset_info.omop_version)
     supported_omop_versions = [5.3, 5.4]
     logger.info(f"Expecting OMOP version: {omop_version}")
+    omop_cfg_version = omop_cfg[omop_version]
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
@@ -49,9 +50,23 @@ def main(cfg: DictConfig) -> None:
         exit(0)
 
     all_fps = []
-    for ext in DATA_FILE_EXTENSIONS:
-        all_fps.extend(input_dir.rglob(f"*/{ext}"))
-        all_fps.extend(input_dir.rglob(f"{ext}"))
+    for table in omop_cfg_version["tables"]:
+        # Check for .csv and .parquet files
+        if table in IGNORE_TABLES:
+            logger.info(f"Skipping {table} as it is in the ignore list.")
+            continue
+        csv_files = list(input_dir.glob(f"{table}.csv"))
+        parquet_files = list(input_dir.glob(f"{table}.parquet"))
+        directories = list(input_dir.glob(f"{table}"))
+
+        if csv_files:
+            all_fps.extend(csv_files)
+        elif parquet_files:
+            all_fps.extend(parquet_files)
+        elif directories:
+            all_fps.extend(directories)
+        else:
+            logger.warning(f"No files found for {table}")
 
     for table_name, preprocessor_cfg in preprocessors.items():
         if table_name not in ["subject_id", "admission_id", "raw_data_extensions"]:
