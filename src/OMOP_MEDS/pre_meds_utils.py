@@ -245,9 +245,16 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
         return pl.scan_csv(fp, infer_schema=False)
     elif fp.suffix == ".parquet":
         return pl.scan_parquet(fp)
+    elif fp.is_dir():
+        files = list(fp.glob("**/*"))
+        csv_files = [file for file in files if file.suffix in [".csv", ".gz"]]
+        parquet_files = [file for file in files if file.suffix == ".parquet"]
+        if csv_files:
+            return pl.scan_csv(csv_files, infer_schema=False)
+        elif parquet_files:
+            return pl.scan_parquet(parquet_files)
     else:
         raise ValueError(f"Unknown file type for {fp}")
-
     # if os.path.exists(path_to_table) and os.path.isdir(path_to_table):
     #     csv_files = []
     #     parquet_files = []
