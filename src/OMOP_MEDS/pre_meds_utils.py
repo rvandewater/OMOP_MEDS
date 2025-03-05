@@ -42,7 +42,8 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
     elif isinstance(schema[column], pl.Datetime):
         return pl.col(column).cast(pl.Datetime(time_unit="us"))
     else:
-        raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
+        return pl.col(column)
+        # raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
 def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.LazyFrame:
@@ -86,16 +87,19 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     # admission_time = pl.col("admission_time")
     # date_of_death = pl.col("death_datetime")
     if death_df is not None:
-        date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
-            cast_to_datetime(death_df.collect_schema(), "death_datetime")
-        )
+
         death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
     else:
-        death_df = pl.DataFrame({
-                SUBJECT_ID: [],
-                "date_of_death": [None] * 0
-                }).lazy()
-        date_of_death = death_df.select("date_of_death")
+        death_df = (pl.DataFrame(
+            data=[],
+            schema={
+            SUBJECT_ID: pl.Int64,
+            "date_of_death": pl.Datetime,
+            "death_datetime": pl.Datetime,
+        })).lazy()
+    date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
+        cast_to_datetime(death_df.collect_schema(), "death_datetime")
+    )
     # TODO: join with location, provider, care_site,
     return (
         person_df.sort(by=date_of_birth)
