@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, omegaconf, OmegaConf
 
 from . import ETL_CFG, EVENT_CFG, HAS_PRE_MEDS, MAIN_CFG, RUNNER_CFG
 from . import __version__ as PKG_VERSION
@@ -49,7 +49,15 @@ def main(cfg: DictConfig):
     pre_MEDS_transform(cfg)
     # else:
     #     pre_MEDS_dir = raw_input_dir
-
+    event_cfg = OmegaConf.load(EVENT_CFG)
+    if cfg.get("tables_to_ignore", None):
+        event_cfg.tables_to_ignore = cfg.tables_to_ignore
+        with open(EVENT_CFG, "w") as f:
+            omegaconf.OmegaConf.save(config=event_cfg, f=f)
+    elif event_cfg.get("tables_to_ignore", None):
+        event_cfg.pop("tables_to_ignore")
+        with open(EVENT_CFG, "w") as f:
+            omegaconf.OmegaConf.save(config=event_cfg, f=f)
     # Step 2: MEDS Cohort Creation
     # First we need to set some environment variables
     command_parts = [
