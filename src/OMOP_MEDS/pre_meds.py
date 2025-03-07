@@ -90,11 +90,13 @@ def main(cfg: DictConfig) -> None:
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing concepts table first...")
-        path = next(input_dir.glob("concept.*"))
-        if not path:
-            path = next(input_dir.glob("2b_concept.*"))
+        path = list(input_dir.glob("concept.*"))
+        if len(path) == 0:
+            path = list(input_dir.glob("2b_concept.*"))
+            if len(path) == 0:
+                raise FileNotFoundError("No concept table found in the input directory.")
             # For some reason this is the concept table in the omop demo data
-        concept_df = load_raw_file(path)
+        concept_df = load_raw_file(path[0])
         write_lazyframe(concept_df, concept_out_fp)
 
     if person_out_fp.is_file():  # and visit_out_fp.is_file():
@@ -103,15 +105,15 @@ def main(cfg: DictConfig) -> None:
         # visit_df = pl.scan_parquet(visit_out_fp)
     else:
         logger.info("Processing patient table...")
-        person_in_fp = next(input_dir.glob("person"))
-        if person_in_fp.is_file():
-            person_df = load_raw_file(person_in_fp)
+        person_in_fp = list(input_dir.glob("person.*"))
+        if len(person_in_fp) > 0:
+            person_df = load_raw_file(person_in_fp[0])
         else:
             raise FileNotFoundError("No person table found in the input directory.")
 
-        death_in_fp = next(input_dir.glob("death"))
-        if death_in_fp.is_file():
-            death_df = load_raw_file(death_in_fp)
+        death_in_fp = list(input_dir.glob("death.*"))
+        if len(death_in_fp) > 0:
+            death_df = load_raw_file(death_in_fp[0])
         else:
             death_df = None
         # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
