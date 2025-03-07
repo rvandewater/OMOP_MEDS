@@ -81,18 +81,27 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     #                 time_unit="us",
     #             ),
     #         )
-    date_of_birth = (
-        pl.when(pl.col("birth_datetime").is_not_null())
-        .then(cast_to_datetime(person_df.collect_schema(), "birth_datetime"))
-        .otherwise(
-            pl.datetime(
-                pl.col("year_of_birth"),
-                pl.col("month_of_birth").fill_null(1),
-                pl.col("day_of_birth").fill_null(1),
-                time_unit="us",
+    person_schema = person_df.collect_schema()
+    if "birth_datetime" in person_schema:
+        date_of_birth = (
+            pl.when(pl.col("birth_datetime").is_not_null())
+            .then(cast_to_datetime(person_df.collect_schema(), "birth_datetime"))
+            .otherwise(
+                pl.datetime(
+                    pl.col("year_of_birth"),
+                    pl.col("month_of_birth").fill_null(1),
+                    pl.col("day_of_birth").fill_null(1),
+                    time_unit="us",
+                )
             )
         )
-    )
+    else:
+        date_of_birth = pl.datetime(
+            pl.col("year_of_birth"),
+            pl.col("month_of_birth").fill_null(1),
+            pl.col("day_of_birth").fill_null(1),
+            time_unit="us",
+        )
     # admission_time = pl.col("admission_time")
     # date_of_death = pl.col("death_datetime")
     if death_df is not None:
