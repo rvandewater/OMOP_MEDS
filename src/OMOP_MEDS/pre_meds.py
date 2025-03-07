@@ -132,7 +132,7 @@ def main(cfg: DictConfig) -> None:
         concept_relationship_df = pl.scan_parquet(concept_relationship_out_fp)
     else:
         logger.info("Processing concept_relationship table first...")
-        concept_relationship_fp = input_dir / "concept_relationship.csv"
+        concept_relationship_fp = get_table_path(input_dir, "concept_relationship")
         logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
         concept_relationship_df = load_raw_file(concept_relationship_fp)
         write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
