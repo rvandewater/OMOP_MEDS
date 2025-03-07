@@ -13,6 +13,15 @@ SUBJECT_ID = premeds_cfg.subject_id
 OMOP_TIME_FORMATS: Iterable[str] = ("%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d")
 
 
+def get_table_path(input_dir: Path, table_name: str) -> Path | None:
+    table_path = input_dir / table_name
+    if table_path.exists():
+        return table_path
+    table_path_with_ext = list(input_dir.glob(f"{table_name}.*"))
+    if table_path_with_ext:
+        return table_path_with_ext[0]
+    return None
+
 def parse_time(time: pl.Expr, time_formats: Iterable[str]) -> pl.Expr:
     return pl.coalesce(
         [time.str.to_datetime(time_format, strict=False, time_unit="us") for time_format in time_formats]
@@ -265,7 +274,8 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
         elif parquet_files:
             return pl.scan_parquet(parquet_files)
     else:
-        raise ValueError(f"Unknown file type for {fp}")
+        return None
+        #raise ValueError(f"Unknown file type for {fp}")
     # if os.path.exists(path_to_table) and os.path.isdir(path_to_table):
     #     csv_files = []
     #     parquet_files = []
@@ -374,3 +384,4 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     #     if concept_id_1 in concept_id_map and concept_id_2 in concept_id_map:
     #         code_metadata[concept_id_map[concept_id_1]]["parent_codes"].append(concept_id_map[concept_id_2])
     return code_metadata  # concept_id_map, concept_name_map
+

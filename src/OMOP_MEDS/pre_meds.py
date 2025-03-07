@@ -14,6 +14,7 @@ from .pre_meds_utils import (
     get_patient_link,
     join_concept_and_process_psuedotime,
     load_raw_file,
+    get_table_path
 )
 
 from . import dataset_info, omop_cfg, premeds_cfg
@@ -90,13 +91,13 @@ def main(cfg: DictConfig) -> None:
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing concepts table first...")
-        path = list(input_dir.glob("concept.*"))
-        if len(path) == 0:
-            path = list(input_dir.glob("2b_concept.*"))
-            if len(path) == 0:
+        path = get_table_path(input_dir, "concept")
+        if not path:
+            path = get_table_path(input_dir, "2b_concept")
+            if not path:
                 raise FileNotFoundError("No concept table found in the input directory.")
             # For some reason this is the concept table in the omop demo data
-        concept_df = load_raw_file(path[0])
+        concept_df = load_raw_file(path)
         write_lazyframe(concept_df, concept_out_fp)
 
     if person_out_fp.is_file():  # and visit_out_fp.is_file():
@@ -105,15 +106,15 @@ def main(cfg: DictConfig) -> None:
         # visit_df = pl.scan_parquet(visit_out_fp)
     else:
         logger.info("Processing patient table...")
-        person_in_fp = list(input_dir.glob("person.*"))
-        if len(person_in_fp) > 0:
-            person_df = load_raw_file(person_in_fp[0])
+        person_in_fp = get_table_path(input_dir, "person")
+        if person_in_fp:
+            person_df = load_raw_file(person_in_fp)
         else:
             raise FileNotFoundError("No person table found in the input directory.")
 
-        death_in_fp = list(input_dir.glob("death.*"))
-        if len(death_in_fp) > 0:
-            death_df = load_raw_file(death_in_fp[0])
+        death_in_fp = get_table_path(input_dir, "death")
+        if death_in_fp:
+            death_df = load_raw_file(death_in_fp)
         else:
             death_df = None
         # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
@@ -195,3 +196,4 @@ def main(cfg: DictConfig) -> None:
 
     logger.info(f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}")
     return
+
