@@ -88,7 +88,7 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
             .then(cast_to_datetime(person_df.collect_schema(), "birth_datetime"))
             .otherwise(
                 pl.datetime(
-                    pl.col("year_of_birth"),
+                    pl.col("year_of_birth").fill_null(1900),
                     pl.col("month_of_birth").fill_null(1),
                     pl.col("day_of_birth").fill_null(1),
                     time_unit="us",
