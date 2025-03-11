@@ -207,5 +207,5 @@ condition_era:
     time_format: '%Y-%m-%d %H:%M:%S'
     numeric_value: col(condition_occurrence_count)
     table_name: col(table_name)
-tables_to_ignore:
-- measurement
+#tables_to_ignore:
+#- measurement
