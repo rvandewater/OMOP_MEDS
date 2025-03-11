@@ -79,7 +79,6 @@ drug_exposure:
     numeric_value: col(quantity)
     time_format: '%Y-%m-%d %H:%M:%S'
     visit_occurrence_id: col(visit_occurrence_id)
-    end: col(drug_exposure_end_datetime)
     table_name: col(table_name)
   drug_exposure_end:
     code:
@@ -208,3 +207,5 @@ condition_era:
     time_format: '%Y-%m-%d %H:%M:%S'
     numeric_value: col(condition_occurrence_count)
     table_name: col(table_name)
+tables_to_ignore:
+- measurement
