@@ -81,21 +81,15 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     #                 time_unit="us",
     #             ),
     #         )
-    date_parsing = (pl.when(
-                (pl.col("year_of_birth").cast(pl.Int64) == 0) &
-                (pl.col("month_of_birth").cast(pl.Int64) == 0) &
-                (pl.col("day_of_birth").cast(pl.Int64) == 0)
-            )
-            .then(None)
-            .otherwise(
+    # person_df.filter()
+    date_parsing = (
                 pl.datetime(
-                    pl.col("year_of_birth").fill_null(1900),
-                    pl.col("month_of_birth").fill_null(1),
-                    pl.col("day_of_birth").fill_null(1),
+                    pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
+                    pl.col("month_of_birth").replace(0, 1).fill_null(1),
+                    pl.col("day_of_birth").replace(0, 1).fill_null(1),
                     time_unit="us",
                 )
             )
-        )
     person_schema = person_df.collect_schema()
     if "birth_datetime" in person_schema:
         date_of_birth = (
