@@ -8,6 +8,8 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig, OmegaConf, omegaconf
 
+from src.OMOP_MEDS.pre_meds_utils import rename_demo_files
+
 from . import ETL_CFG, EVENT_CFG, MAIN_CFG, RUNNER_CFG
 from . import __version__ as PKG_VERSION
 from . import dataset_info
@@ -37,9 +39,11 @@ def main(cfg: DictConfig):
         if cfg.get("do_demo", False):
             logger.info("Downloading demo data.")
             download_data(raw_input_dir, dataset_info, do_demo=True)
+            rename_demo_files(raw_input_dir)
         else:
             logger.info("Downloading data.")
             download_data(raw_input_dir, dataset_info)
+            rename_demo_files(raw_input_dir)
     else:  # pragma: no cover
         logger.info("Skipping data download.")
 

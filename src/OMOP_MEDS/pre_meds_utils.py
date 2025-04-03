@@ -342,3 +342,12 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     #     if concept_id_1 in concept_id_map and concept_id_2 in concept_id_map:
     #         code_metadata[concept_id_map[concept_id_1]]["parent_codes"].append(concept_id_map[concept_id_2])
     return code_metadata  # concept_id_map, concept_name_map
+
+
+def rename_demo_files(directory: Path):
+    """Rename files in the directory by removing the '2b_' prefix."""
+    for file_path in directory.glob("2b_*"):
+        new_name = file_path.name.replace("2b_", "")
+        new_path = file_path.with_name(new_name)
+        file_path.rename(new_path)
+        logger.info(f"Renamed: {file_path} to {new_path}")

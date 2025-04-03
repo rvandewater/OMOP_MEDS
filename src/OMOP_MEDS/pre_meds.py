@@ -88,13 +88,11 @@ def main(cfg: DictConfig) -> None:
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing concepts table first...")
-        path = get_table_path(input_dir, "concept")
-        if not path:
-            path = get_table_path(input_dir, "2b_concept")
-            if not path:
-                raise FileNotFoundError("No concept table found in the input directory.")
+        concept_path = get_table_path(input_dir, "concept")
+        if not concept_path:
+            raise FileNotFoundError("No concept table found in the input directory.")
             # For some reason this is the concept table in the omop demo data
-        concept_df = load_raw_file(path)
+        concept_df = load_raw_file(concept_path)
         write_lazyframe(concept_df, concept_out_fp)
 
     if person_out_fp.is_file():  # and visit_out_fp.is_file():
@@ -130,6 +128,8 @@ def main(cfg: DictConfig) -> None:
     else:
         logger.info("Processing concept_relationship table first...")
         concept_relationship_fp = get_table_path(input_dir, "concept_relationship")
+        if not concept_relationship_fp:
+            raise FileNotFoundError("No concept relationship table found in the input directory.")
         logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
         concept_relationship_df = load_raw_file(concept_relationship_fp)
         write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
