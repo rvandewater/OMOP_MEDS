@@ -8,6 +8,8 @@
 [![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/rvandewater/OMOP_MEDS#license)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rvandewater/OMOP_MEDS/pulls)
 [![contributors](https://img.shields.io/github/contributors/rvandewater/OMOP_MEDS.svg)](https://github.com/rvandewater/OMOP_MEDS/graphs/contributors)
+[![DOI](https://zenodo.org/badge/940565218.svg)](https://doi.org/10.5281/zenodo.15132443)
+
 
 An ETL pipeline for transforming OMOP datasets into the MEDS format using the MEDS-Transforms library.
 Thanks to the developers of the first OMOP MEDS ETL, from which we took inspiration,
@@ -20,9 +22,13 @@ pip install OMOP_MEDS # you can do this locally or via PyPI
 OMOP_MEDS root_output_dir=$ROOT_OUTPUT_DIR
 
 ```
+To try with the MIMIC-IV OMOP demo dataset, you can run:
 
-Example config:
+```bash
+OMOP_MEDS root_output_dir=/path/to/your/output do_download=True ++do_demo=True
+```
 
+Example config for an OMOP dataset:
 ```yaml
 dataset_name: MIMIC_IV_OMOP
 raw_dataset_version: 1.0
@@ -41,3 +47,4 @@ urls:
 ```
 
 ## Citation
+If you use this dataset, please use the citation link in Github.
