@@ -22,6 +22,7 @@ def get_table_path(input_dir: Path, table_name: str) -> Path | None:
         return table_path_with_ext[0]
     return None
 
+
 def parse_time(time: pl.Expr, time_formats: Iterable[str]) -> pl.Expr:
     return pl.coalesce(
         [time.str.to_datetime(time_format, strict=False, time_unit="us") for time_format in time_formats]
@@ -82,21 +83,18 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     #             ),
     #         )
     # person_df.filter()
-    date_parsing = (
-                pl.datetime(
-                    pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
-                    pl.col("month_of_birth").replace(0, 1).fill_null(1),
-                    pl.col("day_of_birth").replace(0, 1).fill_null(1),
-                    time_unit="us",
-                )
-            )
+    date_parsing = pl.datetime(
+        pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
+        pl.col("month_of_birth").replace(0, 1).fill_null(1),
+        pl.col("day_of_birth").replace(0, 1).fill_null(1),
+        time_unit="us",
+    )
     person_schema = person_df.collect_schema()
     if "birth_datetime" in person_schema:
         date_of_birth = (
             pl.when(pl.col("birth_datetime").is_not_null())
             .then(cast_to_datetime(person_df.collect_schema(), "birth_datetime"))
-            .otherwise(date_parsing
-            )
+            .otherwise(date_parsing)
         )
     else:
         date_of_birth = date_parsing
@@ -106,13 +104,16 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
 
         death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
     else:
-        death_df = (pl.DataFrame(
-            data=[],
-            schema={
-            SUBJECT_ID: pl.Int64,
-            "date_of_death": pl.Datetime,
-            "death_datetime": pl.Datetime,
-        })).lazy()
+        death_df = (
+            pl.DataFrame(
+                data=[],
+                schema={
+                    SUBJECT_ID: pl.Int64,
+                    "date_of_death": pl.Datetime,
+                    "death_datetime": pl.Datetime,
+                },
+            )
+        ).lazy()
     date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
         cast_to_datetime(death_df.collect_schema(), "death_datetime")
     )
@@ -284,7 +285,7 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
         return None
     file = file.select(pl.all().name.to_lowercase())
     return file
-        #raise ValueError(f"Unknown file type for {fp}")
+    # raise ValueError(f"Unknown file type for {fp}")
     # if os.path.exists(path_to_table) and os.path.isdir(path_to_table):
     #     csv_files = []
     #     parquet_files = []
@@ -393,4 +394,3 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     #     if concept_id_1 in concept_id_map and concept_id_2 in concept_id_map:
     #         code_metadata[concept_id_map[concept_id_1]]["parent_codes"].append(concept_id_map[concept_id_2])
     return code_metadata  # concept_id_map, concept_name_map
-

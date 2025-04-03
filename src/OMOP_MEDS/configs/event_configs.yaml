@@ -3,21 +3,21 @@ person:
   death_time:
     code: MEDS_DEATH
     time: col(date_of_death)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     table_name: col(table_name)
   age:
     code:
-    - MEDS_BIRTH
+      - MEDS_BIRTH
     time: col(date_of_birth)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     table_name: col(table_name)
 observation:
   observation:
     code:
-    - col(vocabulary_id)
-    - col(concept_code)
+      - col(vocabulary_id)
+      - col(concept_code)
     time: col(observation_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(value_as_number)
     unit: col(unit_concept_id)
     text_value: col(value_as_string)
@@ -26,10 +26,10 @@ observation:
 measurement:
   measurement:
     code:
-    - col(vocabulary_id)
-    - col(concept_code)
+      - col(vocabulary_id)
+      - col(concept_code)
     time: col(measurement_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(value_as_number)
     unit: col(unit_concept_id)
     visit_occurrence_id: col(visit_occurrence_id)
@@ -37,174 +37,174 @@ measurement:
 visit_occurrence:
   visit:
     code:
-    - col(vocabulary_id)
-    - col(visit_type_concept_id)
-    - start
+      - col(vocabulary_id)
+      - col(visit_type_concept_id)
+      - start
     time: col(visit_start_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
   visit_end:
     code:
-    - col(vocabulary_id)
-    - col(concept_code)
-    - end
+      - col(vocabulary_id)
+      - col(concept_code)
+      - end
     time: col(visit_end_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
 observation_period:
   observation_period:
     code:
-    - col(period_type_concept_id)
-    - start
+      - col(period_type_concept_id)
+      - start
     time: col(observation_period_start_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     table_name: col(table_name)
   observation_period_end:
     code:
-    - observation_period_start
-    - col(period_type_concept_id)
-    - end
+      - observation_period_start
+      - col(period_type_concept_id)
+      - end
     time: col(observation_period_end_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     table_name: col(table_name)
 drug_exposure:
   drug_exposure:
     code:
-    - col(vocabulary_id)
-    - col(drug_concept_id)
-    - start
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+      - start
     time: col(drug_exposure_start_datetime)
     numeric_value: col(quantity)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
   drug_exposure_end:
     code:
-    - col(vocabulary_id)
-    - col(drug_concept_id)
-    - end
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+      - end
     time: col(drug_exposure_end_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
 specimen:
   specimen:
     code:
-    - specimen
-    - col(specimen_concept_id)
+      - specimen
+      - col(specimen_concept_id)
     time: col(specimen_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(quantity)
     unit: col(unit_concept_id)
     table_name: col(table_name)
 device_exposure:
   device_exposure:
     code:
-    - col(vocabulary_id)
-    - col(device_concept_id)
-    - start
+      - col(vocabulary_id)
+      - col(device_concept_id)
+      - start
     time: col(device_exposure_start_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(quantity)
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
   device_exposure_end:
     code:
-    - col(vocabulary_id)
-    - col(device_concept_id)
-    - end
+      - col(vocabulary_id)
+      - col(device_concept_id)
+      - end
     time: col(device_exposure_end_datetime)
     numeric_value: col(quantity)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
 dose_era:
   dose_era:
     code:
-    - col(drug_concept_id)
-    - start
+      - col(drug_concept_id)
+      - start
     time: col(dose_era_start_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(dose_value)
     unit: col(unit_concept_id)
     table_name: col(table_name)
   dose_era_end:
     code:
-    - col(drug_concept_id)
-    - end
+      - col(drug_concept_id)
+      - end
     time: col(dose_era_end_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(dose_value)
     unit: col(unit_concept_id)
     table_name: col(table_name)
 condition_occurrence:
   condition_occurrence:
     code:
-    - col(vocabulary_id)
-    - col(condition_concept_id)
-    - start
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+      - start
     time: col(condition_start_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
   condition_end:
     code:
-    - col(vocabulary_id)
-    - col(condition_concept_id)
-    - end
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+      - end
     time: col(condition_end_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
 drug_era:
   drug_era:
     code:
-    - col(vocabulary_id)
-    - col(drug_concept_id)
-    - start
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+      - start
     time: col(drug_era_start_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(drug_exposure_count)
     table_name: col(table_name)
   drug_era_end:
     code:
-    - col(vocabulary_id)
-    - col(drug_concept_id)
-    - end
+      - col(vocabulary_id)
+      - col(drug_concept_id)
+      - end
     time: col(drug_era_end_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(drug_exposure_count)
     table_name: col(table_name)
 procedure_occurrence:
   procedure_occurrence:
     code:
-    - procedure_occurrence
-    - col(vocabulary_id)
-    - col(procedure_concept_id)
+      - procedure_occurrence
+      - col(vocabulary_id)
+      - col(procedure_concept_id)
     time: col(procedure_datetime)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(quantity)
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
 condition_era:
   condition_era:
     code:
-    - col(vocabulary_id)
-    - col(condition_concept_id)
-    - start
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+      - start
     time: col(condition_era_start_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(condition_occurrence_count)
     table_name: col(table_name)
   condition_era_end:
     code:
-    - col(vocabulary_id)
-    - col(condition_concept_id)
-    - end
+      - col(vocabulary_id)
+      - col(condition_concept_id)
+      - end
     time: col(condition_era_end_date)
-    time_format: '%Y-%m-%d %H:%M:%S'
+    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(condition_occurrence_count)
     table_name: col(table_name)
 #tables_to_ignore:

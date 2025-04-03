@@ -8,16 +8,15 @@ from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig
 
+from . import dataset_info, omop_cfg, premeds_cfg
 from .pre_meds_utils import (
     DATASET_NAME,
     extract_metadata,
     get_patient_link,
+    get_table_path,
     join_concept_and_process_psuedotime,
     load_raw_file,
-    get_table_path
 )
-
-from . import dataset_info, omop_cfg, premeds_cfg
 
 # Name of the dataset
 # Column name for admission ID associated with this particular admission
@@ -186,14 +185,12 @@ def main(cfg: DictConfig) -> None:
         # if (table_name + "_end_datetime") in schema.names():
         #     end = cast_to_datetime(schema, table_name + "_end_datetime", move_to_end_of_day=True)
         #     metadata["end"] = end
-        logger.info(
-            f"patient_df schema: {patient_df.collect_schema()}, "
-            f"processed_df schema: {processed_df.collect_schema()}"
-        )
+        # logger.info(
+        #     f"processed_df schema: {processed_df.collect_schema()}"
+        # )
         processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
         processed_df.sink_parquet(out_fp)
         logger.info(f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}")
 
     logger.info(f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}")
     return
-
