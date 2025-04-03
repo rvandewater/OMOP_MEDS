@@ -58,31 +58,44 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
 
 def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.LazyFrame:
     """
-    Process the operations table to get the patient table and the link table.
-
-    As dataset may store only offset times, note here that we add a CONSTANT TIME ACROSS ALL PATIENTS for the
-    true timestamp of their health system admission.
+    Process the persons table and death table to get an accurate birth and death datetime.
 
     The output of this process is ultimately converted to events via the `patient` key in the
     `configs/event_configs.yaml` file.
-    """
-    # admission_time = pl.datetime()
-    # age_in_years = pl.col()
-    # age_in_days = age_in_years * 365.25
-    #
-    # pseudo_date_of_birth = admission_time - pl.duration(days=age_in_days)
-    # pseudo_date_of_death = admission_time + pl.duration(seconds=pl.col())
+        Args:
+        person_df: A Polars LazyFrame containing person data.
+        death_df: A Polars LazyFrame containing death data.
 
-    # date_of_birth =  pl.coalesce(
-    #             pl.col( "birth_datetime"),
-    #             pl.datetime(
-    #                 pl.col("year_of_birth"),
-    #                 pl.coalesce(pl.col("month_of_birth"), pl.lit(1)),
-    #                 pl.coalesce(pl.col("day_of_birth"), pl.lit(1)),
-    #                 time_unit="us",
-    #             ),
-    #         )
-    # person_df.filter()
+    Returns:
+        A Polars LazyFrame with the processed patient data, including date of birth and date of death.
+
+    Examples:
+    >>> import polars as pl
+    >>> from datetime import datetime
+    >>> person_data = {
+    ...     "person_id": [1, 2],
+    ...     "year_of_birth": [1980, 1990],
+    ...     "month_of_birth": [1, 2],
+    ...     "day_of_birth": [1, 2],
+    ...     "birth_datetime": [None, None]
+    ... }
+    >>> death_data = {
+    ...     "person_id": [1],
+    ...     "death_datetime": ["2020-01-01 00:00:00"]
+    ... }
+    >>> person_df = pl.DataFrame(person_data).lazy()
+    >>> death_df = pl.DataFrame(death_data).lazy()
+    >>> result = get_patient_link(person_df, death_df)
+    >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
+    >>> expected_dict = {
+    ...     "person_id": [1, 2],
+    ...     "date_of_birth": [datetime(1980, 1, 1), datetime(1990, 2, 2)],
+    ...     "date_of_death": [datetime(2020, 1, 1), None],
+    ...     "table_name": ["person", "person"]
+    ... }
+    >>> assert result_dict == expected_dict
+    """
+
     date_parsing = pl.datetime(
         pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
         pl.col("month_of_birth").replace(0, 1).fill_null(1),
@@ -98,10 +111,7 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
         )
     else:
         date_of_birth = date_parsing
-    # admission_time = pl.col("admission_time")
-    # date_of_death = pl.col("death_datetime")
     if death_df is not None:
-
         death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
     else:
         death_df = (
@@ -137,51 +147,43 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     # visit_df,
 
 
-def join_concept_and_process_psuedotime(
+def join_concept(
     table_name: str,
-    offset_col: str | list[str] | None = None,
-    pseudotime_col: str | list[str] | None = None,
     reference_col: str | list[str] | None = None,
     output_data_cols: list[str] | None = None,
     concept_cols: list[str] | None = None,
-    warning_items: list[str] | None = None,
 ) -> Callable[[pl.LazyFrame, pl.LazyFrame], pl.LazyFrame]:
     """Returns a function that joins a dataframe to the `patient` table and adds pseudotimes.
     Also raises specified warning strings via the logger for uncertain columns.
     All args except `table_name` are taken from the table_preprocessors.yaml.
     Args:
-        table_name: name of the INSPIRE table that should be joined
-        offset_col: list of all columns that contain time offsets since the patient's first admission
+        table_name: name of the table that should be joined
+        offset_col: list of all columns that contain tim offsets since the patient's first admission
         pseudotime_col: list of all timestamp columns derived from `offset_col` and the linked `patient`
             table
         output_data_cols: list of all data columns included in the output
-        warning_items: any warnings noted in the table_preprocessors.yaml
+        reference_col: list of all columns that link to the concept_id
 
     Returns:
         Function that expects the raw data stored in the `table_name` table and the joined output of the
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
 
     Examples:
-        >>> func = join_concept_and_process_psuedotime(
-        ...     "operations",
-        ...     ["admission_time", "icuin_time", "icuout_time", "orin_time", "orout_time",
-        ...      "opstart_time", "opend_time", "discharge_time", "anstart_time", "anend_time",
-        ...      "cpbon_time", "cpboff_time", "inhosp_death_time", "allcause_death_time", "opdate"],
-        ...     ["admission_time", "icuin_time", "icuout_time", "orin_time", "orout_time",
-        ...      "opstart_time", "opend_time", "discharge_time", "anstart_time", "anend_time",
-        ...      "cpbon_time", "cpboff_time", "inhosp_death_time", "allcause_death_time", "opdate"],
-        ...     ["subject_id", "op_id", "age", "antype", "sex", "weight", "height", "race", "asa",
-        ...      "case_id", "hadm_id", "department", "emop", "icd10_pcs", "date_of_birth",
-        ...      "date_of_death"],
-        ...     ["How should we deal with op_id and subject_id?"]
+        >>> func = join_concept(
+        ...     "observation",
+        ...     ["observation_id", "observation_concept_id", "observation_date", "observation_datetime",
+        ...      "observation_type_concept_id", "value_as_number", "value_as_string", "value_as_concept_id",
+        ...      "qualifier_concept_id", "unit_concept_id", "provider_id", "visit_occurrence_id", "visit_detail_id",
+        ...      "observation_source_value", "observation_source_concept_id", "unit_source_value", "qualifier_source_value"],
+        ...     ["subject_id", "op_id", "age", "antype", "sex", "weight", "height", "race", "asa", "case_id", "hadm_id",
+        ...      "department", "emop", "icd10_pcs", "date_of_birth", "date_of_death"]
         ... )
-        >>> df = load_raw_file(Path("tests/operations_synthetic.csv"))
-        >>> raw_admissions_df = load_raw_file(Path("tests/operations_synthetic.csv"))
-        >>> patient_df, link_df = get_patient_link(raw_admissions_df)
-        >>> references_df = load_raw_file(Path("tests/d_references.csv"))
-        >>> processed_df = func(df, patient_df, references_df)
-        >>> type(processed_df)
-        >>> <class 'polars.lazyframe.frame.LazyFrame'>
+        >>> observation_df = load_raw_file(Path("tests/demo_resources/observation.csv"))
+        >>> person_df = load_raw_file(Path("tests/demo_resources/person.csv"))
+        >>> death_df = load_raw_file(Path("tests/demo_resources/death.csv"))
+        >>> concept_df = load_raw_file(Path("tests/demo_resources/concept.csv"))
+        >>> patient_df = get_patient_link(person_df, death_df)
+        >>> processed_df = func(observation_df, concept_df)
     """
 
     if output_data_cols is None:
@@ -190,34 +192,13 @@ def join_concept_and_process_psuedotime(
     if reference_col is None:
         reference_col = []
 
-    if offset_col is None:
-        offset_col = []
-
-    if pseudotime_col is None:
-        pseudotime_col = []
-
     if concept_cols is None:
         concept_cols = []
 
-    if isinstance(offset_col, str):
-        offset_col = [offset_col]
-    if isinstance(pseudotime_col, str):
-        pseudotime_col = [pseudotime_col]
     if isinstance(reference_col, str):
         reference_col = [reference_col]
 
-    if len(offset_col) != len(pseudotime_col):
-        raise ValueError(
-            "There must be the same number of `offset_col`s and `pseudotime_col`s specified. Got "
-            f"{len(offset_col)} and {len(pseudotime_col)}, respectively."
-        )
-    if set(offset_col) & set(output_data_cols) or set(pseudotime_col) & set(output_data_cols):
-        raise ValueError(
-            "There is an overlap between `offset_col` or `pseudotime_col` and `output_data_cols`: "
-            f"{set(offset_col) & set(output_data_cols) | set(pseudotime_col) & set(output_data_cols)}"
-        )
-
-    def fn(df: pl.LazyFrame, references_df: pl.LazyFrame) -> pl.LazyFrame:
+    def fn(df: pl.LazyFrame, concept_df: pl.LazyFrame) -> pl.LazyFrame:
         f"""Takes the {table_name} table and converts it to a form that includes pseudo-timestamps.
 
         The output of this process is ultimately converted to events via the `{table_name}` key in the
@@ -230,24 +211,13 @@ def join_concept_and_process_psuedotime(
         Returns:
             The processed {table_name} data.
         """
-        # pseudotimes = [
-        #     (pl.col("first_admitted_at_time") + pl.duration(seconds=pl.col(offset))).alias(pseudotime)
-        #     for pseudotime, offset in zip(pseudotime_col, offset_col)
-        # ]
-        # if warning_items:
-        #     warning_lines = [
-        #         f"NOT SURE ABOUT THE FOLLOWING for {table_name} table. Check with the {DATASET_NAME} team:",
-        #         *(f"  - {item}" for item in warning_items),
-        #     ]
-        #     logger.warning("\n".join(warning_lines))
-        # logger.info(f"Joining {table_name} to patient table...")
         # logger.info(df.collect_schema())
         # # Join the patient table to the data table, INSPIRE only has subject_id as key
         # joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
         # collected = df.collect()
         df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
         if len(reference_col) > 0:
-            df = df.join(references_df, left_on=reference_col, right_on="concept_id", how="left")
+            df = df.join(concept_df, left_on=reference_col, right_on="concept_id", how="left")
         # collected = joined.collect()
         return df  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
@@ -266,6 +236,12 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
     of paths.
 
     The first list contains all the csv files. The second list contains all parquet files.
+
+    Examples:
+        >>> from pathlib import Path
+        >>> import polars as pl
+        >>> fp = Path("tests/demo_resources/observation.csv")
+        >>> df = load_raw_file(fp)
     """
     if fp.suffixes == [".csv", ".gz"]:
         file = pl.scan_csv(fp, compression="gzip", infer_schema=False)
@@ -285,27 +261,6 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
         return None
     file = file.select(pl.all().name.to_lowercase())
     return file
-    # raise ValueError(f"Unknown file type for {fp}")
-    # if os.path.exists(path_to_table) and os.path.isdir(path_to_table):
-    #     csv_files = []
-    #     parquet_files = []
-    #
-    #     for a in os.listdir(path_to_table):
-    #         fname = os.path.join(path_to_table, a)
-    #         if a.endswith(".csv") or a.endswith(".csv.gz"):
-    #             csv_files.append(fname)
-    #         elif a.endswith(".parquet"):
-    #             parquet_files.append(fname)
-    #
-    #     return csv_files, parquet_files
-    # elif os.path.exists(path_to_table + ".csv"):
-    #     return pl.read_parque(path_to_table + ".csv"
-    # elif os.path.exists(path_to_table + ".csv.gz"):
-    #     return path_to_table + ".csv.gz"
-    # elif os.path.exists(path_to_table + ".parquet"):
-    #     return path_to_table + ".parquet"
-    # else:
-    #     raise
 
 
 def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyFrame) -> pl.LazyFrame:
