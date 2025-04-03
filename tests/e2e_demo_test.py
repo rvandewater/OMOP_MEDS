@@ -3,7 +3,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 
-
 # @pytest.mark.skip(reason="If you have a demo dataset, re-enable this test in your downstream repositories.")
 def test_e2e():
     with TemporaryDirectory() as temp_dir:
