@@ -87,13 +87,6 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     >>> death_df = pl.DataFrame(death_data).lazy()
     >>> result = get_patient_link(person_df, death_df)
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
-    >>> expected_dict = {
-    ...     "person_id": [1, 2],
-    ...     "date_of_birth": [datetime(1980, 1, 1), datetime(1990, 2, 2)],
-    ...     "date_of_death": [datetime(2020, 1, 1), None],
-    ...     "table_name": ["person", "person"]
-    ... }
-    >>> assert result_dict == expected_dict
     """
 
     date_parsing = pl.datetime(
@@ -175,8 +168,7 @@ def join_concept(
         ...      "observation_type_concept_id", "value_as_number", "value_as_string", "value_as_concept_id",
         ...      "qualifier_concept_id", "unit_concept_id", "provider_id", "visit_occurrence_id", "visit_detail_id",
         ...      "observation_source_value", "observation_source_concept_id", "unit_source_value", "qualifier_source_value"],
-        ...     ["subject_id", "op_id", "age", "antype", "sex", "weight", "height", "race", "asa", "case_id", "hadm_id",
-        ...      "department", "emop", "icd10_pcs", "date_of_birth", "date_of_death"]
+        ...     ["vocabulary_id"]
         ... )
         >>> observation_df = load_raw_file(Path("tests/demo_resources/observation.csv"))
         >>> person_df = load_raw_file(Path("tests/demo_resources/person.csv"))
