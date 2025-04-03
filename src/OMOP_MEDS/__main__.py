@@ -6,14 +6,13 @@ import shutil
 from pathlib import Path
 
 import hydra
-from omegaconf import DictConfig, omegaconf, OmegaConf
+from omegaconf import DictConfig, OmegaConf, omegaconf
 
-from . import ETL_CFG, EVENT_CFG, HAS_PRE_MEDS, MAIN_CFG, RUNNER_CFG
+from . import ETL_CFG, EVENT_CFG, MAIN_CFG, RUNNER_CFG
 from . import __version__ as PKG_VERSION
 from . import dataset_info
 from .commands import run_command
 from .download import download_data
-
 from .pre_meds import main as pre_MEDS_transform
 
 logger = logging.getLogger(__name__)
@@ -67,8 +66,6 @@ def main(cfg: DictConfig):
     # ETL_CFG_TEMP = ETL_CFG+"_temp"
     # with open(ETL_CFG_TEMP, "w") as f:
     #     omegaconf.OmegaConf.save(config=event_cfg, f=f)
-
-
 
     # else:
     #     pre_MEDS_dir = raw_input_dir
