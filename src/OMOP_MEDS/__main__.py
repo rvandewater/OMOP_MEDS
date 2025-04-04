@@ -8,14 +8,13 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig, OmegaConf, omegaconf
 
-from .pre_meds_utils import rename_demo_files
-
 from . import ETL_CFG, EVENT_CFG, MAIN_CFG, RUNNER_CFG
 from . import __version__ as PKG_VERSION
 from . import dataset_info
 from .commands import run_command
 from .download import download_data
 from .pre_meds import main as pre_MEDS_transform
+from .pre_meds_utils import rename_demo_files
 
 logger = logging.getLogger(__name__)
 
