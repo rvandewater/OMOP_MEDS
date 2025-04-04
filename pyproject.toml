@@ -31,6 +31,8 @@ slurm_parallelism = ["hydra-submitit-launcher"]
 
 [project.scripts]
 MEDS_extract-OMOP = "OMOP_MEDS.__main__:main"
+OMOP_MEDS = "OMOP_MEDS.__main__:main"
+
 
 [project.urls]
 Homepage = "https://github.com/rvandewater/OMOP_MEDS"
