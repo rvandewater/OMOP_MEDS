@@ -8,7 +8,7 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig, OmegaConf, omegaconf
 
-from src.OMOP_MEDS.pre_meds_utils import rename_demo_files
+from .pre_meds_utils import rename_demo_files
 
 from . import ETL_CFG, EVENT_CFG, MAIN_CFG, RUNNER_CFG
 from . import __version__ as PKG_VERSION
