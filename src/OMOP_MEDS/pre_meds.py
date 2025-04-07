@@ -93,6 +93,7 @@ def main(cfg: DictConfig) -> None:
             raise FileNotFoundError("No concept table found in the input directory.")
             # For some reason this is the concept table in the omop demo data
         concept_df = load_raw_file(concept_path)
+        concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
         write_lazyframe(concept_df, concept_out_fp)
 
     if person_out_fp.is_file():  # and visit_out_fp.is_file():

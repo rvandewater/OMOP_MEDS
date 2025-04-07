@@ -9,7 +9,7 @@ raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
 person:
   # No pseudotime in OMOP
   # Column that contains ID's to concepts
-  reference_col: []
+  reference_cols: []
   output_data_cols:
     [
       "year_of_birth",
@@ -32,7 +32,7 @@ person:
 
 observation:
   5.3:
-    reference_col: ["observation_source_concept_id"]
+    reference_cols: ["observation_source_concept_id"]
     output_data_cols:
       [
         "observation_id",
@@ -55,7 +55,7 @@ observation:
       ]
     concept_cols: ["vocabulary_id"]
   5.4:
-    reference_col: ["observation_source_concept_id"]
+    reference_cols: ["observation_source_concept_id"]
     output_data_cols:
       [
         "observation_id",
@@ -83,7 +83,7 @@ observation:
 
 measurement:
   5.3:
-    reference_col: ["measurement_source_concept_id"]
+    reference_cols: ["measurement_source_concept_id"]
     output_data_cols:
       [
         "measurement_id",
@@ -108,7 +108,7 @@ measurement:
       ]
     concept_cols: ["vocabulary_id"]
   5.4:
-    reference_col: ["measurement_source_concept_id"]
+    reference_cols: ["measurement_source_concept_id"]
     output_data_cols:
       [
         "measurement_id",
@@ -137,7 +137,7 @@ measurement:
 
 visit_occurrence:
   5.3:
-    reference_col: ["visit_source_concept_id"]
+    reference_cols: ["visit_source_concept_id"]
     output_data_cols:
       [
         "visit_occurrence_id",
@@ -159,7 +159,7 @@ visit_occurrence:
       ]
     concept_cols: ["vocabulary_id"]
   5.4:
-    reference_col: ["visit_source_concept_id"]
+    reference_cols: ["visit_source_concept_id"]
     output_data_cols:
       [
         "visit_occurrence_id",
@@ -182,7 +182,7 @@ visit_occurrence:
     concept_cols: ["vocabulary_id"]
 
 observation_period:
-  reference_col: ["period_type_concept_id"]
+  reference_cols: ["period_type_concept_id"]
   output_data_cols:
     [
       "observation_period_start_date",
@@ -192,7 +192,7 @@ observation_period:
   concept_cols: []
 
 drug_exposure:
-  reference_col: ["drug_source_concept_id"]
+  reference_cols: ["drug_source_concept_id"]
   output_data_cols:
     [
       "drug_exposure_id",
@@ -220,7 +220,7 @@ drug_exposure:
   concept_cols: ["vocabulary_id"]
 
 specimen:
-  reference_col: [] # does not join with concept
+  reference_cols: [] # does not join with concept
   output_data_cols:
     [
       "specimen_id",
@@ -242,7 +242,7 @@ specimen:
 
 device_exposure:
   5.3:
-    reference_col: ["device_source_concept_id"]
+    reference_cols: ["device_source_concept_id"]
     output_data_cols:
       [
         "device_exposure_id",
@@ -261,7 +261,7 @@ device_exposure:
       ]
     concept_cols: ["vocabulary_id"]
   5.4:
-    reference_col: ["device_source_concept_id"]
+    reference_cols: ["device_source_concept_id"]
     output_data_cols:
       [
         "device_exposure_id",
@@ -285,7 +285,7 @@ device_exposure:
     concept_cols: ["vocabulary_id"]
 
 dose_era:
-  reference_col: [] # does not join with concept
+  reference_cols: [] # does not join with concept
   output_data_cols:
     [
       "dose_era_id",
@@ -297,7 +297,7 @@ dose_era:
     ]
   concept_cols: []
 #note_nlp:
-#    reference_col: ["note_type_concept_id" ] # TODO check if correct join column
+#    reference_cols: ["note_type_concept_id" ] # TODO check if correct join column
 #    output_data_cols:
 #        [
 #          "note_nlp_id",
@@ -320,7 +320,7 @@ dose_era:
 #    concept_cols: []
 
 condition_occurrence:
-  reference_col: ["condition_source_concept_id"]
+  reference_cols: ["condition_source_concept_id"]
   output_data_cols:
     [
       "condition_occurrence_id",
@@ -342,7 +342,7 @@ condition_occurrence:
   concept_cols: ["vocabulary_id"]
 
 drug_era:
-  reference_col: ["drug_concept_id"] # does not join with concept
+  reference_cols: ["drug_concept_id"] # does not join with concept
   output_data_cols:
     [
       "drug_era_id",
@@ -356,7 +356,7 @@ drug_era:
 # TODO: join with visit
 visit_detail:
   5.3:
-    reference_col: ["visit_detail_source_concept_id"]
+    reference_cols: ["visit_detail_source_concept_id"]
     output_data_cols:
       [
         "visit_detail_id",
@@ -380,7 +380,7 @@ visit_detail:
       ]
     concept_cols: ["vocabulary_id"]
   5.4:
-    reference_col: ["visit_detail_source_concept_id"]
+    reference_cols: ["visit_detail_source_concept_id"]
     output_data_cols:
       [
         "visit_detail_id",
@@ -406,7 +406,7 @@ visit_detail:
 
 procedure_occurrence:
   5.3:
-    reference_col: ["procedure_source_concept_id"]
+    reference_cols: ["procedure_source_concept_id"]
     output_data_cols:
       [
         "procedure_occurrence_id",
@@ -425,7 +425,7 @@ procedure_occurrence:
       ]
     concept_cols: ["vocabulary_id"]
   5.4:
-    reference_col: ["procedure_source_concept_id"]
+    reference_cols: ["procedure_source_concept_id"]
     output_data_cols:
       [
         "procedure_occurrence_id",
@@ -448,7 +448,7 @@ procedure_occurrence:
 
 note:
   5.3:
-    reference_col: ["note_type_concept_id"] # TODO check if correct join column
+    reference_cols: ["note_type_concept_id"] # TODO check if correct join column
     output_data_cols:
       [
         "note_id",
@@ -470,7 +470,7 @@ note:
       ]
     concept_cols: ["vocabulary_id"]
   5.4:
-    reference_col: ["note_type_concept_id"] # TODO check if correct join column
+    reference_cols: ["note_type_concept_id"] # TODO check if correct join column
     output_data_cols:
       [
         "note_id",
@@ -495,7 +495,7 @@ note:
     concept_cols: ["vocabulary_id"]
 
 condition_era:
-  reference_col: ["condition_concept_id"]
+  reference_cols: ["condition_concept_id"]
   output_data_cols:
     [
       "condition_era_id",
@@ -514,7 +514,7 @@ condition_era:
 # NOT in MIMIC DEMO: episode, episode_event
 
 #provider:
-#  reference_col: [ "provider_source_concept_id" ]
+#  reference_cols: [ "provider_source_concept_id" ]
 #  output_data_cols: [
 #    "provider_id",
 #    "provider_name",
@@ -534,7 +534,7 @@ condition_era:
 #concept:
 #  offset_col: [ ]
 #  pseudotime_col: [ ]
-#  reference_col: [ "concept_id" ]
+#  reference_cols: [ "concept_id" ]
 #  output_data_cols: [
 #    "concept_name",
 #    "domain_id",
@@ -547,5 +547,5 @@ condition_era:
 #    "invalid_reason", ]
 
 #death:
-#  reference_col: [ "death_type_concept_id", "cause_concept_id", "cause_source_concept_id", "cause_source_value" ]
+#  reference_cols: [ "death_type_concept_id", "cause_concept_id", "cause_source_concept_id", "cause_source_value" ]
 #  output_data_cols: [ "death_date", "death_datetime", ]

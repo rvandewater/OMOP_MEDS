@@ -46,6 +46,9 @@ def main(cfg: DictConfig):
     else:  # pragma: no cover
         logger.info("Skipping data download.")
 
+    if cfg.do_demo:
+        rename_demo_files(raw_input_dir)
+
     # Step 1: Pre-MEDS Data Wrangling
     # if HAS_PRE_MEDS:
     event_cfg = OmegaConf.load(EVENT_CFG)
