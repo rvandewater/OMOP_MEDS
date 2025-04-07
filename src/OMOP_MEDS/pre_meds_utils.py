@@ -142,7 +142,7 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
 
 def join_concept(
     table_name: str,
-    reference_col: str | list[str] | None = None,
+    reference_cols: str | list[str] | None = None,
     output_data_cols: list[str] | None = None,
     concept_cols: list[str] | None = None,
 ) -> Callable[[pl.LazyFrame, pl.LazyFrame], pl.LazyFrame]:
@@ -151,12 +151,9 @@ def join_concept(
     All args except `table_name` are taken from the table_preprocessors.yaml.
     Args:
         table_name: name of the table that should be joined
-        offset_col: list of all columns that contain tim offsets since the patient's first admission
-        pseudotime_col: list of all timestamp columns derived from `offset_col` and the linked `patient`
-            table
         output_data_cols: list of all data columns included in the output
-        reference_col: list of all columns that link to the concept_id
-
+        reference_cols: list of all columns that link to the concept_id
+        concept_cols: list of all columns that link to the concept_id
     Returns:
         Function that expects the raw data stored in the `table_name` table and the joined output of the
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
@@ -182,24 +179,24 @@ def join_concept(
     if output_data_cols is None:
         output_data_cols = []
 
-    if reference_col is None:
-        reference_col = []
+    if reference_cols is None:
+        reference_cols = []
 
     if concept_cols is None:
         concept_cols = []
 
-    if isinstance(reference_col, str):
-        reference_col = [reference_col]
+    if isinstance(reference_cols, str):
+        reference_cols = [reference_cols]
 
     def fn(df: pl.LazyFrame, concept_df: pl.LazyFrame) -> pl.LazyFrame:
-        f"""Takes the {table_name} table and converts it to a form that includes pseudo-timestamps.
+        f"""Takes the {table_name} table and converts it to a form that includes the original concepts.
 
         The output of this process is ultimately converted to events via the `{table_name}` key in the
         `configs/event_configs.yaml` file.
 
         Args:
             df: The raw {table_name} data.
-            patient_df: The processed patient data.
+            concept_df: The concepts to join.
 
         Returns:
             The processed {table_name} data.
@@ -209,15 +206,16 @@ def join_concept(
         # joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
         # collected = df.collect()
         df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
-        if len(reference_col) > 0:
-            df = df.join(concept_df, left_on=reference_col, right_on="concept_id", how="left")
+        if len(reference_cols) > 0:
+            df = df.with_columns(pl.col(reference_cols).cast(pl.Int64))
+            df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
         # collected = joined.collect()
         return df  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
 
 
-def load_raw_file(fp: Path) -> pl.LazyFrame:
+def load_raw_file(fp: Path) -> pl.LazyFrame | None:
     """Retrieve all .csv/.csv.gz/.parquet files for the OMOP table given by fp
 
     Because OMOP tables can be quite large for datasets comprising millions
@@ -250,6 +248,8 @@ def load_raw_file(fp: Path) -> pl.LazyFrame:
             file = pl.scan_csv(csv_files, infer_schema=False)
         elif parquet_files:
             file = pl.scan_parquet(parquet_files)
+        else:
+            return None
     else:
         return None
     file = file.select(pl.all().name.to_lowercase())
