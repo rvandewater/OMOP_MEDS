@@ -45,6 +45,29 @@ urls:
     - EXAMPLE_SHARED_URL # Often used for shared metadata files
 ```
 
+## MEDS-transforms settings
+
+If you want to convert a large dataset, you can use parallelization with MEDS-transforms
+(the MEDS-transformation step that takes the longest).
+
+Using local parallelization with the `hydra-joblib-launcher` package, you can set the number of workers:
+
+```
+pip install hydra-joblib-launcher --upgrade
+```
+
+Then, you can set the number of workers as environment variable:
+
+```bash
+export N_WORKERS=16
+```
+
+Moreover, you can set the number of subjects per shard to balance the parallelization overhead based on how many subjects you have in your dataset:
+
+```
+export N_SUBJECTS_PER_SHARD=1000
+```
+
 ## Citation
 
 If you use this dataset, please use the citation link in Github.
