@@ -9,6 +9,7 @@
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rvandewater/OMOP_MEDS/pulls)
 [![contributors](https://img.shields.io/github/contributors/rvandewater/OMOP_MEDS.svg)](https://github.com/rvandewater/OMOP_MEDS/graphs/contributors)
 [![DOI](https://zenodo.org/badge/940565218.svg)](https://doi.org/10.5281/zenodo.15132443)
+![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
 
 An ETL pipeline for transforming OMOP datasets into the MEDS format using the MEDS-Transforms library.
 Thanks to the developers of the first OMOP MEDS ETL, from which we took inspiration,
