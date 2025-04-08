@@ -81,7 +81,7 @@ def main(cfg: DictConfig) -> None:
             functions[table_name] = join_concept(table_name=table_name, **preprocessor_cfg)
 
     unused_tables = {}
-    person_out_fp = MEDS_input_dir / "person.parquet"
+    person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
     concept_out_fp = MEDS_input_dir / "concept.parquet"
     concept_relationship_out_fp = MEDS_input_dir / "concept_relationship.parquet"
 

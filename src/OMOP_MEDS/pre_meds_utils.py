@@ -155,13 +155,14 @@ def join_concept(
         table_name: name of the table that should be joined
         output_data_cols: list of all data columns included in the output
         reference_cols: list of all columns that link to the concept_id
-        concept_cols: list of all columns that link to the concept_id
+        concept_cols: list of all columns that are included in the concept table and
+        should be added to the output
     Returns:
         Function that expects the raw data stored in the `table_name` table and the joined output of the
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
 
     Examples:
-        >>> from src.OMOP_MEDS.schema import get_schema_loader        >>> func = join_concept(
+        >>> from omop_schema.utils import get_schema_loader        >>> func = join_concept(
         ...     "observation",
         ...     ["observation_id", "observation_concept_id", "observation_date", "observation_datetime",
         ...      "observation_type_concept_id", "value_as_number", "value_as_string", "value_as_concept_id",
@@ -212,8 +213,11 @@ def join_concept(
         if len(reference_cols) > 0:
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64))
             df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
-        # collected = joined.collect()
-        return df  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
+        output_data_cols.extend(concept_cols)
+        to_select = [col for col in output_data_cols if col in df.collect_schema().names()]
+        to_select.append(SUBJECT_ID)
+        # to_select.extend(concept_df.collect_schema().names())
+        return df.select(to_select)  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
 
