@@ -4,6 +4,8 @@ from typing import Any
 
 import polars as pl
 from loguru import logger
+from omop_schema.schema.base import OMOPSchemaBase
+from omop_schema.utils import pyarrow_to_polars_schema
 
 from . import dataset_info, premeds_cfg
 
@@ -159,7 +161,7 @@ def join_concept(
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
 
     Examples:
-        >>> func = join_concept(
+        >>> from src.OMOP_MEDS.schema import get_schema_loader        >>> func = join_concept(
         ...     "observation",
         ...     ["observation_id", "observation_concept_id", "observation_date", "observation_datetime",
         ...      "observation_type_concept_id", "value_as_number", "value_as_string", "value_as_concept_id",
@@ -168,10 +170,11 @@ def join_concept(
         ...      "unit_source_value", "qualifier_source_value"],
         ...     ["vocabulary_id"]
         ... )
-        >>> observation_df = load_raw_file(Path("tests/demo_resources/observation.csv"))
-        >>> person_df = load_raw_file(Path("tests/demo_resources/person.csv"))
-        >>> death_df = load_raw_file(Path("tests/demo_resources/death.csv"))
-        >>> concept_df = load_raw_file(Path("tests/demo_resources/concept.csv"))
+        >>> schema_loader = get_schema_loader(5.3)
+        >>> observation_df = load_raw_file(Path("tests/demo_resources/observation.csv"), schema_loader)
+        >>> person_df = load_raw_file(Path("tests/demo_resources/person.csv"), schema_loader)
+        >>> death_df = load_raw_file(Path("tests/demo_resources/death.csv"), schema_loader)
+        >>> concept_df = load_raw_file(Path("tests/demo_resources/concept.csv"), schema_loader)
         >>> patient_df = get_patient_link(person_df, death_df)
         >>> processed_df = func(observation_df, concept_df)
     """
@@ -215,7 +218,7 @@ def join_concept(
     return fn
 
 
-def load_raw_file(fp: Path) -> pl.LazyFrame | None:
+def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | None:
     """Retrieve all .csv/.csv.gz/.parquet files for the OMOP table given by fp
 
     Because OMOP tables can be quite large for datasets comprising millions
@@ -234,20 +237,28 @@ def load_raw_file(fp: Path) -> pl.LazyFrame | None:
         >>> fp = Path("tests/demo_resources/observation.csv")
         >>> df = load_raw_file(fp)
     """
+    # TODO: Write tool/method that reads a specific omop table with a specific datatypes
+    table_name = fp.stem.split(".")[0]  # Infer table name from file path
+    schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema(table_name))
+
+    # pa.schema([(col, dtype) for coll, dtype in schema.items()])
+    # Convert dict to pa.Schema
     if fp.suffixes == [".csv", ".gz"]:
-        file = pl.scan_csv(fp, compression="gzip", infer_schema=False)
+        file = pl.scan_csv(fp, compression="gzip", infer_schema=False, schema_overrides=schema)
     elif fp.suffix == ".csv":
-        file = pl.scan_csv(fp, infer_schema=False)
+        # Using schema_overrides to set the schema as the ordering could be different
+        # and there could be extra columns
+        file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
     elif fp.suffix == ".parquet":
-        file = pl.scan_parquet(fp)
+        file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
     elif fp.is_dir():
         files = list(fp.glob("**/*"))
         csv_files = [file for file in files if file.suffix in [".csv", ".gz"]]
         parquet_files = [file for file in files if file.suffix == ".parquet"]
         if csv_files:
-            file = pl.scan_csv(csv_files, infer_schema=False)
+            file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
         elif parquet_files:
-            file = pl.scan_parquet(parquet_files)
+            file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
         else:
             return None
     else:

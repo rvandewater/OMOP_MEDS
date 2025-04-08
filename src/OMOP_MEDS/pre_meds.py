@@ -7,6 +7,7 @@ import polars as pl
 from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig
+from omop_schema.utils import get_schema_loader
 
 from . import dataset_info, omop_cfg, premeds_cfg
 from .pre_meds_utils import (
@@ -37,6 +38,7 @@ def main(cfg: DictConfig) -> None:
     supported_omop_versions = [5.3, 5.4]
     logger.info(f"Expecting OMOP version: {omop_version}")
     omop_cfg_version = omop_cfg[omop_version]
+    schema_loader = get_schema_loader(omop_version)
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
@@ -92,7 +94,7 @@ def main(cfg: DictConfig) -> None:
         if not concept_path:
             raise FileNotFoundError("No concept table found in the input directory.")
             # For some reason this is the concept table in the omop demo data
-        concept_df = load_raw_file(concept_path)
+        concept_df = load_raw_file(concept_path, schema_loader)
         concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
         write_lazyframe(concept_df, concept_out_fp)
 
@@ -104,13 +106,13 @@ def main(cfg: DictConfig) -> None:
         logger.info("Processing patient table...")
         person_in_fp = get_table_path(input_dir, "person")
         if person_in_fp:
-            person_df = load_raw_file(person_in_fp)
+            person_df = load_raw_file(person_in_fp, schema_loader)
         else:
             raise FileNotFoundError("No person table found in the input directory.")
 
         death_in_fp = get_table_path(input_dir, "death")
         if death_in_fp:
-            death_df = load_raw_file(death_in_fp)
+            death_df = load_raw_file(death_in_fp, schema_loader)
         else:
             death_df = None
         # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
@@ -132,7 +134,7 @@ def main(cfg: DictConfig) -> None:
         if not concept_relationship_fp:
             raise FileNotFoundError("No concept relationship table found in the input directory.")
         logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
-        concept_relationship_df = load_raw_file(concept_relationship_fp)
+        concept_relationship_df = load_raw_file(concept_relationship_fp, schema_loader)
         write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
 
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
@@ -158,7 +160,7 @@ def main(cfg: DictConfig) -> None:
 
         st = datetime.now()
         logger.info(f"Processing {pfx}...")
-        df = load_raw_file(in_fp)
+        df = load_raw_file(in_fp, schema_loader)
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df)
