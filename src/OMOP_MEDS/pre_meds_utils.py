@@ -134,7 +134,7 @@ def get_patient_link(
         .first()
         .join(death_df, left_on=SUBJECT_ID, right_on="death_person_id", how="left")  # Use renamed column
         .select(
-            SUBJECT_ID,
+            pl.col(SUBJECT_ID),
             date_of_birth.alias("date_of_birth"),
             # admission_time.alias("first_admitted_at_time"),
             date_of_death.alias("date_of_death"),
