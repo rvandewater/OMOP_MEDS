@@ -94,6 +94,8 @@ def get_patient_link(
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
     """
 
+    person_df = person_df.collect().lazy()
+
     date_parsing = pl.datetime(
         pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
         pl.col("month_of_birth").replace(0, 1).fill_null(1),
@@ -140,7 +142,7 @@ def get_patient_link(
             date_of_death.alias("date_of_death"),
         )
         .with_columns(table_name=pl.lit("person"))
-        # .collect()
+        .collect()
         .lazy()
     )  # We get parquet sink error if we don't collect here
     # visit_df,
