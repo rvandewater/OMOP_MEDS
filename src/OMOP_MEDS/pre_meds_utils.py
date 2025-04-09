@@ -127,7 +127,7 @@ def get_patient_link(
     # TODO: join with location, provider, care_site,
     return (
         person_df.sort(by=date_of_birth)
-        .with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        # .with_columns(pl.col(SUBJECT_ID))
         .group_by(SUBJECT_ID)
         .first()
         .join(death_df, on=SUBJECT_ID, how="left")
@@ -138,7 +138,7 @@ def get_patient_link(
             date_of_death.alias("date_of_death"),
         )
         .with_columns(table_name=pl.lit("person"))
-        .collect()
+        # .collect()
         .lazy()
     )  # We get parquet sink error if we don't collect here
     # visit_df,
