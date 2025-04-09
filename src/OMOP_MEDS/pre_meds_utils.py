@@ -4,6 +4,7 @@ from typing import Any
 
 import polars as pl
 from loguru import logger
+from omop_schema.convert import convert_to_schema_polars
 from omop_schema.schema.base import OMOPSchemaBase
 from omop_schema.utils import pyarrow_to_polars_schema
 
@@ -58,15 +59,25 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
         # raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
-def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.LazyFrame:
+def get_patient_link(
+    person_df: pl.LazyFrame,
+    death_df: pl.LazyFrame,
+    visit_df: pl.LazyFrame,
+    schema_loader: OMOPSchemaBase,
+    limit: int = 0,
+) -> pl.LazyFrame:
     """
     Process the persons table and death table to get an accurate birth and death datetime.
+    Will produce a table of the subjects that will be included in the MEDS cohort.
 
     The output of this process is ultimately converted to events via the `patient` key in the
     `configs/event_configs.yaml` file.
         Args:
         person_df: A Polars LazyFrame containing person data.
         death_df: A Polars LazyFrame containing death data.
+        visit_df: A Polars LazyFrame containing visit data.
+        schema_loader: An instance of OMOPSchemaBase to load the schema.
+        limit: An optional limit on the number of rows to process.
 
     Returns:
         A Polars LazyFrame with the processed patient data, including date of birth and date of death.
@@ -74,6 +85,7 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     Examples:
     >>> import polars as pl
     >>> from datetime import datetime
+    >>> from omop_schema.utils import get_schema_loader
     >>> person_data = {
     ...     "person_id": [1, 2],
     ...     "year_of_birth": [1980, 1990],
@@ -87,10 +99,16 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
     ... }
     >>> person_df = pl.DataFrame(person_data).lazy()
     >>> death_df = pl.DataFrame(death_data).lazy()
-    >>> result = get_patient_link(person_df, death_df)
+    >>> visit_df = pl.DataFrame({"person_id": [1, 2]}).lazy()
+    >>> schema_loader = get_schema_loader(5.3)
+    >>> result = get_patient_link(person_df, death_df, visit_df, schema_loader)
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
     """
-
+    person_df = person_df.join(visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="semi")
+    if limit > 0:
+        # Limit the number of persons
+        logger.info(f"Limiting the number of persons to {limit}")
+        person_df = person_df.limit(limit)
     date_parsing = pl.datetime(
         pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
         pl.col("month_of_birth").replace(0, 1).fill_null(1),
@@ -106,31 +124,27 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
         )
     else:
         date_of_birth = date_parsing
-    if death_df is not None:
-        death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
-    else:
+
+    if death_df is None:
+        death_schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema("death"))
         death_df = (
             pl.DataFrame(
                 data=[],
-                schema={
-                    SUBJECT_ID: pl.Int64,
-                    "date_of_death": pl.Datetime,
-                    "death_datetime": pl.Datetime,
-                },
+                schema=death_schema,
             )
         ).lazy()
     date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
         cast_to_datetime(death_df.collect_schema(), "death_datetime")
     )
-    # TODO: join with location, provider, care_site,
+
     return (
         person_df.sort(by=date_of_birth)
-        .with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        # .with_columns(pl.col(SUBJECT_ID))
         .group_by(SUBJECT_ID)
         .first()
-        .join(death_df, on=SUBJECT_ID, how="left")
+        .join(death_df, on=SUBJECT_ID, how="left")  # Use renamed column
         .select(
-            SUBJECT_ID,
+            pl.col(SUBJECT_ID),
             date_of_birth.alias("date_of_birth"),
             # admission_time.alias("first_admitted_at_time"),
             date_of_death.alias("date_of_death"),
@@ -155,13 +169,14 @@ def join_concept(
         table_name: name of the table that should be joined
         output_data_cols: list of all data columns included in the output
         reference_cols: list of all columns that link to the concept_id
-        concept_cols: list of all columns that link to the concept_id
+        concept_cols: list of all columns that are included in the concept table and
+        should be added to the output
     Returns:
         Function that expects the raw data stored in the `table_name` table and the joined output of the
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
 
     Examples:
-        >>> from src.OMOP_MEDS.schema import get_schema_loader        >>> func = join_concept(
+        >>> from omop_schema.utils import get_schema_loader        >>> func = join_concept(
         ...     "observation",
         ...     ["observation_id", "observation_concept_id", "observation_date", "observation_datetime",
         ...      "observation_type_concept_id", "value_as_number", "value_as_string", "value_as_concept_id",
@@ -191,7 +206,7 @@ def join_concept(
     if isinstance(reference_cols, str):
         reference_cols = [reference_cols]
 
-    def fn(df: pl.LazyFrame, concept_df: pl.LazyFrame) -> pl.LazyFrame:
+    def fn(df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame) -> pl.LazyFrame:
         f"""Takes the {table_name} table and converts it to a form that includes the original concepts.
 
         The output of this process is ultimately converted to events via the `{table_name}` key in the
@@ -200,6 +215,7 @@ def join_concept(
         Args:
             df: The raw {table_name} data.
             concept_df: The concepts to join.
+            person_df: The patient data to keep.
 
         Returns:
             The processed {table_name} data.
@@ -209,11 +225,16 @@ def join_concept(
         # joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
         # collected = df.collect()
         df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        # Keep only the persons that are in the patient table
+        df = df.join(person_df, on=SUBJECT_ID, how="semi")
         if len(reference_cols) > 0:
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64))
             df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
-        # collected = joined.collect()
-        return df  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
+        output_data_cols.extend(concept_cols)
+        to_select = [col for col in output_data_cols if col in df.collect_schema().names()]
+        to_select.append(SUBJECT_ID)
+        # to_select.extend(concept_df.collect_schema().names())
+        return df.select(to_select)  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
 
@@ -250,7 +271,9 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         # and there could be extra columns
         file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
     elif fp.suffix == ".parquet":
-        file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
+        file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
+        file = file.select(pl.all().name.to_lowercase())
+        file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
     elif fp.is_dir():
         files = list(fp.glob("**/*"))
         csv_files = [file for file in files if file.suffix in [".csv", ".gz"]]
@@ -258,7 +281,9 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         if csv_files:
             file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
         elif parquet_files:
-            file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
+            file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
+            file = file.select(pl.all().name.to_lowercase())
+            file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
         else:
             return None
     else:

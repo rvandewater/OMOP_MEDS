@@ -14,7 +14,7 @@ EVENT_CFG = files(__package_name__).joinpath("configs/event_configs.yaml")
 ETL_CFG = files(__package_name__).joinpath("configs/ETL.yaml")
 RUNNER_CFG = files(__package_name__).joinpath("configs/runner.yaml")
 PRE_MEDS_PY = files(__package_name__).joinpath("pre_MEDS.py")
-PRE_MEDS_CFG = files(__package_name__).joinpath("configs/pre_MEDS.yaml")
+PRE_MEDS_CFG = files(__package_name__).joinpath("configs/pre_MEDS_minimal.yaml")
 DATASET_CFG = files(__package_name__).joinpath("dataset.yaml")
 OMOP_CFG = files(__package_name__).joinpath("configs/OMOP.yaml")
 

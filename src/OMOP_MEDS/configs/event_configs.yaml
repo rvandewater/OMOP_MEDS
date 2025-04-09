@@ -1,5 +1,5 @@
 subject_id_col: person_id
-person:
+person_birth_death:
   death_time:
     code: MEDS_DEATH
     time: col(date_of_death)
@@ -11,6 +11,25 @@ person:
     time: col(date_of_birth)
     time_format: "%Y-%m-%d %H:%M:%S"
     table_name: col(table_name)
+
+# TODO: check how to handle vocabularies with these concepts
+person:
+  race:
+    code:
+      - RACE
+      - col(race_concept_id)
+    time: null
+  gender:
+    code:
+      - GENDER
+      - col(gender_source_concept_id)
+    time: null
+  ethnicity:
+    code:
+      - ETHNICITY
+      - col(ethnicity_concept_id)
+    time: null
+
 observation:
   observation:
     code:

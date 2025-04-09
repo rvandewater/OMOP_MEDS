@@ -32,11 +32,10 @@ person:
 observation:
   5.3:
     reference_cols: ["observation_source_concept_id"]
-    output_data_cols:
-      [
-        "observation_id",
-        "observation_concept_id",
-        "observation_date",
+    output_data_cols: [
+        #        "observation_id",
+        #        "observation_concept_id",
+        #        "observation_date",
         "observation_datetime",
         "observation_type_concept_id",
         "value_as_number",
@@ -44,13 +43,13 @@ observation:
         "value_as_concept_id",
         "qualifier_concept_id",
         "unit_concept_id",
-        "provider_id",
+        #        "provider_id",
         "visit_occurrence_id",
         "visit_detail_id",
         "observation_source_value",
         "observation_source_concept_id",
-        "unit_source_value",
-        "qualifier_source_value",
+        #        "unit_source_value",
+        #        "qualifier_source_value",
       ]
     concept_cols: ["vocabulary_id", "concept_code"]
   5.4:
@@ -83,27 +82,26 @@ observation:
 measurement:
   5.3:
     reference_cols: ["measurement_source_concept_id"]
-    output_data_cols:
-      [
-        "measurement_id",
-        "measurement_concept_id",
-        "measurement_date",
+    output_data_cols: [
+        #        "measurement_id",
+        #        "measurement_concept_id",
+        #        "measurement_date",
         "measurement_datetime",
-        "measurement_time",
-        "measurement_type_concept_id",
-        "operator_concept_id",
+        #        "measurement_time",
+        #        "measurement_type_concept_id",
+        #        "operator_concept_id",
         "value_as_number",
-        "value_as_concept_id",
+        #        "value_as_concept_id",
         "unit_concept_id",
-        "range_low",
-        "range_high",
-        "provider_id",
+        #        "range_low",
+        #        "range_high",
+        #        "provider_id",
         "visit_occurrence_id",
-        "visit_detail_id",
-        "measurement_source_value",
-        "measurement_source_concept_id",
-        "unit_source_value",
-        "value_source_value",
+        #        "visit_detail_id",
+        #        "measurement_source_value",
+        #        "measurement_source_concept_id",
+        #        "unit_source_value",
+        #        "value_source_value",
       ]
     concept_cols: ["vocabulary_id", "concept_code"]
   5.4:
