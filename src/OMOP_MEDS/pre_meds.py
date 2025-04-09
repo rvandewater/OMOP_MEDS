@@ -119,8 +119,11 @@ def main(cfg: DictConfig) -> None:
 
         # logger.info(f"Loading {str(admissions_fp.resolve())}...")
         # person_df = load_raw_file(admissions_fp)
-
-        patient_df = get_patient_link(person_df=person_df, death_df=death_df, schema_loader=schema_loader)
+        visit_in_fp = get_table_path(input_dir, "visit_occurrence")
+        visit_df = load_raw_file(visit_in_fp, schema_loader)
+        patient_df = get_patient_link(
+            person_df=person_df, death_df=death_df, visit_df=visit_df, schema_loader=schema_loader
+        )
         # write_lazyframe(patient_df, person_out_fp)
         patient_df.sink_parquet(person_out_fp)
         # write_lazyframe(visit_df, visit_out_fp)
@@ -164,7 +167,7 @@ def main(cfg: DictConfig) -> None:
         df = load_raw_file(in_fp, schema_loader)
 
         fn = functions[pfx]
-        processed_df = fn(df, concept_df)
+        processed_df = fn(df, concept_df, patient_df)
 
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)

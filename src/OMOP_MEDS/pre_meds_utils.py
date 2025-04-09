@@ -60,7 +60,7 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
 
 
 def get_patient_link(
-    person_df: pl.LazyFrame, death_df: pl.LazyFrame, schema_loader: OMOPSchemaBase
+    person_df: pl.LazyFrame, death_df: pl.LazyFrame, visit_df: pl.LazyFrame, schema_loader: OMOPSchemaBase
 ) -> pl.LazyFrame:
     """
     Process the persons table and death table to get an accurate birth and death datetime.
@@ -93,8 +93,7 @@ def get_patient_link(
     >>> result = get_patient_link(person_df, death_df)
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
     """
-
-    person_df = person_df.collect().lazy()
+    person_df = person_df.join(visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="semi")
 
     date_parsing = pl.datetime(
         pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
@@ -113,11 +112,8 @@ def get_patient_link(
         date_of_birth = date_parsing
 
     death_schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema("death"))
-    if death_df is not None:
-        # death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
-        death_df = death_df.rename({"person_id": "death_person_id"})  # Rename to avoid conflict
-        # death_df = death_df.with_columns(pl.col("death_person_id").cast(pl.Int64))
-    else:
+
+    if death_df is None:
         death_df = (
             pl.DataFrame(
                 data=[],
@@ -134,7 +130,7 @@ def get_patient_link(
         # .with_columns(pl.col(SUBJECT_ID))
         .group_by(SUBJECT_ID)
         .first()
-        .join(death_df, left_on=SUBJECT_ID, right_on="death_person_id", how="left")  # Use renamed column
+        .join(death_df, on=SUBJECT_ID, how="left")  # Use renamed column
         .select(
             pl.col(SUBJECT_ID),
             date_of_birth.alias("date_of_birth"),
@@ -198,7 +194,7 @@ def join_concept(
     if isinstance(reference_cols, str):
         reference_cols = [reference_cols]
 
-    def fn(df: pl.LazyFrame, concept_df: pl.LazyFrame) -> pl.LazyFrame:
+    def fn(df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame) -> pl.LazyFrame:
         f"""Takes the {table_name} table and converts it to a form that includes the original concepts.
 
         The output of this process is ultimately converted to events via the `{table_name}` key in the
@@ -207,6 +203,7 @@ def join_concept(
         Args:
             df: The raw {table_name} data.
             concept_df: The concepts to join.
+            person_df: The patient data to keep.
 
         Returns:
             The processed {table_name} data.
@@ -216,6 +213,8 @@ def join_concept(
         # joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
         # collected = df.collect()
         df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        # Keep only the persons that are in the patient table
+        df = df.join(person_df, on=SUBJECT_ID, how="semi")
         if len(reference_cols) > 0:
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64))
             df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
