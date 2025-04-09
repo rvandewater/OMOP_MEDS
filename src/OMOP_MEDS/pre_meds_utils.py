@@ -112,7 +112,10 @@ def get_patient_link(
 
     death_schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema("death"))
     if death_df is not None:
-        death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        death_df = death_df
+        # death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        # death_df = death_df.rename({"person_id": "death_person_id"})  # Rename to avoid conflict
+        # death_df = death_df.with_columns(pl.col("death_person_id").cast(pl.Int64))
     else:
         death_df = (
             pl.DataFrame(
@@ -130,7 +133,7 @@ def get_patient_link(
         # .with_columns(pl.col(SUBJECT_ID))
         .group_by(SUBJECT_ID)
         .first()
-        .join(death_df, on=SUBJECT_ID, how="left")
+        .join(death_df, on=SUBJECT_ID, how="left")  # Use renamed column
         .select(
             SUBJECT_ID,
             date_of_birth.alias("date_of_birth"),
