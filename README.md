@@ -51,6 +51,7 @@ urls:
 The following settings can be used to configure the pre-MEDS steps.
 
 ```bash
+OMOP_MEDS
 root_output_dir=path/to/your/output
 raw_input_dir=/path/to/your/raw/input
 do_download=False # Set to True to download the dataset
