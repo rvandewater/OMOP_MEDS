@@ -51,13 +51,13 @@ urls:
 The following settings can be used to configure the pre-MEDS steps.
 
 ```bash
-OMOP_MEDS
-root_output_dir=path/to/your/output
-raw_input_dir=/path/to/your/raw/input
-do_download=False # Set to True to download the dataset
-++do_overwrite=True # Set to True to overwrite existing files
-++do_demo=True # Set to True to process demo dataset
-++limit_subjects=50 # Limit the number of subjects to process
+OMOP_MEDS \
+  root_output_dir=path/to/your/output \
+  raw_input_dir=/path/to/your/raw/input \
+  do_download=False \  # Set to True to download the dataset
+  ++do_overwrite=True \  # Set to True to overwrite existing files
+  ++do_demo=True \  # Set to True to process demo dataset
+  ++limit_subjects=50  # Limit the number of subjects to process
 ```
 
 ## MEDS-transforms settings
