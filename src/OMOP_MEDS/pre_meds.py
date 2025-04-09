@@ -170,6 +170,9 @@ def main(cfg: DictConfig) -> None:
         st = datetime.now()
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp, schema_loader)
+        if df.fetch(1).height == 0:
+            logger.warning(f"Skipping {pfx} as it is empty.")
+            continue
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
