@@ -4,6 +4,7 @@ from typing import Any
 
 import polars as pl
 from loguru import logger
+from omop_schema.convert import convert_to_schema_polars
 from omop_schema.schema.base import OMOPSchemaBase
 from omop_schema.utils import pyarrow_to_polars_schema
 
@@ -256,6 +257,7 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
     elif fp.suffix == ".parquet":
         file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
+        file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
     elif fp.is_dir():
         files = list(fp.glob("**/*"))
         csv_files = [file for file in files if file.suffix in [".csv", ".gz"]]
@@ -264,6 +266,7 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
             file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
         elif parquet_files:
             file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
+            file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
         else:
             return None
     else:
