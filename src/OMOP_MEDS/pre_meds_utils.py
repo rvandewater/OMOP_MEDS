@@ -176,22 +176,23 @@ def join_concept(
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
 
     Examples:
-        >>> from omop_schema.utils import get_schema_loader        >>> func = join_concept(
+        >>> from omop_schema.utils import get_schema_loader
+        >>> func = join_concept(
         ...     "observation",
-        ...     ["observation_id", "observation_concept_id", "observation_date", "observation_datetime",
-        ...      "observation_type_concept_id", "value_as_number", "value_as_string", "value_as_concept_id",
-        ...      "qualifier_concept_id", "unit_concept_id", "provider_id", "visit_occurrence_id",
-        ...      "visit_detail_id", "observation_source_value", "observation_source_concept_id",
-        ...      "unit_source_value", "qualifier_source_value"],
-        ...     ["vocabulary_id"]
+        ...     ["observation_source_concept_id"],  # Add a comma here
+        ...     ["observation_datetime", "observation_type_concept_id", "value_as_number", "value_as_string",
+        ...     "value_as_concept_id", "qualifier_concept_id", "unit_concept_id", "visit_occurrence_id",
+        ...      "visit_detail_id", "observation_source_value", "observation_source_concept_id"],
+        ...     ["vocabulary_id", "concept_code"]
         ... )
         >>> schema_loader = get_schema_loader(5.3)
         >>> observation_df = load_raw_file(Path("tests/demo_resources/observation.csv"), schema_loader)
         >>> person_df = load_raw_file(Path("tests/demo_resources/person.csv"), schema_loader)
         >>> death_df = load_raw_file(Path("tests/demo_resources/death.csv"), schema_loader)
         >>> concept_df = load_raw_file(Path("tests/demo_resources/concept.csv"), schema_loader)
-        >>> patient_df = get_patient_link(person_df, death_df)
-        >>> processed_df = func(observation_df, concept_df)
+        >>> visit_df = load_raw_file(Path("tests/demo_resources/visit_occurrence.csv"), schema_loader)
+        >>> patient_link = get_patient_link(person_df, death_df, visit_df, schema_loader)
+        >>> processed_df = func(observation_df, concept_df, patient_link)
     """
 
     if output_data_cols is None:
@@ -255,8 +256,10 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
     Examples:
         >>> from pathlib import Path
         >>> import polars as pl
+        >>> from omop_schema.utils import get_schema_loader
+        >>> schema_loader = get_schema_loader(5.3)
         >>> fp = Path("tests/demo_resources/observation.csv")
-        >>> df = load_raw_file(fp)
+        >>> df = load_raw_file(fp, schema_loader)
     """
     # TODO: Write tool/method that reads a specific omop table with a specific datatypes
     table_name = fp.stem.split(".")[0]  # Infer table name from file path
