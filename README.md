@@ -65,7 +65,7 @@ export N_WORKERS=16
 
 Moreover, you can set the number of subjects per shard to balance the parallelization overhead based on how many subjects you have in your dataset:
 
-```
+```bash
 export N_SUBJECTS_PER_SHARD=1000
 ```
 

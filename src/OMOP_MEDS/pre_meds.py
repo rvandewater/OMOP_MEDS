@@ -42,6 +42,7 @@ def main(cfg: DictConfig) -> None:
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
+    limit = cfg.get("limit_subjects", 0)
 
     done_fp = MEDS_input_dir / ".done"
     if done_fp.is_file() and not cfg.do_overwrite:
@@ -122,7 +123,11 @@ def main(cfg: DictConfig) -> None:
         visit_in_fp = get_table_path(input_dir, "visit_occurrence")
         visit_df = load_raw_file(visit_in_fp, schema_loader)
         patient_df = get_patient_link(
-            person_df=person_df, death_df=death_df, visit_df=visit_df, schema_loader=schema_loader
+            person_df=person_df,
+            death_df=death_df,
+            visit_df=visit_df,
+            schema_loader=schema_loader,
+            limit=limit,
         )
         # write_lazyframe(patient_df, person_out_fp)
         patient_df.sink_parquet(person_out_fp)

@@ -60,16 +60,24 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
 
 
 def get_patient_link(
-    person_df: pl.LazyFrame, death_df: pl.LazyFrame, visit_df: pl.LazyFrame, schema_loader: OMOPSchemaBase
+    person_df: pl.LazyFrame,
+    death_df: pl.LazyFrame,
+    visit_df: pl.LazyFrame,
+    schema_loader: OMOPSchemaBase,
+    limit: int = 0,
 ) -> pl.LazyFrame:
     """
     Process the persons table and death table to get an accurate birth and death datetime.
+    Will produce a table of the subjects that will be included in the MEDS cohort.
 
     The output of this process is ultimately converted to events via the `patient` key in the
     `configs/event_configs.yaml` file.
         Args:
         person_df: A Polars LazyFrame containing person data.
         death_df: A Polars LazyFrame containing death data.
+        visit_df: A Polars LazyFrame containing visit data.
+        schema_loader: An instance of OMOPSchemaBase to load the schema.
+        limit: An optional limit on the number of rows to process.
 
     Returns:
         A Polars LazyFrame with the processed patient data, including date of birth and date of death.
@@ -77,6 +85,7 @@ def get_patient_link(
     Examples:
     >>> import polars as pl
     >>> from datetime import datetime
+    >>> from omop_schema.utils import get_schema_loader
     >>> person_data = {
     ...     "person_id": [1, 2],
     ...     "year_of_birth": [1980, 1990],
@@ -90,11 +99,16 @@ def get_patient_link(
     ... }
     >>> person_df = pl.DataFrame(person_data).lazy()
     >>> death_df = pl.DataFrame(death_data).lazy()
-    >>> result = get_patient_link(person_df, death_df)
+    >>> visit_df = pl.DataFrame({"person_id": [1, 2]}).lazy()
+    >>> schema_loader = get_schema_loader(5.3)
+    >>> result = get_patient_link(person_df, death_df, visit_df, schema_loader)
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
     """
     person_df = person_df.join(visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="semi")
-
+    if limit > 0:
+        # Limit the number of persons
+        logger.info(f"Limiting the number of persons to {limit}")
+        person_df = person_df.limit(limit)
     date_parsing = pl.datetime(
         pl.col("year_of_birth").replace(0, 1800).fill_null(1900),
         pl.col("month_of_birth").replace(0, 1).fill_null(1),
@@ -111,9 +125,8 @@ def get_patient_link(
     else:
         date_of_birth = date_parsing
 
-    death_schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema("death"))
-
     if death_df is None:
+        death_schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema("death"))
         death_df = (
             pl.DataFrame(
                 data=[],
@@ -124,7 +137,6 @@ def get_patient_link(
         cast_to_datetime(death_df.collect_schema(), "death_datetime")
     )
 
-    # TODO: join with location, provider, care_site,
     return (
         person_df.sort(by=date_of_birth)
         # .with_columns(pl.col(SUBJECT_ID))
