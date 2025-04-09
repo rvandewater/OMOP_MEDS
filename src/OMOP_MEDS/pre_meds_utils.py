@@ -58,7 +58,9 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
         # raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
-def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.LazyFrame:
+def get_patient_link(
+    person_df: pl.LazyFrame, death_df: pl.LazyFrame, schema_loader: OMOPSchemaBase
+) -> pl.LazyFrame:
     """
     Process the persons table and death table to get an accurate birth and death datetime.
 
@@ -106,22 +108,21 @@ def get_patient_link(person_df: pl.LazyFrame, death_df: pl.LazyFrame) -> pl.Lazy
         )
     else:
         date_of_birth = date_parsing
+
+    death_schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema("death"))
     if death_df is not None:
         death_df = death_df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
     else:
         death_df = (
             pl.DataFrame(
                 data=[],
-                schema={
-                    SUBJECT_ID: pl.Int64,
-                    "date_of_death": pl.Datetime,
-                    "death_datetime": pl.Datetime,
-                },
+                schema=death_schema,
             )
         ).lazy()
     date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
         cast_to_datetime(death_df.collect_schema(), "death_datetime")
     )
+
     # TODO: join with location, provider, care_site,
     return (
         person_df.sort(by=date_of_birth)

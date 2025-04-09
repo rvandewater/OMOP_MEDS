@@ -120,7 +120,7 @@ def main(cfg: DictConfig) -> None:
         # logger.info(f"Loading {str(admissions_fp.resolve())}...")
         # person_df = load_raw_file(admissions_fp)
 
-        patient_df = get_patient_link(person_df=person_df, death_df=death_df)
+        patient_df = get_patient_link(person_df=person_df, death_df=death_df, schema_loader=schema_loader)
         write_lazyframe(patient_df, person_out_fp)
         # write_lazyframe(visit_df, visit_out_fp)
     if concept_relationship_out_fp.is_file():
