@@ -256,7 +256,7 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         # and there could be extra columns
         file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
     elif fp.suffix == ".parquet":
-        file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
+        file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
         file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
     elif fp.is_dir():
         files = list(fp.glob("**/*"))
@@ -265,7 +265,7 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         if csv_files:
             file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
         elif parquet_files:
-            file = pl.scan_parquet(fp, schema=schema, allow_missing_columns=True)
+            file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
             file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
         else:
             return None
