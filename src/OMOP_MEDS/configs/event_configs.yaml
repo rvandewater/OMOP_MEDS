@@ -199,7 +199,6 @@ drug_era:
 procedure_occurrence:
   procedure_occurrence:
     code:
-      - procedure_occurrence
       - col(vocabulary_id)
       - col(procedure_concept_id)
     time: col(procedure_datetime)

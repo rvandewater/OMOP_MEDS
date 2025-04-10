@@ -1,7 +1,8 @@
-dataset_name: "MIMIC_IV_OMOP"
-raw_dataset_version: 0.9
-omop_version: 5.3
+dataset_name: ${oc.decode:${oc.env:DATASET_NAME, "MIMIC_IV_OMOP_DEMO"}}
+raw_dataset_version: ${oc.decode:${oc.env:RAW_DATASET_VERSION, "0.9"}}
+omop_version: ${oc.decode:${oc.env:OMOP_VERSION, "5.3"}}
 
+# MIMIC-IV-OMOP demo data repository
 urls:
   dataset:
     - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/

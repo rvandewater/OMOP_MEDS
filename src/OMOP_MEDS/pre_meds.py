@@ -156,7 +156,7 @@ def main(cfg: DictConfig) -> None:
             logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
             continue
         elif pfx not in functions:
-            logger.warning(f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS UNEXPECTED")
+            logger.warning(f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED")
             continue
 
         out_fp = MEDS_input_dir / f"{pfx}.parquet"
