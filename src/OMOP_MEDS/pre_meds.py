@@ -170,7 +170,7 @@ def main(cfg: DictConfig) -> None:
         st = datetime.now()
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp, schema_loader)
-        if df.fetch(1).height == 0:
+        if df.limit(1).collect().is_empty():
             logger.warning(f"Skipping {pfx} as it is empty.")
             continue
 
@@ -202,7 +202,7 @@ def main(cfg: DictConfig) -> None:
         #     f"processed_df schema: {processed_df.collect_schema()}"
         # )
         processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
-        if processed_df.fetch(1).height == 0:
+        if processed_df.limit(1).collect().is_empty():
             logger.warning(
                 f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
             )
