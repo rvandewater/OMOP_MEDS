@@ -210,7 +210,7 @@ condition_era:
   condition_era:
     code:
       - col(vocabulary_id)
-      - col(condition_concept_id)
+      - col(concept_code)
       - start
     time: col(condition_era_start_date)
     #    time_format: "%Y-%m-%d %H:%M:%S"
@@ -219,7 +219,7 @@ condition_era:
   condition_era_end:
     code:
       - col(vocabulary_id)
-      - col(condition_concept_id)
+      - col(concept_code)
       - end
     time: col(condition_era_end_date)
     #    time_format: "%Y-%m-%d %H:%M:%S"

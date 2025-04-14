@@ -51,7 +51,14 @@ observation:
         #        "unit_source_value",
         #        "qualifier_source_value",
       ]
-    concept_cols: ["vocabulary_id", "concept_code"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
   5.4:
     reference_cols: ["observation_source_concept_id"]
     output_data_cols:
@@ -77,11 +84,18 @@ observation:
         "observation_event_id",
         "obs_event_field_concept_id",
       ]
-    concept_cols: ["vocabulary_id", "concept_code"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
 
 measurement:
   5.3:
-    reference_cols: ["measurement_source_concept_id"]
+    reference_cols: ["measurement_concept_id", "measurement_source_concept_id"]
     output_data_cols: [
         #        "measurement_id",
         #        "measurement_concept_id",
@@ -103,7 +117,14 @@ measurement:
         #        "unit_source_value",
         #        "value_source_value",
       ]
-    concept_cols: ["vocabulary_id", "concept_code"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
   5.4:
     reference_cols: ["measurement_source_concept_id"]
     output_data_cols:
@@ -131,11 +152,18 @@ measurement:
         "meas_event_field_concept_id",
         "concept_code",
       ]
-    concept_cols: ["vocabulary_id", "concept_code"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
 
 visit_occurrence:
   5.3:
-    reference_cols: ["visit_source_concept_id"]
+    reference_cols: ["visit_concept_id", "visit_source_concept_id"]
     output_data_cols:
       [
         "visit_occurrence_id",
@@ -155,7 +183,14 @@ visit_occurrence:
         "discharge_to_source_value",
         "preceding_visit_occurrence_id",
       ]
-    concept_cols: ["vocabulary_id", "concept_code"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
   5.4:
     reference_cols: ["visit_source_concept_id"]
     output_data_cols:
@@ -177,7 +212,14 @@ visit_occurrence:
         "discharged_to_source_value",
         "preceding_visit_occurrence_id",
       ]
-    concept_cols: ["vocabulary_id", "concept_code"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
 
 observation_period:
   reference_cols: ["period_type_concept_id"]
@@ -215,7 +257,14 @@ drug_exposure:
       "route_source_value",
       "dose_unit_source_value",
     ]
-  concept_cols: ["vocabulary_id"]
+  concept_cols:
+    [
+      "vocabulary_id",
+      "concept_code",
+      "vocabulary_id_source_concept_id",
+      "concept_code_source_concept_id",
+      "concept_name_source_concept_id",
+    ]
 
 specimen:
   reference_cols: [] # does not join with concept
@@ -240,7 +289,7 @@ specimen:
 
 device_exposure:
   5.3:
-    reference_cols: ["device_source_concept_id"]
+    reference_cols: ["device_concept_id", "device_source_concept_id"]
     output_data_cols:
       [
         "device_exposure_id",
@@ -257,9 +306,16 @@ device_exposure:
         "visit_detail_id",
         "device_source_value",
       ]
-    concept_cols: ["vocabulary_id"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
   5.4:
-    reference_cols: ["device_source_concept_id"]
+    reference_cols: ["device_concept_id", "device_source_concept_id"]
     output_data_cols:
       [
         "device_exposure_id",
@@ -280,7 +336,14 @@ device_exposure:
         "unit_source_value",
         "unit_source_concept_id",
       ]
-    concept_cols: ["vocabulary_id"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
 
 dose_era:
   reference_cols: [] # does not join with concept
@@ -318,7 +381,7 @@ dose_era:
 #    concept_cols: []
 
 condition_occurrence:
-  reference_cols: ["condition_source_concept_id"]
+  reference_cols: ["condition_concept_id", "condition_source_concept_id"]
   output_data_cols:
     [
       "condition_occurrence_id",
@@ -337,7 +400,14 @@ condition_occurrence:
       "condition_status_source_value",
       "condition_status_concept_id",
     ]
-  concept_cols: ["vocabulary_id"]
+  concept_cols:
+    [
+      "vocabulary_id",
+      "concept_code",
+      "vocabulary_id_source_concept_id",
+      "concept_code_source_concept_id",
+      "concept_name_source_concept_id",
+    ]
 
 drug_era:
   reference_cols: ["drug_concept_id"] # does not join with concept
@@ -354,7 +424,8 @@ drug_era:
 # TODO: join with visit
 visit_detail:
   5.3:
-    reference_cols: ["visit_detail_source_concept_id"]
+    reference_cols:
+      ["visit_detail_concept_id", "visit_detail_source_concept_id"]
     output_data_cols:
       [
         "visit_detail_id",
@@ -376,9 +447,17 @@ visit_detail:
         "visit_detail_parent_id",
         "visit_occurrence_id",
       ]
-    concept_cols: ["vocabulary_id"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
   5.4:
-    reference_cols: ["visit_detail_source_concept_id"]
+    reference_cols:
+      ["visit_detail_concept_id", "visit_detail_source_concept_id"]
     output_data_cols:
       [
         "visit_detail_id",
@@ -400,11 +479,18 @@ visit_detail:
         "parent_visit_detail_id",
         "visit_occurrence_id",
       ]
-    concept_cols: ["vocabulary_id"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
 
 procedure_occurrence:
   5.3:
-    reference_cols: ["procedure_source_concept_id"]
+    reference_cols: ["procedure_concept_id", "procedure_source_concept_id"]
     output_data_cols:
       [
         "procedure_occurrence_id",
@@ -421,9 +507,16 @@ procedure_occurrence:
         "procedure_source_concept_id",
         "modifier_source_value",
       ]
-    concept_cols: ["vocabulary_id"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
   5.4:
-    reference_cols: ["procedure_source_concept_id"]
+    reference_cols: ["procedure_concept_id", "procedure_source_concept_id"]
     output_data_cols:
       [
         "procedure_occurrence_id",
@@ -442,7 +535,14 @@ procedure_occurrence:
         "procedure_end_date",
         "procedure_end_datetime",
       ]
-    concept_cols: ["vocabulary_id"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
 
 note:
   5.3:
@@ -466,7 +566,14 @@ note:
         "encoding_source_value",
         "language_source_value",
       ]
-    concept_cols: ["vocabulary_id"]
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
   5.4:
     reference_cols: ["note_type_concept_id"] # TODO check if correct join column
     output_data_cols:
@@ -490,13 +597,19 @@ note:
         "note_event_id",
         "note_event_field_concept_id",
       ]
-    concept_cols: ["vocabulary_id"]
-
+    concept_cols:
+      [
+        "vocabulary_id",
+        "concept_code",
+        "vocabulary_id_source_concept_id",
+        "concept_code_source_concept_id",
+        "concept_name_source_concept_id",
+      ]
+# Todo: how to handle source ids for condition_era
 condition_era:
   reference_cols: ["condition_concept_id"]
   output_data_cols:
     [
-      "condition_concept_id",
       "condition_era_id",
       "condition_era_start_date",
       "condition_era_end_date",
@@ -504,7 +617,7 @@ condition_era:
       "condition_occurrence_duration",
       "condition_occurrence_length",
     ]
-  concept_cols: ["vocabulary_id"]
+  concept_cols: ["vocabulary_id", "concept_code"]
 #TODO: how to handle source
 # TODO incorporate provider, caresite, cost, concept_relationship, vocabulary, attribute_definition, fact_relationship,
 # TODO: location, cohort_attribute, cdm_source, metadata, payer_plan_period

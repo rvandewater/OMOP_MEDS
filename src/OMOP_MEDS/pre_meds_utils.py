@@ -230,7 +230,14 @@ def join_concept(
         df = df.join(person_df, on=SUBJECT_ID, how="semi")
         if len(reference_cols) > 0:
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64))
-            df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
+            if len(reference_cols) == 1:
+                df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
+            else:
+                for item in reference_cols:
+                    clean_item = item.replace(f"{table_name}", "")  # Remove the table name prefix
+                    df = df.join(
+                        concept_df, left_on=item, right_on="concept_id", how="left", suffix=f"{clean_item}"
+                    )
         output_data_cols.extend(concept_cols)
         to_select = [col for col in output_data_cols if col in df.collect_schema().names()]
         to_select.append(SUBJECT_ID)
