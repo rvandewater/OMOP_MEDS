@@ -51,18 +51,17 @@ urls:
 The following settings can be used to configure the pre-MEDS steps.
 
 ```bash
-# Set the root output directory
 OMOP_MEDS \
-  root_output_dir=path/to/your/output \
-  raw_input_dir=/path/to/your/raw/input \
-  do_download=False \
-  # Set to True to overwrite existing files
-  ++do_overwrite=True \
-  # Set to True to process demo dataset
-  ++do_demo=True \
-  # Limit the number of subjects to process
-  ++limit_subjects=50
+  root_output_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/meds_debug/small_demo \
+  raw_input_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/full_omop \
+  do_download=False ++do_overwrite=True ++limit_subjects=50
 ```
+
+- `root_output_dir`: Set the root output directory.
+- `raw_input_dir`: Path to the raw input directory.
+- `do_download`: Set to `False` to skip downloading the dataset.
+- `++do_overwrite`: Set to `True` to overwrite existing files.
+- `++limit_subjects`: Limit the number of subjects to process.
 
 ## MEDS-transforms settings
 
