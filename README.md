@@ -52,9 +52,9 @@ The following settings can be used to configure the pre-MEDS steps.
 
 ```bash
 OMOP_MEDS \
-  root_output_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/meds_debug/small_demo \
-  raw_input_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/full_omop \
-  do_download=False ++do_overwrite=True ++limit_subjects=50
+	root_output_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/meds_debug/small_demo \
+	raw_input_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/full_omop \
+	do_download=False ++do_overwrite=True ++limit_subjects=50
 ```
 
 - `root_output_dir`: Set the root output directory.
