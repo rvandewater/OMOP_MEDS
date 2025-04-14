@@ -202,6 +202,11 @@ def main(cfg: DictConfig) -> None:
         #     f"processed_df schema: {processed_df.collect_schema()}"
         # )
         processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
+        if processed_df.fetch(1).height == 0:
+            logger.warning(
+                f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
+            )
+            continue
         processed_df.sink_parquet(out_fp)
         logger.info(f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}")
 
