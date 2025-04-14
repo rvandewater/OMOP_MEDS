@@ -46,7 +46,7 @@ measurement:
   measurement:
     code:
       - col(vocabulary_id)
-      - col(concept_code)
+      - col(measurement_concept_id)
     time: col(measurement_datetime)
     #    time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(value_as_number)
@@ -66,7 +66,7 @@ visit_occurrence:
   visit_end:
     code:
       - col(vocabulary_id)
-      - col(concept_code)
+      - col(visit_type_concept_id)
       - end
     time: col(visit_end_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
