@@ -232,6 +232,10 @@ def join_concept(
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64))
             if len(reference_cols) == 1:
                 df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
+                df = df.with_columns(
+                    pl.col(reference_cols).alias("preferred_concept_name"),
+                    pl.col("vocabulary_id").alias("preferred_vocabulary_name"),
+                )
             else:
                 clean_item = ""
                 for item in reference_cols:

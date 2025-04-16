@@ -31,7 +31,7 @@ person:
 
 observation:
   5.3:
-    reference_cols: ["observation_source_concept_id"]
+    reference_cols: ["observation_concept_id", "observation_source_concept_id"]
     output_data_cols: [
         #        "observation_id",
         #        "observation_concept_id",
@@ -232,7 +232,7 @@ observation_period:
   concept_cols: []
 
 drug_exposure:
-  reference_cols: ["drug_source_concept_id"]
+  reference_cols: ["drug_concept_id", "drug_source_concept_id"]
   output_data_cols:
     [
       "drug_exposure_id",
