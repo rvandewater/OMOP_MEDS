@@ -239,7 +239,12 @@ def join_concept(
             else:
                 clean_item = ""
                 for item in reference_cols:
-                    clean_item = item.replace(f"{table_name}", "")  # Remove the table name prefix
+                    table_names = table_name.split("_")
+                    clean_item = item
+                    for part in table_names:
+                        clean_item = clean_item.replace(part, "")
+                    clean_item = clean_item.lstrip("_")
+                    # Remove the table name prefix
                     df = df.join(
                         concept_df, left_on=item, right_on="concept_id", how="left", suffix=f"_{clean_item}"
                     )
