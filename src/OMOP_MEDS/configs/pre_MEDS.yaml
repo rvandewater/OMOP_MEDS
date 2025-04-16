@@ -82,7 +82,7 @@ observation:
 
 measurement:
   5.3:
-    reference_cols: ["measurement_source_concept_id"]
+    reference_cols: ["measurement_concept_id", "measurement_source_concept_id"]
     output_data_cols:
       [
         "measurement_id",
@@ -506,7 +506,7 @@ condition_era:
       "condition_occurrence_duration",
       "condition_occurrence_length",
     ]
-  concept_cols: ["vocabulary_id"]
+  concept_cols: ["vocabulary_id", "concept_id"]
 #TODO: how to handle source
 # TODO incorporate provider, caresite, cost, concept_relationship, vocabulary, attribute_definition, fact_relationship,
 # TODO: location, cohort_attribute, cdm_source, metadata, payer_plan_period

@@ -233,15 +233,29 @@ def join_concept(
             if len(reference_cols) == 1:
                 df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
             else:
+                clean_item = ""
                 for item in reference_cols:
                     clean_item = item.replace(f"{table_name}", "")  # Remove the table name prefix
                     df = df.join(
-                        concept_df, left_on=item, right_on="concept_id", how="left", suffix=f"{clean_item}"
+                        concept_df, left_on=item, right_on="concept_id", how="left", suffix=f"_{clean_item}"
                     )
+                # Determine the concept id for the codes
+                df = determine_concept_id(
+                    df,
+                    original_concept_id_cols=reference_cols,
+                    mapped_concept_col="concept_code",
+                    mapped_vocab_col="vocabulary_id",
+                    source_concept_col=f"concept_code_{clean_item}",
+                    source_vocab_col=f"vocabulary_id_{clean_item}",
+                )
+        # df_collected = df.collect()
         output_data_cols.extend(concept_cols)
         to_select = [col for col in output_data_cols if col in df.collect_schema().names()]
         to_select.append(SUBJECT_ID)
+        if "preferred_concept_name" in df.collect_schema().names():
+            to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
         # to_select.extend(concept_df.collect_schema().names())
+
         return df.select(to_select)  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
@@ -388,6 +402,118 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     #     if concept_id_1 in concept_id_map and concept_id_2 in concept_id_map:
     #         code_metadata[concept_id_map[concept_id_1]]["parent_codes"].append(concept_id_map[concept_id_2])
     return code_metadata  # concept_id_map, concept_name_map
+
+
+def determine_concept_id(
+    df: pl.LazyFrame,
+    original_concept_id_cols,
+    mapped_concept_col,
+    mapped_vocab_col,
+    source_concept_col,
+    source_vocab_col,
+    prefer_source: bool = False,
+) -> pl.LazyFrame:
+    """Determine the concept ID for a given column in a DataFrame.
+
+    Args:
+        df: The DataFrame containing the data.
+        mapped_concept_col: The column containing the mapped concept IDs.
+        source_concept_col: The column containing the source concept IDs.
+
+    Returns:
+        A new DataFrame with the determined concept IDs.
+    """
+    # if prefer_source:
+    #     # If prefer_source is True, use the source concept ID if available
+    #     vocab_id = (
+    #         pl.when(pl.col(source_concept_col).is_not_null() & pl.col(source_vocab_col).is_not_null())
+    #         .then(pl.col(source_vocab_col))
+    #         .otherwise(pl.col(mapped_vocab_col))
+    #     )
+    #
+    # else:
+    #     vocab_id = (
+    #         pl.when(pl.col(mapped_vocab_col).is_not_null() & pl.col(mapped_concept_col).is_not_null())
+    #         .then(pl.col(mapped_vocab_col))
+    #         .otherwise(pl.col(source_vocab_col))
+    #     )
+    # if vocab_id.name == mapped_vocab_col:
+    #     concept_id = mapped_concept_col
+    # elif vocab_id.name == source_vocab_col:
+    #     concept_id = source_concept_col
+    # else:
+    #     concept_id = (
+    #         pl.when(pl.col(mapped_concept_col).is_not_null())
+    #         .then(pl.col(mapped_concept_col))
+    #         .otherwise(pl.col(source_concept_col))
+    #     )
+    if prefer_source:
+        vocab_id = (
+            pl.when(pl.col(source_concept_col).is_not_null() & pl.col(source_vocab_col).is_not_null())
+            .then(pl.col(source_vocab_col))
+            .otherwise(
+                pl.when(pl.col(mapped_concept_col).is_not_null() & pl.col(mapped_vocab_col).is_not_null())
+                .then(pl.col(mapped_vocab_col))
+                .otherwise(pl.lit(None))  # Default to None if no valid vocab_id is found
+            )
+        )
+
+        concept_id = (
+            pl.when(prefer_source & pl.col(source_concept_col).is_not_null())
+            .then(pl.col(source_concept_col))
+            .otherwise(
+                pl.when(pl.col(mapped_concept_col).is_not_null())
+                .then(pl.col(mapped_concept_col))
+                .otherwise(
+                    pl.when(pl.col(original_concept_id_cols).is_not_null())
+                    .then(pl.concat_str(original_concept_id_cols, separator=", "))
+                    .otherwise(pl.lit(None))  # Default to None if no valid concept_id is found
+                )
+            )
+        )
+    else:
+        vocab_id = (
+            pl.when(pl.col(mapped_vocab_col).is_not_null() & pl.col(mapped_concept_col).is_not_null())
+            .then(pl.col(mapped_vocab_col))
+            .otherwise(
+                pl.when(pl.col(source_vocab_col).is_not_null() & pl.col(source_concept_col).is_not_null())
+                .then(pl.col(source_vocab_col))
+                .otherwise(pl.lit(None))  # Default to None if no valid vocab_id is found
+            )
+        )
+
+        concept_id = (
+            pl.when(pl.col(mapped_concept_col).is_not_null())
+            .then(pl.col(mapped_concept_col))
+            .otherwise(
+                pl.when(pl.col(source_concept_col).is_not_null())
+                .then(pl.col(source_concept_col))
+                .otherwise(
+                    pl.when(pl.col(original_concept_id_cols[0]).is_not_null()).then(
+                        original_concept_id_cols[0]
+                        + ":"
+                        + pl.concat_str(original_concept_id_cols[0], separator=",")
+                    )
+                    # .then("".join([f"{col} = {pl.col(col)}" for col in original_concept_id_cols]))
+                    # .then(pl.when(len(list(original_concept_id_cols))> 1 &
+                    # pl.col(original_concept_id_cols[1])
+                    # .is_not_null())
+                    #     .then(original_concept_id_cols[0] +":" +
+                    #           pl.concat_str(original_concept_id_cols, separator=f",
+                    #           {original_concept_id_cols[1]}"))
+                    #     .otherwise(original_concept_id_cols[0] + pl.concat_str(original_concept_id_cols,
+                    #     separator=",")))
+                    .otherwise(pl.lit(None))  # Default to None if no valid concept_id is found
+                )
+            )
+        )
+
+    df = df.with_columns(
+        concept_id.alias("preferred_concept_name"), vocab_id.alias("preferred_vocabulary_name")
+    )
+    # collected = df.collect()
+    # logger.info(f"Using {mapped_concept_col} as concept_id")
+    return df
 
 
 def rename_demo_files(directory: Path):
