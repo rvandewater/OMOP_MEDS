@@ -265,9 +265,11 @@ drug_exposure:
       "concept_code_source_concept_id",
       "concept_name_source_concept_id",
     ]
+  # TODO: integrate fallback_values into preferred concept/vocab
+  fallback_values: ["drug_source_value"]
 
 specimen:
-  reference_cols: [] # does not join with concept
+  reference_cols: ["specimen_concept_id"]
   output_data_cols:
     [
       "specimen_id",
@@ -346,7 +348,7 @@ device_exposure:
       ]
 
 dose_era:
-  reference_cols: [] # does not join with concept
+  reference_cols: ["drug_concept_id"] # does not join with concept
   output_data_cols:
     [
       "dose_era_id",
@@ -356,7 +358,7 @@ dose_era:
       "dose_era_start_date",
       "dose_era_end_date",
     ]
-  concept_cols: []
+  concept_cols: ["vocabulary_id", "concept_code"]
 #note_nlp:
 #    reference_cols: ["note_type_concept_id" ] # TODO check if correct join column
 #    output_data_cols:

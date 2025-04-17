@@ -229,7 +229,7 @@ def join_concept(
         # Keep only the persons that are in the patient table
         df = df.join(person_df, on=SUBJECT_ID, how="semi")
         if len(reference_cols) > 0:
-            df = df.with_columns(pl.col(reference_cols).cast(pl.Int64))
+            df = df.with_columns(pl.col(reference_cols).cast(pl.Int64).replace(0, None))
             if len(reference_cols) == 1:
                 df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
                 df = df.with_columns(
@@ -415,22 +415,42 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
 
 def determine_concept_id(
     df: pl.LazyFrame,
-    original_concept_id_cols,
-    mapped_concept_col,
-    mapped_vocab_col,
-    source_concept_col,
-    source_vocab_col,
+    original_concept_id_cols: list[str],
+    mapped_concept_col: str,
+    mapped_vocab_col: str,
+    source_concept_col: str,
+    source_vocab_col: str,
     prefer_source: bool = False,
 ) -> pl.LazyFrame:
-    """Determine the concept ID for a given column in a DataFrame.
+    """
+    Determines the concept ID and vocabulary ID for a given DataFrame by prioritizing
+    either the source or mapped concept columns based on the `prefer_source` flag.
 
     Args:
-        df: The DataFrame containing the data.
-        mapped_concept_col: The column containing the mapped concept IDs.
-        source_concept_col: The column containing the source concept IDs.
+        df (pl.LazyFrame): The input DataFrame containing concept-related columns.
+        original_concept_id_cols (list[str]): List of original concept ID columns to consider.
+        mapped_concept_col (str): Column name for the mapped concept ID.
+        mapped_vocab_col (str): Column name for the mapped vocabulary ID.
+        source_concept_col (str): Column name for the source concept ID.
+        source_vocab_col (str): Column name for the source vocabulary ID.
+        prefer_source (bool, optional): If `True`, prioritizes the source concept and vocabulary
+            columns over the mapped ones. Defaults to `False`.
 
     Returns:
-        A new DataFrame with the determined concept IDs.
+        pl.LazyFrame: A new DataFrame with the determined concept ID and vocabulary ID
+        added as `preferred_concept_name` and `preferred_vocabulary_name` columns.
+
+    Example:
+        >>> df = pl.LazyFrame({"mapped_concept_col": [1, None], "source_concept_col": [None, 2]})
+        >>> result = determine_concept_id(
+        ...     df,
+        ...     original_concept_id_cols=["original_col"],
+        ...     mapped_concept_col="mapped_concept_col",
+        ...     mapped_vocab_col="mapped_vocab_col",
+        ...     source_concept_col="source_concept_col",
+        ...     source_vocab_col="source_vocab_col",
+        ...     prefer_source=True
+        ... )
     """
     # if prefer_source:
     #     # If prefer_source is True, use the source concept ID if available

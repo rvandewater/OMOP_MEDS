@@ -111,7 +111,7 @@ drug_exposure:
 specimen:
   specimen:
     code:
-      - specimen
+      - col(preferred_vocabulary_name)
       - col(specimen_concept_id)
     time: col(specimen_datetime)
     #    time_format: "%Y-%m-%d %H:%M:%S"
@@ -132,7 +132,7 @@ device_exposure:
   device_exposure_end:
     code:
       - col(preferred_vocabulary_name)
-      - col(device_concept_id)
+      - col(preferred_concept_name)
       - end
     time: col(device_exposure_end_datetime)
     numeric_value: col(quantity)
@@ -142,7 +142,8 @@ device_exposure:
 dose_era:
   dose_era:
     code:
-      - col(drug_concept_id)
+      - col(preferred_vocabulary_name)
+      - col(preferred_concept_name)
       - start
     time: col(dose_era_start_date)
     #    time_format: "%Y-%m-%d %H:%M:%S"
@@ -151,7 +152,8 @@ dose_era:
     table_name: col(table_name)
   dose_era_end:
     code:
-      - col(drug_concept_id)
+      - col(preferred_vocabulary_name)
+      - col(preferred_concept_name)
       - end
     time: col(dose_era_end_date)
     #    time_format: "%Y-%m-%d %H:%M:%S"
@@ -162,7 +164,7 @@ condition_occurrence:
   condition_occurrence:
     code:
       - col(preferred_vocabulary_name)
-      - col(condition_concept_id)
+      - col(preferred_concept_name)
       - start
     time: col(condition_start_datetime)
     #    time_format: "%Y-%m-%d %H:%M:%S"
@@ -171,7 +173,7 @@ condition_occurrence:
   condition_end:
     code:
       - col(preferred_vocabulary_name)
-      - col(condition_concept_id)
+      - col(preferred_concept_name)
       - end
     time: col(condition_end_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
@@ -181,7 +183,7 @@ drug_era:
   drug_era:
     code:
       - col(preferred_vocabulary_name)
-      - col(drug_concept_id)
+      - col(preferred_concept_name)
       - start
     time: col(drug_era_start_date)
     #    time_format: "%Y-%m-%d %H:%M:%S"
@@ -190,7 +192,7 @@ drug_era:
   drug_era_end:
     code:
       - col(preferred_vocabulary_name)
-      - col(drug_concept_id)
+      - col(preferred_concept_name)
       - end
     time: col(drug_era_end_date)
     #    time_format: "%Y-%m-%d %H:%M:%S"
@@ -200,7 +202,7 @@ procedure_occurrence:
   procedure_occurrence:
     code:
       - col(preferred_vocabulary_name)
-      - col(procedure_concept_id)
+      - col(preferred_concept_name)
     time: col(procedure_datetime)
     time_format: "%Y-%m-%d %H:%M:%S"
     numeric_value: col(quantity)

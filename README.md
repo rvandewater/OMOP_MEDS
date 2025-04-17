@@ -86,6 +86,11 @@ Moreover, you can set the number of subjects per shard to balance the paralleliz
 export N_SUBJECTS_PER_SHARD=1000
 ```
 
+## The MIMIC-IV OMOP Dataset
+
+We use the demo dataset for MIMIC-IV in the OMOP format, which is a subset of the MIMIC-IV dataset.
+This dataset downloaded from Physionet does not include the standard dictionary linking definitions but should otherwise be functional
+
 ## Citation
 
 If you use this dataset, please use the citation link in Github.
