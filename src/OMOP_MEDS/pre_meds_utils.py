@@ -226,6 +226,8 @@ def join_concept(
         # joined = df.join(patient_df.lazy(), on=ADMISSION_ID, how="inner")
         # collected = df.collect()
         df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+        # df = df.with_columns("preferred_concept_name", pl.lit(None))
+        # df = df.with_columns("preferred_vocabulary_name", pl.lit(None))
         # Keep only the persons that are in the patient table
         df = df.join(person_df, on=SUBJECT_ID, how="semi")
         if len(reference_cols) > 0:
@@ -263,8 +265,8 @@ def join_concept(
         to_select.append(SUBJECT_ID)
         if "preferred_concept_name" in df.collect_schema().names():
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
-        # to_select.extend(concept_df.collect_schema().names())
-
+            # to_select.extend(concept_df.collect_schema().names())
+            df = df.with_columns(pl.col("preferred_vocabulary_name").replace(None, f"OMOP_{table_name}"))
         return df.select(to_select)  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
 
     return fn
