@@ -266,7 +266,7 @@ drug_exposure:
       "concept_name_source_concept_id",
     ]
   # TODO: integrate fallback_values into preferred concept/vocab
-  fallback_values: ["drug_source_value"]
+#  fallback_values: ["drug_source_value"]
 
 specimen:
   reference_cols: ["specimen_concept_id"]
