@@ -361,7 +361,7 @@ def cast_files_to_schema(folder_path: str, target_schema: dict, output_folder: s
         df = convert_to_schema_polars(
             dataset=df.lazy(),
             target_schema=target_schema,
-            allow_extra_columns=True,
+            allow_extra_columns=False,
             allow_missing_columns=True,
             add_missing_columns=True,
         ).collect()
