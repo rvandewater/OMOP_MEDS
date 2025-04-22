@@ -312,15 +312,15 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         files = list(fp.glob("**/*"))
         csv_files = [file for file in files if file.suffix in [".csv", ".gz"]]
         parquet_files = [file for file in files if file.suffix == ".parquet"]
-        mismatching_schema_check = True
+        # mismatching_schema_check = True
         if csv_files:
             file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
         elif parquet_files:
             file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
             file = file.select(pl.all().name.to_lowercase())
-            if mismatching_schema_check:
-                cast_files_to_schema(str(fp), schema, str(fp))
-            file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
+            # if mismatching_schema_check:
+            #     cast_files_to_schema(str(fp), schema, str(fp))
+            file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
         else:
             return None
     else:
