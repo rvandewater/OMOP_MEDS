@@ -265,9 +265,8 @@ def join_concept(
         to_select.append(SUBJECT_ID)
         if "preferred_concept_name" in df.collect_schema().names():
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
-            # to_select.extend(concept_df.collect_schema().names())
             df = df.with_columns(pl.col("preferred_vocabulary_name").replace(None, f"OMOP_{table_name}"))
-        return df.select(to_select)  # .select(SUBJECT_ID, ADMISSION_ID, *output_data_cols)
+        return df.select(to_select)
 
     return fn
 
@@ -313,11 +312,14 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         files = list(fp.glob("**/*"))
         csv_files = [file for file in files if file.suffix in [".csv", ".gz"]]
         parquet_files = [file for file in files if file.suffix == ".parquet"]
+        mismatching_schema_check = True
         if csv_files:
             file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
         elif parquet_files:
             file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
             file = file.select(pl.all().name.to_lowercase())
+            if mismatching_schema_check:
+                cast_files_to_schema(str(fp), schema, str(fp))
             file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
         else:
             return None
@@ -325,6 +327,87 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         return None
     file = file.select(pl.all().name.to_lowercase())
     return file
+
+
+def cast_files_to_schema(folder_path: str, target_schema: dict, output_folder: str):
+    """
+    Casts all files in a folder to the target schema using convert_to_schema_polars.
+    Used when the schema of the files in the folder is inconsistent.
+
+    Args:
+        folder_path (str): Path to the folder containing the files.
+        target_schema (dict): The target schema (column name -> data type).
+        output_folder (str): Path to the folder where processed files will be saved.
+
+    Returns:
+        None
+    """
+    folder = Path(folder_path)
+    output_dir = Path(output_folder)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check for column mismatches
+    mismatched_columns = check_column_mismatches(folder_path)
+
+    if mismatched_columns:
+        print(f"Found mismatched columns: {mismatched_columns}")
+
+    # Process each file in the folder
+    for file in folder.glob("*.parquet"):
+        print(f"Processing file: {file}")
+        df = pl.scan_parquet(file)
+
+        # Align the file's schema with the target schema
+        df = convert_to_schema_polars(
+            dataset=df.lazy(),
+            target_schema=target_schema,
+            allow_extra_columns=True,
+            allow_missing_columns=True,
+            add_missing_columns=True,
+        ).collect()
+
+        # Save the processed file to the output folder
+        output_file = output_dir / file.name
+        df.write_parquet(output_file)
+        print(f"File saved to: {output_file}")
+
+
+def check_column_mismatches(folder_path: str):
+    """
+    Check for column mismatches (e.g., datatype inconsistencies) across all Parquet files in a folder.
+
+    Parameters:
+    folder_path (str): The path to the folder containing Parquet files.
+
+    Returns:
+    dict: A dictionary where keys are column names and values are lists of inconsistent datatypes.
+    """
+    column_types = {}
+
+    # Iterate through all Parquet files in the folder
+    for file in Path(folder_path).glob("*.parquet"):
+        print(f"Checking file: {file}")
+        # Read the schema of the Parquet file
+        df = pl.read_parquet(file)
+        schema = df.schema
+
+        # Compare the schema with the accumulated column types
+        for col, dtype in schema.items():
+            if col not in column_types:
+                column_types[col] = set()
+            column_types[col].add(dtype)
+
+    # Identify mismatched columns
+    mismatched_columns = {col: list(dtypes) for col, dtypes in column_types.items() if len(dtypes) > 1}
+
+    if mismatched_columns:
+        print("Mismatched columns found:")
+        for col, dtypes in mismatched_columns.items():
+            print(f"  Column: {col}, Datatypes: {dtypes}")
+    else:
+        print("No mismatched columns found. All schemas are consistent.")
+
+    return mismatched_columns
 
 
 def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyFrame) -> pl.LazyFrame:
