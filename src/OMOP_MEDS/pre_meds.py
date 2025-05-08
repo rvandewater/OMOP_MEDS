@@ -5,7 +5,6 @@ from pathlib import Path
 
 import polars as pl
 from loguru import logger
-from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig
 from omop_schema.utils import get_schema_loader
 
@@ -14,9 +13,11 @@ from .pre_meds_utils import (
     DATASET_NAME,
     extract_metadata,
     get_patient_link,
+    get_shard_prefix,
     get_table_path,
     join_concept,
     load_raw_file,
+    write_lazyframe,
 )
 
 # Name of the dataset

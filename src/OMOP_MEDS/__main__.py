@@ -95,7 +95,7 @@ def main(cfg: DictConfig):
     # Then we construct the rest of the command
     command_parts.extend(
         [
-            "MEDS_transform-runner",
+            "MEDS_transform-pipeline",
             f"--config-path={str(RUNNER_CFG.parent.resolve())}",
             f"--config-name={RUNNER_CFG.stem}",
             f"pipeline_config_fp={str(ETL_CFG.resolve())}",
