@@ -16,10 +16,10 @@ description: |-
   See the MEDS-Transforms Extract documentation for configuration file details.
 
 # The event conversion configuration file is used throughout the pipeline to define the events to extract.
-event_conversion_config_fp: ${oc.env:EVENT_CONVERSION_CONFIG_FP}
+event_conversion_config_fp: ???
 
 input_dir: ${oc.env:PRE_MEDS_DIR}
-cohort_dir: ${oc.env:MEDS_COHORT_DIR}
+output_dir: ${oc.env:MEDS_COHORT_DIR}
 
 etl_metadata:
   dataset_name: ${oc.env:DATASET_NAME}
@@ -29,13 +29,17 @@ stage_configs:
   shard_events:
     row_chunksize: 20000000000 # however many rows for measurement
     infer_schema_length: 999999999
+    event_conversion_config_fp: ${oc.env:EVENT_CONVERSION_CONFIG_FP}
   split_and_shard_subjects:
     n_subjects_per_shard: ${oc.decode:${oc.env:N_SUBJECTS_PER_SHARD, 10000}} # 500000 for MS
 
 stages:
-  - shard_events
+  - shard_events:
+      data_input_dir: ${oc.env:PRE_MEDS_DIR}
+      event_conversion_config_fp: ${oc.env:EVENT_CONVERSION_CONFIG_FP}
   - split_and_shard_subjects
-  - convert_to_sharded_events
+  - convert_to_subject_sharded
+  - convert_to_MEDS_events
   - merge_to_MEDS_cohort
   - extract_code_metadata
   - finalize_MEDS_metadata

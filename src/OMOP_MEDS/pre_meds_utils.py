@@ -630,6 +630,37 @@ def determine_concept_id(
     return df
 
 
+def get_shard_prefix(base_path: Path, fp: Path) -> str:
+    """Extracts the shard prefix from a file path by removing the raw_cohort_dir.
+
+    Args:
+        base_path: The base path to remove from the file path.
+        fp: The full file path from which to extract the shard prefix.
+
+    Returns:
+        The shard prefix (the file path relative to the base path with the suffix removed).
+
+    Examples:
+        >>> get_shard_prefix(Path("/a/b/c"), Path("/a/b/c/d.parquet"))
+        'd'
+        >>> get_shard_prefix(Path("/a/b/c"), Path("/a/b/c/d/e.csv.gz"))
+        'd/e'
+    """
+
+    relative_path = fp.relative_to(base_path)
+    relative_parent = relative_path.parent
+    file_name = relative_path.name.split(".")[0]
+
+    return str(relative_parent / file_name)
+
+
+def write_lazyframe(df: pl.LazyFrame, out_fp: Path) -> None:
+    if isinstance(df, pl.LazyFrame):
+        df = df.collect()
+    out_fp.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(out_fp, use_pyarrow=True)
+
+
 def rename_demo_files(directory: Path):
     """Rename files in the directory by removing the '2b_' prefix."""
     for file_path in directory.glob("2b_*"):
