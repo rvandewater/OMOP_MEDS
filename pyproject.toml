@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "OMOP-MEDS"
 dynamic = ["version"]
 authors = [
-    { name="Robin van de Water", email="robin.vandewater@hpi.de"},
-  { name="Matthew McDermott", email="mattmcdermott8@gmail.com" },
+    { name = "Robin van de Water", email = "robin.vandewater@hpi.de" },
+    { name = "Matthew McDermott", email = "mattmcdermott8@gmail.com" },
 ]
 description = "An ETL to convert OMOP data to the MEDS format."
 readme = "README.md"
@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "meds-transforms~=0.2.4", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars", "omop_schema"
+    "meds-transforms~=0.3.0", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars", "omop_schema", "hydra-joblib-launcher"
 ]
 
 [tool.setuptools_scm]

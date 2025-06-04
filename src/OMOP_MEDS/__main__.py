@@ -99,6 +99,7 @@ def main(cfg: DictConfig):
             f"--config-path={str(RUNNER_CFG.parent.resolve())}",
             f"--config-name={RUNNER_CFG.stem}",
             f"pipeline_config_fp={str(ETL_CFG.resolve())}",
+            f"+event_conversion_config_fp={str(event_cfg_path.resolve())}",
         ]
     )
     if int(os.getenv("N_WORKERS", 1)) <= 1:
