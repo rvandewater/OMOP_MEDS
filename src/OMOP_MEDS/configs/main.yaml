@@ -10,7 +10,7 @@ MEDS_cohort_dir: ${root_output_dir}/MEDS_cohort
 
 stage_runner_fp: null
 
-do_download: True
+do_download: False
 do_overwrite: False
 do_demo: False
 
