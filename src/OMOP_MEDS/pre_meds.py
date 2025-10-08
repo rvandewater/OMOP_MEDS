@@ -75,7 +75,12 @@ def main(cfg: DictConfig) -> None:
             logger.warning(f"No files found for {table}")
 
     for table_name, preprocessor_cfg in preprocessors.items():
-        if table_name not in ["subject_id", "admission_id", "raw_data_extensions"]:
+        if table_name not in [
+            "subject_id",
+            "admission_id",
+            "raw_data_extensions",
+            "expected_not_processed_tables",
+        ]:
             logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
             if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
                 if omop_version in preprocessor_cfg:
@@ -155,14 +160,25 @@ def main(cfg: DictConfig) -> None:
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
     metadata = extract_metadata(concept_df, concept_relationship_df)
     metadata.sink_parquet(MEDS_input_dir / "codes.parquet")
-
+    logger.info(f"Wrote code metadata to {str((MEDS_input_dir / 'codes.parquet').resolve())}")
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
         if pfx in unused_tables:
             logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
             continue
         elif pfx not in functions:
-            logger.warning(f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED")
+            if pfx in [
+                "person",
+                "death",
+                "concept",
+            ]:
+                logger.info(f"Skipping {pfx} as it has already been processed separately.")
+            elif pfx in cfg.get("tables_to_ignore", []):
+                logger.warning(f"{pfx} will not be processed; this is seen as expected.")
+            else:
+                logger.warning(
+                    f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED"
+                )
             continue
 
         out_fp = MEDS_input_dir / f"{pfx}.parquet"
