@@ -449,8 +449,8 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     )
     parent_codes = parent_codes.with_columns(parent_codes=pl.col("parent_codes").cast(pl.List(pl.Int64)))
     result = result.join(parent_codes, left_on="concept_id", right_on="concept_id_1", how="left")
-    # code_metadata = result.select("vocabulary_id", "concept_id", "description", "parent_codes")
-    code_metadata = result
+    code_metadata = result.select("code", "vocabulary_id", "concept_id", "description", "parent_codes")
+    # code_metadata = result
     code_metadata = code_metadata.with_columns(
         code=pl.col("vocabulary_id").cast(pl.Utf8) + "//" + pl.col("concept_id").cast(pl.Utf8)
     )
