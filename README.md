@@ -18,13 +18,14 @@ We currently support OMOP 5.3 and 5.4 datasets.
 
 ```bash
 pip install OMOP_MEDS
+export DATASET_NAME="Your_OMOP_Dataset_Name" # e.g. MIMIC_IV_OMOP
 OMOP_MEDS root_output_dir=$ROOT_OUTPUT_DIR
 ```
 
 To try with the MIMIC-IV OMOP demo dataset, you can run:
 
 ```bash
-OMOP_MEDS root_output_dir=/path/to/your/output do_download=True ++do_demo=True
+OMOP_MEDS raw_input_dir=path/to/your/input root_output_dir=/path/to/your/output do_download=True ++do_demo=True
 ```
 
 Example config for an OMOP dataset:
