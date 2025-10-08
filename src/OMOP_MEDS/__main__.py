@@ -109,6 +109,16 @@ def main(cfg: DictConfig):
 
     command_parts.append("'hydra.searchpath=[pkg://MEDS_transforms.configs]'")
     run_command(command_parts, cfg)
+    # Copy codes.parquet to MEDS cohort directory
+    codes_source = pre_MEDS_dir / "codes.parquet"
+    codes_dest = MEDS_cohort_dir / "metadata/codes.parquet"
+
+    if codes_source.exists():
+        logger.info(f"Copying codes.parquet from {codes_source} to {codes_dest}")
+        MEDS_cohort_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(codes_source, codes_dest)
+    else:
+        logger.warning(f"codes.parquet not found in {pre_MEDS_dir}")
 
 
 if __name__ == "__main__":
