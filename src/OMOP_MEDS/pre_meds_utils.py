@@ -444,7 +444,6 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     # Take the parents of the concepts
     parent_codes = concept_relationship_df.filter(pl.col("relationship_id") == "Maps to")
     parent_codes = parent_codes.join(concept_df, left_on="concept_id_2", right_on="concept_id", how="left")
-    parent_codes = parent_codes.collect()
     parent_codes = parent_codes.with_columns(
         parent_codes=pl.col("vocabulary_id") + "//" + pl.col("concept_code")
     )
