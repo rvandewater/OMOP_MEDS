@@ -1,5 +1,6 @@
 """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -52,7 +53,8 @@ def main(cfg: DictConfig) -> None:
             f"do_overwrite={cfg.do_overwrite}. Returning."
         )
         exit(0)
-
+    else:
+        shutil.rmtree(MEDS_input_dir, ignore_errors=True)
     all_fps = []
     for table in omop_cfg_version["tables"]:
         # Check for .csv and .parquet files
@@ -130,6 +132,7 @@ def main(cfg: DictConfig) -> None:
             schema_loader=schema_loader,
             limit=limit,
         )
+        patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
         # write_lazyframe(patient_df, person_out_fp)
         patient_df.sink_parquet(person_out_fp)
         # write_lazyframe(visit_df, visit_out_fp)
