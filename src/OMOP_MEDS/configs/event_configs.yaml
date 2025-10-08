@@ -4,34 +4,35 @@ person_birth_death:
     code: MEDS_DEATH
     time: col(date_of_death)
     time_format: "%Y-%m-%d %H:%M:%S"
-    table_name: death
+    table_name: table_name
   age:
     code:
       - MEDS_BIRTH
     time: col(date_of_birth)
     time_format: "%Y-%m-%d %H:%M:%S"
-    table_name: person
+    table_name: table_name
 
 # TODO: check how to handle vocabularies with these concepts
+
 person:
   race:
     code:
       - RACE
       - col(race_concept_id)
     time: null
-    table_name: person
+    table_name: table_name
   gender:
     code:
       - GENDER
       - col(gender_source_value)
     time: null
-    table_name: person
+    table_name: table_name
   ethnicity:
     code:
       - ETHNICITY
       - col(ethnicity_concept_id)
     time: null
-    table_name: person
+    table_name: table_name
 
 observation:
   observation:
@@ -64,6 +65,7 @@ visit_occurrence:
       - start
     time: col(visit_start_datetime)
     visit_occurrence_id: col(visit_occurrence_id)
+    text: col(care_site_name)
     table_name: col(table_name)
   visit_end:
     code:

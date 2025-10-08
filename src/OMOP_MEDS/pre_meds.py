@@ -124,6 +124,7 @@ def main(cfg: DictConfig) -> None:
         # logger.info(f"Loading {str(admissions_fp.resolve())}...")
         # person_df = load_raw_file(admissions_fp)
         visit_in_fp = get_table_path(input_dir, "visit_occurrence")
+
         visit_df = load_raw_file(visit_in_fp, schema_loader)
         patient_df = get_patient_link(
             person_df=person_df,
@@ -135,6 +136,7 @@ def main(cfg: DictConfig) -> None:
         patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
         # write_lazyframe(patient_df, person_out_fp)
         patient_df.sink_parquet(person_out_fp)
+        # write_lazyframe(visit_df, MEDS_input_dir / "visit_occurrence.parquet")
         # write_lazyframe(visit_df, visit_out_fp)
     if concept_relationship_out_fp.is_file():
         logger.info(
@@ -171,16 +173,23 @@ def main(cfg: DictConfig) -> None:
 
         out_fp.parent.mkdir(parents=True, exist_ok=True)
 
-        st = datetime.now()
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp, schema_loader)
+
+        st = datetime.now()
         if df.limit(1).collect().is_empty():
             logger.warning(f"Skipping {pfx} as it is empty.")
             continue
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
-
+        if pfx == "visit_occurrence":
+            care_site_in_fp = get_table_path(input_dir, "care_site")
+            if not care_site_in_fp:
+                raise FileNotFoundError("No care_site table found in the input directory.")
+            else:
+                care_site_df = load_raw_file(care_site_in_fp, schema_loader)
+                processed_df = processed_df.join(care_site_df, on="care_site_id", how="left")
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
         # unit_columns = []
@@ -211,6 +220,8 @@ def main(cfg: DictConfig) -> None:
                 f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
             )
             continue
+
+        # write_lazyframe(processed_df, out_fp)
         processed_df.sink_parquet(out_fp)
         logger.info(f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}")
 

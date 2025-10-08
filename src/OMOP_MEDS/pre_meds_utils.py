@@ -153,7 +153,6 @@ def get_patient_link(
         .collect()
         .lazy()
     )  # We get parquet sink error if we don't collect here
-    # visit_df,
 
 
 def join_concept(
