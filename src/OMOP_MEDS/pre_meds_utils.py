@@ -432,10 +432,12 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     logger.info("Generating codes metadata from OMOP `concept` table and `concept_relationship` table")
     concept = concept_df
     concept_id = pl.col("concept_id").cast(pl.Int64)
-    code = pl.col("vocabulary_id") + "/" + pl.col("concept_code")
+    # code = pl.col("vocabulary_id") + "//" + pl.col("concept_code")
     logger.info(concept.collect_schema())
     # Convert the table into a dictionary
-    result = concept.select(concept_id=concept_id, code=code, name=pl.col("concept_name"))
+    result = concept.select(
+        concept_id=concept_id, vocabulary_id=pl.col("vocabulary_id"), description=pl.col("concept_name")
+    )
     concept_relationship_df = concept_relationship_df.with_columns(
         pl.col("concept_id_1").cast(pl.Int64), pl.col("concept_id_2").cast(pl.Int64)
     )
@@ -445,8 +447,8 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
         pl.col("concept_id_2").alias("parent_codes").cast(pl.List(pl.Int64))
     )
     result = result.join(parent_codes, left_on="concept_id", right_on="concept_id_1", how="left")
-    code_metadata = result.select("code", "name", "parent_codes")
-
+    code_metadata = result.select("vocabulary_id", "concept_id", "description", "parent_codes")
+    # code_metadata = code_metadata.with_columns(pl.col("name").alias("description"))
     # result = result.to_dict(as_series=False)
 
     # Update our running dictionary with the concepts we read in from

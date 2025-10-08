@@ -43,7 +43,8 @@ def main(cfg: DictConfig) -> None:
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
     limit = cfg.get("limit_subjects", 0)
-
+    if limit > 0:
+        logger.info(f"Limiting to {limit} subjects for debugging purposes.")
     done_fp = MEDS_input_dir / ".done"
     if done_fp.is_file() and not cfg.do_overwrite:
         logger.info(

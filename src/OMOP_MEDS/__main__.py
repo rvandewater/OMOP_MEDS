@@ -28,7 +28,6 @@ def main(cfg: DictConfig):
     MEDS_cohort_dir = Path(cfg.MEDS_cohort_dir)
     stage_runner_fp = cfg.get("stage_runner_fp", None)
     root_output_dir = Path(cfg.root_output_dir)
-
     if cfg.do_overwrite and root_output_dir.exists():
         logger.info("Removing existing MEDS cohort directory.")
         shutil.rmtree(root_output_dir)
