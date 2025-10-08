@@ -4,13 +4,13 @@ person_birth_death:
     code: MEDS_DEATH
     time: col(date_of_death)
     time_format: "%Y-%m-%d %H:%M:%S"
-    table_name: col(table_name)
+    table_name: death
   age:
     code:
       - MEDS_BIRTH
     time: col(date_of_birth)
     time_format: "%Y-%m-%d %H:%M:%S"
-    table_name: col(table_name)
+    table_name: person
 
 # TODO: check how to handle vocabularies with these concepts
 person:
@@ -19,16 +19,19 @@ person:
       - RACE
       - col(race_concept_id)
     time: null
+    table_name: person
   gender:
     code:
       - GENDER
       - col(gender_source_value)
     time: null
+    table_name: person
   ethnicity:
     code:
       - ETHNICITY
       - col(ethnicity_concept_id)
     time: null
+    table_name: person
 
 observation:
   observation:
