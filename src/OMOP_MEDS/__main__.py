@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import hydra
+import polars as pl
 from omegaconf import DictConfig, OmegaConf, omegaconf
 
 from . import ETL_CFG, EVENT_CFG, MAIN_CFG, RUNNER_CFG
@@ -113,13 +114,37 @@ def main(cfg: DictConfig):
     command_parts.append("'hydra.searchpath=[pkg://MEDS_transforms.configs]'")
     run_command(command_parts, cfg)
     # Copy codes.parquet to MEDS cohort directory
+
+    finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir)
+
+
+def finish_codes_metadata(MEDS_cohort_dir: Path, pre_MEDS_dir: Path):
     codes_source = pre_MEDS_dir / "codes.parquet"
     codes_dest = MEDS_cohort_dir / "metadata/codes.parquet"
 
     if codes_source.exists():
-        logger.info(f"Copying codes.parquet from {codes_source} to {codes_dest}")
         MEDS_cohort_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(codes_source, codes_dest)
+        logger.info(f"Copying codes.parquet from {codes_source} to {codes_dest}")
+        # Read metadata and collected codes
+        metadata = pl.read_parquet(codes_source)
+        collected = (
+            pl.scan_parquet(MEDS_cohort_dir / "data/**/*.parquet")
+            .select(["code", "table_name"])
+            .group_by(["code", "table_name"])
+            .agg(pl.len().alias("occurrence_count"))
+            .collect()
+        )
+        # Extract base code for alignment
+        collected = collected.with_columns(
+            pl.col("code").str.replace(r"(//start|//end)$", "").alias("base_code")
+        )
+        metadata = metadata.with_columns(pl.col("code").alias("base_code"))
+        # Join to fill metadata for suffixed codes
+        merged = collected.join(metadata, on="base_code", how="left").with_columns(
+            pl.col("code")  # keep original code with suffix
+        )
+        # Save merged codes
+        merged.write_parquet(MEDS_cohort_dir / "metadata/codes.parquet")
     else:
         logger.warning(f"codes.parquet not found in {pre_MEDS_dir}")
 
