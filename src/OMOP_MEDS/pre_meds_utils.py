@@ -577,7 +577,7 @@ def determine_concept_id(
                 .otherwise(
                     pl.when(pl.col(original_concept_id_cols[0]).is_not_null())
                     .then(
-                        original_concept_id_cols[0].cast(pl.Utf8)
+                        original_concept_id_cols[0]
                         + ":"
                         + pl.concat_str(original_concept_id_cols[0], separator=",")
                     )
@@ -606,7 +606,7 @@ def determine_concept_id(
                     pl.when(pl.col(original_concept_id_cols[0]).is_not_null()).then(
                         pl.concat_str(
                             [
-                                pl.col(original_concept_id_cols[0]).cast(pl.Utf8)
+                                original_concept_id_cols[0]
                                 + ":"
                                 + pl.concat_str(original_concept_id_cols, separator=",")
                             ]
