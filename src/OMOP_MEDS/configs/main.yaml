@@ -2,15 +2,36 @@ defaults:
   - _self_
 
 root_output_dir: ???
-tables_to_ignore: null
-
+tables_to_ignore:
+  [
+    "note_nlp",
+    "fact_relationship",
+    "location",
+    "care_site",
+    "provider",
+    "payer_plan_period",
+    "cost",
+    "metadata",
+    "cdm_source",
+    "concept_class",
+    "cohort_definition",
+    "attribute_definition",
+    "attribute_definition",
+    "cohort_definition",
+    "vocabulary",
+    "cdm_source",
+    "vocabulary",
+    "concept_ancestor",
+    "concept_relationship",
+  ]
+prefer_source: False
 raw_input_dir: ${root_output_dir}/raw_input
 pre_MEDS_dir: ${root_output_dir}/pre_MEDS
 MEDS_cohort_dir: ${root_output_dir}/MEDS_cohort
 
 stage_runner_fp: null
 
-do_download: True
+do_download: False
 do_overwrite: False
 do_demo: False
 

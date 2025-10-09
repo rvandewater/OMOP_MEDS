@@ -1,5 +1,6 @@
 """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -39,11 +40,17 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Expecting OMOP version: {omop_version}")
     omop_cfg_version = omop_cfg[omop_version]
     schema_loader = get_schema_loader(omop_version)
+    if cfg.prefer_source:
+        logger.warning(
+            "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
+            " This has major implications for downstream analysis."
+        )
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
     limit = cfg.get("limit_subjects", 0)
-
+    if limit > 0:
+        logger.info(f"Limiting to {limit} subjects for debugging purposes.")
     done_fp = MEDS_input_dir / ".done"
     if done_fp.is_file() and not cfg.do_overwrite:
         logger.info(
@@ -51,7 +58,8 @@ def main(cfg: DictConfig) -> None:
             f"do_overwrite={cfg.do_overwrite}. Returning."
         )
         exit(0)
-
+    else:
+        shutil.rmtree(MEDS_input_dir, ignore_errors=True)
     all_fps = []
     for table in omop_cfg_version["tables"]:
         # Check for .csv and .parquet files
@@ -72,14 +80,25 @@ def main(cfg: DictConfig) -> None:
             logger.warning(f"No files found for {table}")
 
     for table_name, preprocessor_cfg in preprocessors.items():
-        if table_name not in ["subject_id", "admission_id", "raw_data_extensions"]:
+        if table_name not in [
+            "subject_id",
+            "admission_id",
+            "raw_data_extensions",
+            "expected_not_processed_tables",
+        ]:
             logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
             if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
                 if omop_version in preprocessor_cfg:
                     preprocessor_cfg = preprocessor_cfg[omop_version]
                 else:
-                    raise ValueError(f"OMOP version {omop_version} not supported for {table_name}.")
-            functions[table_name] = join_concept(table_name=table_name, **preprocessor_cfg)
+                    raise ValueError(
+                        f"OMOP version {omop_version} not supported for {table_name}."
+                    )
+            functions[table_name] = join_concept(
+                table_name=table_name,
+                **preprocessor_cfg,
+                prefer_source=cfg.prefer_source,
+            )
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
@@ -87,7 +106,9 @@ def main(cfg: DictConfig) -> None:
     concept_relationship_out_fp = MEDS_input_dir / "concept_relationship.parquet"
 
     if concept_out_fp.is_file():
-        logger.info(f"Reloading processed concepts df from {str(concept_out_fp.resolve())}")
+        logger.info(
+            f"Reloading processed concepts df from {str(concept_out_fp.resolve())}"
+        )
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing concepts table first...")
@@ -100,7 +121,9 @@ def main(cfg: DictConfig) -> None:
         write_lazyframe(concept_df, concept_out_fp)
 
     if person_out_fp.is_file():  # and visit_out_fp.is_file():
-        logger.info(f"Reloading processed patient df from {str(person_out_fp.resolve())}")
+        logger.info(
+            f"Reloading processed patient df from {str(person_out_fp.resolve())}"
+        )
         patient_df = pl.scan_parquet(person_out_fp)
         # visit_df = pl.scan_parquet(visit_out_fp)
     else:
@@ -121,6 +144,7 @@ def main(cfg: DictConfig) -> None:
         # logger.info(f"Loading {str(admissions_fp.resolve())}...")
         # person_df = load_raw_file(admissions_fp)
         visit_in_fp = get_table_path(input_dir, "visit_occurrence")
+
         visit_df = load_raw_file(visit_in_fp, schema_loader)
         patient_df = get_patient_link(
             person_df=person_df,
@@ -129,9 +153,9 @@ def main(cfg: DictConfig) -> None:
             schema_loader=schema_loader,
             limit=limit,
         )
-        # write_lazyframe(patient_df, person_out_fp)
+        patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
         patient_df.sink_parquet(person_out_fp)
-        # write_lazyframe(visit_df, visit_out_fp)
+
     if concept_relationship_out_fp.is_file():
         logger.info(
             f"Reloading processed concept_relationship df from {str(concept_relationship_out_fp.resolve())}"
@@ -141,7 +165,9 @@ def main(cfg: DictConfig) -> None:
         logger.info("Processing concept_relationship table first...")
         concept_relationship_fp = get_table_path(input_dir, "concept_relationship")
         if not concept_relationship_fp:
-            raise FileNotFoundError("No concept relationship table found in the input directory.")
+            raise FileNotFoundError(
+                "No concept relationship table found in the input directory."
+            )
         logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
         concept_relationship_df = load_raw_file(concept_relationship_fp, schema_loader)
         write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
@@ -149,14 +175,31 @@ def main(cfg: DictConfig) -> None:
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
     metadata = extract_metadata(concept_df, concept_relationship_df)
     metadata.sink_parquet(MEDS_input_dir / "codes.parquet")
-
+    logger.info(
+        f"Wrote code metadata to {str((MEDS_input_dir / 'codes.parquet').resolve())}"
+    )
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
         if pfx in unused_tables:
             logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
             continue
         elif pfx not in functions:
-            logger.warning(f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED")
+            if pfx in [
+                "person",
+                "death",
+                "concept",
+            ]:
+                logger.info(
+                    f"Skipping {pfx} as it has already been processed separately."
+                )
+            elif pfx in cfg.get("tables_to_ignore", []):
+                logger.warning(
+                    f"{pfx} will not be processed; this is seen as expected."
+                )
+            else:
+                logger.warning(
+                    f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED"
+                )
             continue
 
         out_fp = MEDS_input_dir / f"{pfx}.parquet"
@@ -167,16 +210,27 @@ def main(cfg: DictConfig) -> None:
 
         out_fp.parent.mkdir(parents=True, exist_ok=True)
 
-        st = datetime.now()
         logger.info(f"Processing {pfx}...")
         df = load_raw_file(in_fp, schema_loader)
+
+        st = datetime.now()
         if df.limit(1).collect().is_empty():
             logger.warning(f"Skipping {pfx} as it is empty.")
             continue
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
-
+        if pfx == "visit_occurrence":
+            care_site_in_fp = get_table_path(input_dir, "care_site")
+            if not care_site_in_fp:
+                logger.warning(
+                    "No care_site table found in the input directory. Skipping join with care_site."
+                )
+            else:
+                care_site_df = load_raw_file(care_site_in_fp, schema_loader)
+                processed_df = processed_df.join(
+                    care_site_df, on="care_site_id", how="left"
+                )
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
         # unit_columns = []
@@ -207,8 +261,14 @@ def main(cfg: DictConfig) -> None:
                 f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
             )
             continue
-        processed_df.sink_parquet(out_fp)
-        logger.info(f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}")
 
-    logger.info(f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}")
+        # write_lazyframe(processed_df, out_fp)
+        processed_df.sink_parquet(out_fp)
+        logger.info(
+            f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
+        )
+
+    logger.info(
+        f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}"
+    )
     return
