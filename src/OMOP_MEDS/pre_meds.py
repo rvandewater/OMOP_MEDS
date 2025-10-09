@@ -146,10 +146,8 @@ def main(cfg: DictConfig) -> None:
             limit=limit,
         )
         patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
-        # write_lazyframe(patient_df, person_out_fp)
         patient_df.sink_parquet(person_out_fp)
-        # write_lazyframe(visit_df, MEDS_input_dir / "visit_occurrence.parquet")
-        # write_lazyframe(visit_df, visit_out_fp)
+
     if concept_relationship_out_fp.is_file():
         logger.info(
             f"Reloading processed concept_relationship df from {str(concept_relationship_out_fp.resolve())}"

@@ -577,7 +577,7 @@ def determine_concept_id(
                 .otherwise(
                     pl.when(pl.col(original_concept_id_cols[0]).is_not_null())
                     .then(
-                        original_concept_id_cols[0]
+                        original_concept_id_cols[0].cast(pl.Utf8)
                         + ":"
                         + pl.concat_str(original_concept_id_cols[0], separator=",")
                     )
@@ -604,11 +604,13 @@ def determine_concept_id(
                 .then(pl.col(source_concept_col))
                 .otherwise(
                     pl.when(pl.col(original_concept_id_cols[0]).is_not_null()).then(
-                        pl.concat_str([
-                            pl.col(original_concept_id_cols[0]),
-                            ":",
-                            pl.concat_str(original_concept_id_cols, separator=",")
-                        ])
+                        pl.concat_str(
+                            [
+                                pl.col(original_concept_id_cols[0]).cast(pl.Utf8)
+                                + ":"
+                                + pl.concat_str(original_concept_id_cols, separator=",")
+                            ]
+                        )
                     )
                     # .then("".join([f"{col} = {pl.col(col)}" for col in original_concept_id_cols]))
                     # .then(pl.when(len(list(original_concept_id_cols))> 1 &
