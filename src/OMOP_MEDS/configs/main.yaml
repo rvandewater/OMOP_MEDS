@@ -24,7 +24,7 @@ tables_to_ignore:
     "concept_ancestor",
     "concept_relationship",
   ]
-
+prefer_source: False
 raw_input_dir: ${root_output_dir}/raw_input
 pre_MEDS_dir: ${root_output_dir}/pre_MEDS
 MEDS_cohort_dir: ${root_output_dir}/MEDS_cohort

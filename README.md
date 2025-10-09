@@ -47,6 +47,18 @@ urls:
     - EXAMPLE_SHARED_URL # Often used for shared metadata files
 ```
 
+## Differences with the original meds_etl_omop
+
+This package is designed as a more flexible and configurable alternative to the original `meds_etl_omop` package.
+We make a few important choices that have impact on your downstream training and task definitions:
+
+- We use the mapped concepts by default, which are more standardized across datasets and, for large, health systems can
+    be more clean, especially if you are working with a limited tokenizer on a large dataset.
+    You can still use the source concepts by setting `++prefer_source=True`.
+- We use more tables than in the original `meds_etl_omop` package, which can lead to more complete patient histories.
+    Watch for potential information leakage. You can change your table configs in pre_MEDS.yaml and event_configs.yaml
+-
+
 ## Pre-MEDS settings
 
 The following settings can be used to configure the pre-MEDS steps.
@@ -78,19 +90,21 @@ pip install hydra-joblib-launcher --upgrade
 Then, you can set the number of workers as environment variable:
 
 ```bash
-export N_WORKERS=16
+export N_WORKERS=8
 ```
 
-Moreover, you can set the number of subjects per shard to balance the parallelization overhead based on how many subjects you have in your dataset:
+Moreover, you can set the number of subjects per shard to balance the parallelization overhead based on how many
+subjects you have in your dataset:
 
 ```bash
-export N_SUBJECTS_PER_SHARD=1000
+export N_SUBJECTS_PER_SHARD=100000
 ```
 
 ## The MIMIC-IV OMOP Dataset
 
 We use the demo dataset for MIMIC-IV in the OMOP format, which is a subset of the MIMIC-IV dataset.
-This dataset downloaded from Physionet does not include the standard dictionary linking definitions but should otherwise be functional
+This dataset downloaded from Physionet does not include the standard dictionary linking definitions but should otherwise
+be functional
 
 ## Particularities
 

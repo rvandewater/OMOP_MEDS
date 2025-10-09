@@ -40,6 +40,11 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Expecting OMOP version: {omop_version}")
     omop_cfg_version = omop_cfg[omop_version]
     schema_loader = get_schema_loader(omop_version)
+    if cfg.prefer_source:
+        logger.warning(
+            "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
+            " This has major implications for downstream analysis."
+        )
     input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
@@ -87,7 +92,9 @@ def main(cfg: DictConfig) -> None:
                     preprocessor_cfg = preprocessor_cfg[omop_version]
                 else:
                     raise ValueError(f"OMOP version {omop_version} not supported for {table_name}.")
-            functions[table_name] = join_concept(table_name=table_name, **preprocessor_cfg)
+            functions[table_name] = join_concept(
+                table_name=table_name, **preprocessor_cfg, prefer_source=cfg.prefer_source
+            )
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person_birth_death.parquet"

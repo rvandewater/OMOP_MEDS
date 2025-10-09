@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -160,6 +161,7 @@ def join_concept(
     reference_cols: str | list[str] | None = None,
     output_data_cols: list[str] | None = None,
     concept_cols: list[str] | None = None,
+    prefer_source: bool = False,
 ) -> Callable[[pl.LazyFrame, pl.LazyFrame], pl.LazyFrame]:
     """Returns a function that joins a dataframe to the `patient` table and adds pseudotimes.
     Also raises specified warning strings via the logger for uncertain columns.
@@ -170,6 +172,7 @@ def join_concept(
         reference_cols: list of all columns that link to the concept_id
         concept_cols: list of all columns that are included in the concept table and
         should be added to the output
+        prefer_source: If True, prefer the source concept over the mapped concept.
     Returns:
         Function that expects the raw data stored in the `table_name` table and the joined output of the
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
@@ -182,7 +185,9 @@ def join_concept(
         ...     ["observation_datetime", "observation_type_concept_id", "value_as_number", "value_as_string",
         ...     "value_as_concept_id", "qualifier_concept_id", "unit_concept_id", "visit_occurrence_id",
         ...      "visit_detail_id", "observation_source_value", "observation_source_concept_id"],
-        ...     ["vocabulary_id", "concept_code"]
+        ...     ["vocabulary_id", "concept_code"],
+        ...     prefer_source=False,
+        ...
         ... )
         >>> schema_loader = get_schema_loader(5.3)
         >>> observation_df = load_raw_file(Path("tests/demo_resources/observation.csv"), schema_loader)
@@ -257,6 +262,7 @@ def join_concept(
                     mapped_vocab_col="vocabulary_id",
                     source_concept_col=f"concept_code_{clean_item}",
                     source_vocab_col=f"vocabulary_id_{clean_item}",
+                    prefer_source=prefer_source,
                 )
         # df_collected = df.collect()
         output_data_cols.extend(concept_cols)
@@ -299,14 +305,17 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
     # Convert dict to pa.Schema
     if fp.suffixes == [".csv", ".gz"]:
         file = pl.scan_csv(fp, compression="gzip", infer_schema=False, schema_overrides=schema)
+        logging.info(f"Loaded gzipped CSV file from {fp}")
     elif fp.suffix == ".csv":
         # Using schema_overrides to set the schema as the ordering could be different
         # and there could be extra columns
         file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
+        logging.info(f"Loaded CSV file from {fp}")
     elif fp.suffix == ".parquet":
         file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
         file = file.select(pl.all().name.to_lowercase())
         file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
+        logging.info(f"Loaded Parquet file from {fp}")
     elif fp.is_dir():
         files = list(fp.glob("**/*"))
         csv_files = [file for file in files if file.suffix in [".csv", ".gz"]]
@@ -314,12 +323,14 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         # mismatching_schema_check = True
         if csv_files:
             file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
+            logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
             file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
             file = file.select(pl.all().name.to_lowercase())
             # if mismatching_schema_check:
             #     cast_files_to_schema(str(fp), schema, str(fp))
             file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
+            logging.info(f"Loaded Parquet files as directory from {fp}")
         else:
             return None
     else:
@@ -449,11 +460,12 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     )
     parent_codes = parent_codes.with_columns(parent_codes=pl.col("parent_codes").cast(pl.List(pl.Int64)))
     result = result.join(parent_codes, left_on="concept_id", right_on="concept_id_1", how="left")
-    code_metadata = result.select("code", "vocabulary_id", "concept_id", "description", "parent_codes")
     # code_metadata = result
-    code_metadata = code_metadata.with_columns(
+    code_metadata = result.with_columns(
         code=pl.col("vocabulary_id").cast(pl.Utf8) + "//" + pl.col("concept_id").cast(pl.Utf8)
     )
+    code_metadata = code_metadata.select("code", "vocabulary_id", "concept_id", "description", "parent_codes")
+
     # code_metadata = code_metadata.with_columns(pl.col("name").alias("description"))
     # result = result.to_dict(as_series=False)
 
@@ -545,30 +557,6 @@ def determine_concept_id(
         ...     prefer_source=True
         ... )
     """
-    # if prefer_source:
-    #     # If prefer_source is True, use the source concept ID if available
-    #     vocab_id = (
-    #         pl.when(pl.col(source_concept_col).is_not_null() & pl.col(source_vocab_col).is_not_null())
-    #         .then(pl.col(source_vocab_col))
-    #         .otherwise(pl.col(mapped_vocab_col))
-    #     )
-    #
-    # else:
-    #     vocab_id = (
-    #         pl.when(pl.col(mapped_vocab_col).is_not_null() & pl.col(mapped_concept_col).is_not_null())
-    #         .then(pl.col(mapped_vocab_col))
-    #         .otherwise(pl.col(source_vocab_col))
-    #     )
-    # if vocab_id.name == mapped_vocab_col:
-    #     concept_id = mapped_concept_col
-    # elif vocab_id.name == source_vocab_col:
-    #     concept_id = source_concept_col
-    # else:
-    #     concept_id = (
-    #         pl.when(pl.col(mapped_concept_col).is_not_null())
-    #         .then(pl.col(mapped_concept_col))
-    #         .otherwise(pl.col(source_concept_col))
-    #     )
     if prefer_source:
         vocab_id = (
             pl.when(pl.col(source_concept_col).is_not_null() & pl.col(source_vocab_col).is_not_null())
@@ -581,14 +569,18 @@ def determine_concept_id(
         )
 
         concept_id = (
-            pl.when(prefer_source & pl.col(source_concept_col).is_not_null())
+            pl.when(pl.col(source_concept_col).is_not_null())
             .then(pl.col(source_concept_col))
             .otherwise(
                 pl.when(pl.col(mapped_concept_col).is_not_null())
                 .then(pl.col(mapped_concept_col))
                 .otherwise(
-                    pl.when(pl.col(original_concept_id_cols).is_not_null())
-                    .then(pl.concat_str(original_concept_id_cols, separator=", "))
+                    pl.when(pl.col(original_concept_id_cols[0]).is_not_null())
+                    .then(
+                        original_concept_id_cols[0]
+                        + ":"
+                        + pl.concat_str(original_concept_id_cols[0], separator=",")
+                    )
                     .otherwise(pl.lit(None))  # Default to None if no valid concept_id is found
                 )
             )
@@ -629,17 +621,14 @@ def determine_concept_id(
                 )
             )
         )
-
     df = df.with_columns(
         concept_id.alias("preferred_concept_name"), vocab_id.alias("preferred_vocabulary_name")
     )
-    # collected = df.collect()
-    # logger.info(f"Using {mapped_concept_col} as concept_id")
     return df
 
 
 def rename_demo_files(directory: Path):
-    """Rename files in the directory by removing the '2b_' prefix."""
+    """Rename files in the directory by removing the '2b_' prefix in the MIMIC-OMOP demo."""
     for file_path in directory.glob("2b_*"):
         new_name = file_path.name.replace("2b_", "")
         new_path = file_path.with_name(new_name)
