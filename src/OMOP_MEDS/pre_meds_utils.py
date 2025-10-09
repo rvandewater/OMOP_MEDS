@@ -29,7 +29,10 @@ def get_table_path(input_dir: Path, table_name: str) -> Path | None:
 
 def parse_time(time: pl.Expr, time_formats: Iterable[str]) -> pl.Expr:
     return pl.coalesce(
-        [time.str.to_datetime(time_format, strict=False, time_unit="us") for time_format in time_formats]
+        [
+            time.str.to_datetime(time_format, strict=False, time_unit="us")
+            for time_format in time_formats
+        ]
     )
 
 
@@ -42,7 +45,9 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
             # that date with a timestamp of 23:59:59
             time = pl.col(column)
             time = pl.coalesce(
-                time.str.to_datetime("%Y-%m-%d %H:%M:%S%.f", strict=False, time_unit="us"),
+                time.str.to_datetime(
+                    "%Y-%m-%d %H:%M:%S%.f", strict=False, time_unit="us"
+                ),
                 time.str.to_datetime("%Y-%m-%d", strict=False, time_unit="us")
                 .dt.offset_by("1d")
                 .dt.offset_by("-1s"),
@@ -127,7 +132,9 @@ def get_patient_link(
         date_of_birth = date_parsing
 
     if death_df is None:
-        death_schema = pyarrow_to_polars_schema(schema_loader.get_pyarrow_schema("death"))
+        death_schema = pyarrow_to_polars_schema(
+            schema_loader.get_pyarrow_schema("death")
+        )
         death_df = (
             pl.DataFrame(
                 data=[],
@@ -211,7 +218,9 @@ def join_concept(
     if isinstance(reference_cols, str):
         reference_cols = [reference_cols]
 
-    def fn(df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame) -> pl.LazyFrame:
+    def fn(
+        df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
+    ) -> pl.LazyFrame:
         f"""Takes the {table_name} table and converts it to a form that includes the original concepts.
 
         The output of this process is ultimately converted to events via the `{table_name}` key in the
@@ -237,7 +246,12 @@ def join_concept(
         if len(reference_cols) > 0:
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64).replace(0, None))
             if len(reference_cols) == 1:
-                df = df.join(concept_df, left_on=reference_cols, right_on="concept_id", how="left")
+                df = df.join(
+                    concept_df,
+                    left_on=reference_cols,
+                    right_on="concept_id",
+                    how="left",
+                )
                 df = df.with_columns(
                     pl.col(reference_cols).alias("preferred_concept_name"),
                     pl.col("vocabulary_id").alias("preferred_vocabulary_name"),
@@ -252,7 +266,11 @@ def join_concept(
                     clean_item = clean_item.lstrip("_")
                     # Remove the table name prefix
                     df = df.join(
-                        concept_df, left_on=item, right_on="concept_id", how="left", suffix=f"_{clean_item}"
+                        concept_df,
+                        left_on=item,
+                        right_on="concept_id",
+                        how="left",
+                        suffix=f"_{clean_item}",
                     )
                 # Determine the concept id for the codes
                 df = determine_concept_id(
@@ -266,11 +284,15 @@ def join_concept(
                 )
         # df_collected = df.collect()
         output_data_cols.extend(concept_cols)
-        to_select = [col for col in output_data_cols if col in df.collect_schema().names()]
+        to_select = [
+            col for col in output_data_cols if col in df.collect_schema().names()
+        ]
         to_select.append(SUBJECT_ID)
         if "preferred_concept_name" in df.collect_schema().names():
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
-            df = df.with_columns(pl.col("preferred_vocabulary_name").replace(None, f"OMOP_{table_name}"))
+            df = df.with_columns(
+                pl.col("preferred_vocabulary_name").replace(None, f"OMOP_{table_name}")
+            )
         return df.select(to_select)
 
     return fn
@@ -304,12 +326,16 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
     # pa.schema([(col, dtype) for coll, dtype in schema.items()])
     # Convert dict to pa.Schema
     if fp.suffixes == [".csv", ".gz"]:
-        file = pl.scan_csv(fp, compression="gzip", infer_schema=False, schema_overrides=schema)
+        file = pl.scan_csv(
+            fp, compression="gzip", infer_schema=False, schema_overrides=schema
+        )
         logging.info(f"Loaded gzipped CSV file from {fp}")
     elif fp.suffix == ".csv":
         # Using schema_overrides to set the schema as the ordering could be different
         # and there could be extra columns
-        file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
+        file = pl.scan_csv(
+            fp, infer_schema=False, has_header=True, schema_overrides=schema
+        )
         logging.info(f"Loaded CSV file from {fp}")
     elif fp.suffix == ".parquet":
         file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
@@ -322,7 +348,9 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         parquet_files = [file for file in files if file.suffix == ".parquet"]
         # mismatching_schema_check = True
         if csv_files:
-            file = pl.scan_csv(fp, infer_schema=False, has_header=True, schema_overrides=schema)
+            file = pl.scan_csv(
+                fp, infer_schema=False, has_header=True, schema_overrides=schema
+            )
             logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
             file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
@@ -408,7 +436,9 @@ def check_column_mismatches(folder_path: str):
             column_types[col].add(dtype)
 
     # Identify mismatched columns
-    mismatched_columns = {col: list(dtypes) for col, dtypes in column_types.items() if len(dtypes) > 1}
+    mismatched_columns = {
+        col: list(dtypes) for col, dtypes in column_types.items() if len(dtypes) > 1
+    }
 
     if mismatched_columns:
         print("Mismatched columns found:")
@@ -420,7 +450,9 @@ def check_column_mismatches(folder_path: str):
     return mismatched_columns
 
 
-def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyFrame) -> pl.LazyFrame:
+def extract_metadata(
+    concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyFrame
+) -> pl.LazyFrame:
     # concept_id_map: Dict[int, str] = {}  # [key] concept_id -> [value] concept_code
     # concept_name_map: Dict[int, str] = {}  # [key] concept_id -> [value] concept_name
     # code_metadata: Dict[str, Any] = {}  # [key] concept_code -> [value] metadata
@@ -439,32 +471,48 @@ def extract_metadata(concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyF
     #     with load_file(path_to_decompressed_dir, concept_file) as f:
     # Read the contents of the `concept` table shard
     # `load_file` will unzip the file into `path_to_decompressed_dir` if needed
-    logger.info("Generating codes metadata from OMOP `concept` table and `concept_relationship` table")
+    logger.info(
+        "Generating codes metadata from OMOP `concept` table and `concept_relationship` table"
+    )
     concept = concept_df
     concept_id = pl.col("concept_id").cast(pl.Int64)
     # code = pl.col("vocabulary_id") + "//" + pl.col("concept_code")
     logger.info(concept.collect_schema())
     # Convert the table into a dictionary
     result = concept.select(
-        concept_id=concept_id, vocabulary_id=pl.col("vocabulary_id"), description=pl.col("concept_name")
+        concept_id=concept_id,
+        vocabulary_id=pl.col("vocabulary_id"),
+        description=pl.col("concept_name"),
     )
     concept_relationship_df = concept_relationship_df.with_columns(
         pl.col("concept_id_1").cast(pl.Int64), pl.col("concept_id_2").cast(pl.Int64)
     )
 
     # Take the parents of the concepts
-    parent_codes = concept_relationship_df.filter(pl.col("relationship_id") == "Maps to")
-    parent_codes = parent_codes.join(concept_df, left_on="concept_id_2", right_on="concept_id", how="left")
+    parent_codes = concept_relationship_df.filter(
+        pl.col("relationship_id") == "Maps to"
+    )
+    parent_codes = parent_codes.join(
+        concept_df, left_on="concept_id_2", right_on="concept_id", how="left"
+    )
     parent_codes = parent_codes.with_columns(
         parent_codes=pl.col("vocabulary_id") + "//" + pl.col("concept_code")
     )
-    parent_codes = parent_codes.with_columns(parent_codes=pl.col("parent_codes").cast(pl.List(pl.String)))
-    result = result.join(parent_codes, left_on="concept_id", right_on="concept_id_1", how="left")
+    parent_codes = parent_codes.with_columns(
+        parent_codes=pl.col("parent_codes").cast(pl.List(pl.String))
+    )
+    result = result.join(
+        parent_codes, left_on="concept_id", right_on="concept_id_1", how="left"
+    )
     # code_metadata = result
     code_metadata = result.with_columns(
-        code=pl.col("vocabulary_id").cast(pl.Utf8) + "//" + pl.col("concept_id").cast(pl.Utf8)
+        code=pl.col("vocabulary_id").cast(pl.Utf8)
+        + "//"
+        + pl.col("concept_id").cast(pl.Utf8)
     )
-    code_metadata = code_metadata.select("code", "vocabulary_id", "concept_id", "description", "parent_codes")
+    code_metadata = code_metadata.select(
+        "code", "vocabulary_id", "concept_id", "description", "parent_codes"
+    )
 
     # code_metadata = code_metadata.with_columns(pl.col("name").alias("description"))
     # result = result.to_dict(as_series=False)
@@ -559,12 +607,20 @@ def determine_concept_id(
     """
     if prefer_source:
         vocab_id = (
-            pl.when(pl.col(source_concept_col).is_not_null() & pl.col(source_vocab_col).is_not_null())
+            pl.when(
+                pl.col(source_concept_col).is_not_null()
+                & pl.col(source_vocab_col).is_not_null()
+            )
             .then(pl.col(source_vocab_col))
             .otherwise(
-                pl.when(pl.col(mapped_concept_col).is_not_null() & pl.col(mapped_vocab_col).is_not_null())
+                pl.when(
+                    pl.col(mapped_concept_col).is_not_null()
+                    & pl.col(mapped_vocab_col).is_not_null()
+                )
                 .then(pl.col(mapped_vocab_col))
-                .otherwise(pl.lit(None))  # Default to None if no valid vocab_id is found
+                .otherwise(
+                    pl.lit(None)
+                )  # Default to None if no valid vocab_id is found
             )
         )
 
@@ -581,18 +637,28 @@ def determine_concept_id(
                         + ":"
                         + pl.concat_str(original_concept_id_cols[0], separator=",")
                     )
-                    .otherwise(pl.lit(None))  # Default to None if no valid concept_id is found
+                    .otherwise(
+                        pl.lit(None)
+                    )  # Default to None if no valid concept_id is found
                 )
             )
         )
     else:
         vocab_id = (
-            pl.when(pl.col(mapped_vocab_col).is_not_null() & pl.col(mapped_concept_col).is_not_null())
+            pl.when(
+                pl.col(mapped_vocab_col).is_not_null()
+                & pl.col(mapped_concept_col).is_not_null()
+            )
             .then(pl.col(mapped_vocab_col))
             .otherwise(
-                pl.when(pl.col(source_vocab_col).is_not_null() & pl.col(source_concept_col).is_not_null())
+                pl.when(
+                    pl.col(source_vocab_col).is_not_null()
+                    & pl.col(source_concept_col).is_not_null()
+                )
                 .then(pl.col(source_vocab_col))
-                .otherwise(pl.lit(None))  # Default to None if no valid vocab_id is found
+                .otherwise(
+                    pl.lit(None)
+                )  # Default to None if no valid vocab_id is found
             )
         )
 
@@ -603,7 +669,8 @@ def determine_concept_id(
                 pl.when(pl.col(source_concept_col).is_not_null())
                 .then(pl.col(source_concept_col))
                 .otherwise(
-                    pl.when(pl.col(original_concept_id_cols[0]).is_not_null()).then(
+                    pl.when(pl.col(original_concept_id_cols[0]).is_not_null())
+                    .then(
                         pl.concat_str(
                             [
                                 original_concept_id_cols[0]
@@ -621,12 +688,15 @@ def determine_concept_id(
                     #           {original_concept_id_cols[1]}"))
                     #     .otherwise(original_concept_id_cols[0] + pl.concat_str(original_concept_id_cols,
                     #     separator=",")))
-                    .otherwise(pl.lit(None))  # Default to None if no valid concept_id is found
+                    .otherwise(
+                        pl.lit(None)
+                    )  # Default to None if no valid concept_id is found
                 )
             )
         )
     df = df.with_columns(
-        concept_id.alias("preferred_concept_name"), vocab_id.alias("preferred_vocabulary_name")
+        concept_id.alias("preferred_concept_name"),
+        vocab_id.alias("preferred_vocabulary_name"),
     )
     return df
 

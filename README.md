@@ -11,7 +11,7 @@
 [![DOI](https://zenodo.org/badge/940565218.svg)](https://doi.org/10.5281/zenodo.15132443)
 ![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
 
-An ETL pipeline for transforming  Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM)
+An ETL pipeline for transforming Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM)
 datasets (into the MEDS format using the MEDS-Transforms library.
 We gratefully acknowledge the developers of the first OMOP MEDS ETL, from which we took inspiration,
 which can be found here: https://github.com/Medical-Event-Data-Standard/meds_etl.

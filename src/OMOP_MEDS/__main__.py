@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from importlib.metadata import version
 
 import hydra
 import polars as pl
@@ -18,10 +19,11 @@ from .pre_meds import main as pre_MEDS_transform
 from .pre_meds_utils import rename_demo_files
 
 logger = logging.getLogger(__name__)
-from importlib.metadata import version
 
 
-@hydra.main(version_base=None, config_path=str(MAIN_CFG.parent), config_name=MAIN_CFG.stem)
+@hydra.main(
+    version_base=None, config_path=str(MAIN_CFG.parent), config_name=MAIN_CFG.stem
+)
 def main(cfg: DictConfig):
     """Runs the end-to-end MEDS Extraction pipeline."""
     raw_input_dir = Path(cfg.raw_input_dir)
