@@ -209,7 +209,9 @@ def main(cfg: DictConfig) -> None:
         if pfx == "visit_occurrence":
             care_site_in_fp = get_table_path(input_dir, "care_site")
             if not care_site_in_fp:
-                raise FileNotFoundError("No care_site table found in the input directory.")
+                logger.warning(
+                    "No care_site table found in the input directory. Skipping join with care_site."
+                )
             else:
                 care_site_df = load_raw_file(care_site_in_fp, schema_loader)
                 processed_df = processed_df.join(care_site_df, on="care_site_id", how="left")

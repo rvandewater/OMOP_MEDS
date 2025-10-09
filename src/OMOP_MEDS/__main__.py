@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-
 import logging
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import hydra
@@ -17,12 +17,12 @@ from .pre_meds import main as pre_MEDS_transform
 from .pre_meds_utils import rename_demo_files
 
 logger = logging.getLogger(__name__)
+from importlib.metadata import version
 
 
 @hydra.main(version_base=None, config_path=str(MAIN_CFG.parent), config_name=MAIN_CFG.stem)
 def main(cfg: DictConfig):
     """Runs the end-to-end MEDS Extraction pipeline."""
-
     raw_input_dir = Path(cfg.raw_input_dir)
     pre_MEDS_dir = Path(cfg.pre_MEDS_dir)
     MEDS_cohort_dir = Path(cfg.MEDS_cohort_dir)
@@ -125,4 +125,8 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+    if "--version" in sys.argv:
+        print(f"OMOP_MEDS version: {version('OMOP-MEDS')}")
+        print(f"Hydra version: {hydra.__version__}")
+        sys.exit(0)
     main()

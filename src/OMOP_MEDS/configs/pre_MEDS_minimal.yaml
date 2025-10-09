@@ -619,7 +619,7 @@ condition_era:
     ]
   concept_cols: ["vocabulary_id", "concept_code"]
 #TODO: how to handle source
-# TODO incorporate provider, caresite, cost, concept_relationship, vocabulary, attribute_definition, fact_relationship,
+# TODO incorporate provider, cost, concept_relationship, vocabulary, attribute_definition, fact_relationship,
 # TODO: location, cohort_attribute, cdm_source, metadata, payer_plan_period
 
 # TODO add omop 5.4: episode, episode_event
@@ -642,22 +642,3 @@ condition_era:
 #    "gender_source_value",
 #    "gender_source_concept_id",
 #  ]
-
-#concept:
-#  offset_col: [ ]
-#  pseudotime_col: [ ]
-#  reference_cols: [ "concept_id" ]
-#  output_data_cols: [
-#    "concept_name",
-#    "domain_id",
-#    "vocabulary_id",
-#    "concept_class_id",
-#    "standard_concept",
-#    "concept_code",
-#    "valid_start_DATE",
-#    "valid_end_DATE",
-#    "invalid_reason", ]
-
-#death:
-#  reference_cols: [ "death_type_concept_id", "cause_concept_id", "cause_source_concept_id", "cause_source_value" ]
-#  output_data_cols: [ "death_date", "death_datetime", ]
