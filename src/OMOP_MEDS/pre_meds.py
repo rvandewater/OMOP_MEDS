@@ -18,6 +18,7 @@ from .pre_meds_utils import (
     get_table_path,
     join_concept,
     load_raw_file,
+    extract_nlp_features_from_column,
 )
 
 # Name of the dataset
@@ -112,6 +113,7 @@ def main(cfg: DictConfig) -> None:
         concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
     else:
         logger.info("Processing concepts table first...")
+        logger.info(f"input dir: {str(input_dir.resolve())}")
         concept_path = get_table_path(input_dir, "concept")
         if not concept_path:
             raise FileNotFoundError("No concept table found in the input directory.")
@@ -220,6 +222,52 @@ def main(cfg: DictConfig) -> None:
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
+        if pfx == "note":
+            df = extract_nlp_features_from_column(
+                df=df,
+                text_column="note_text",
+                features=[
+                    "word_count",
+                    "char_count",
+                    "sentence_count",
+                    "avg_word_length",
+                    "avg_sentence_length",
+                    "punctuation_count",
+                    "digit_count",
+                    "uppercase_count",
+                    "unique_word_count",
+                    "lexical_diversity",
+                ],
+            )
+            # df_collected = df.collect()
+            # Join with provider to get specialty
+            # provider_in_fp = get_table_path(input_dir, "provider")
+            # if not provider_in_fp:
+            #     logger.warning(
+            #         "No provider table found in the input directory. Skipping join with provider."
+            #     )
+            # else:
+            #     provider_df = load_raw_file(provider_in_fp, schema_loader)
+            #     processed_df = processed_df.join(
+            #         provider_df.select(
+            #             [
+            #                 pl.col("provider_id").alias("note_provider_id"),
+            #                 pl.col("specialty_concept_id").alias("provider_specialty_concept_id"),
+            #             ]
+            #         ),
+            #         on="note_provider_id",
+            #         how="left",
+            #     )
+            #     processed_df = processed_df.join(
+            #         concept_df.select(
+            #             [
+            #                 pl.col("concept_id").alias("provider_specialty_concept_id"),
+            #                 pl.col("concept_name").alias("provider_specialty_concept_name"),
+            #             ]
+            #         ),
+            #         on="provider_specialty_concept_id",
+            #         how="left",
+            #     )
         if pfx == "visit_occurrence":
             care_site_in_fp = get_table_path(input_dir, "care_site")
             if not care_site_in_fp:

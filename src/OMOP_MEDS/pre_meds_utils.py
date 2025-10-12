@@ -708,3 +708,258 @@ def rename_demo_files(directory: Path):
         new_path = file_path.with_name(new_name)
         file_path.rename(new_path)
         logger.info(f"Renamed: {file_path} to {new_path}")
+
+
+def calculate_nlp_features(
+    text: str | None,
+    features: list[str] | None = None,
+    prefix: str = "",
+) -> dict[str, float | int]:
+    """Calculate NLP features from text.
+
+    Args:
+        text: Input text to analyze. Can be None or empty string.
+        features: List of feature names to calculate. If None, calculates all features.
+            Available features: 'word_count', 'char_count', 'sentence_count',
+            'avg_word_length', 'avg_sentence_length', 'punctuation_count',
+            'digit_count', 'uppercase_count', 'unique_word_count', 'lexical_diversity'
+        prefix: Prefix to add to feature names in output dictionary.
+
+    Returns:
+        Dictionary mapping feature names to their calculated values.
+
+    Examples:
+        >>> calculate_nlp_features("Hello world!", features=["word_count", "char_count"])
+        {'word_count': 2, 'char_count': 12}
+        >>> calculate_nlp_features(None, features=["word_count"])
+        {'word_count': 0}
+    """
+    import re
+
+    # Default to all features if none specified
+    all_available_features = [
+        "word_count",
+        "char_count",
+        "sentence_count",
+        "avg_word_length",
+        "avg_sentence_length",
+        "punctuation_count",
+        "digit_count",
+        "uppercase_count",
+        "unique_word_count",
+        "lexical_diversity",
+    ]
+
+    if features is None:
+        features = all_available_features
+
+    # Initialize result with zeros for missing/empty text
+    if (
+        text is None
+        or text == ""
+        or (hasattr(text, "__len__") and len(str(text).strip()) == 0)
+    ):
+        return {
+            f"{prefix}_feature_{feat}" if prefix else f"feature_{feat}": 0.0
+            if "avg" in feat or "diversity" in feat
+            else 0
+            for feat in features
+        }
+
+    # Convert to string
+    text = str(text)
+
+    # Calculate all features (we'll filter later)
+    words = text.split()
+    word_count = len(words)
+    char_count = len(text)
+
+    sentences = re.split(r"[.!?]+", text)
+    sentence_count = len([s for s in sentences if s.strip()])
+
+    avg_word_length = (
+        sum(len(word.strip(".,!?;:")) for word in words) / word_count
+        if word_count > 0
+        else 0.0
+    )
+
+    avg_sentence_length = word_count / sentence_count if sentence_count > 0 else 0.0
+
+    punctuation_count = len(re.findall(r'[.,!?;:\-()"\']', text))
+    digit_count = len(re.findall(r"\d", text))
+    uppercase_count = len(re.findall(r"[A-Z]", text))
+
+    unique_words = set(word.lower().strip(".,!?;:") for word in words)
+    unique_word_count = len(unique_words)
+    lexical_diversity = unique_word_count / word_count if word_count > 0 else 0.0
+
+    # Map feature names to values
+    feature_map = {
+        "word_count": word_count,
+        "char_count": char_count,
+        "sentence_count": sentence_count,
+        "avg_word_length": round(avg_word_length, 2),
+        "avg_sentence_length": round(avg_sentence_length, 2),
+        "punctuation_count": punctuation_count,
+        "digit_count": digit_count,
+        "uppercase_count": uppercase_count,
+        "unique_word_count": unique_word_count,
+        "lexical_diversity": round(lexical_diversity, 3),
+    }
+
+    # Return only requested features with prefix
+    return {
+        f"{prefix}_feature_{feat}" if prefix else f"feature_{feat}": feature_map[feat]
+        for feat in features
+        if feat in feature_map
+    }
+
+
+def extract_nlp_features_from_column(
+    df: pl.LazyFrame,
+    text_column: str,
+    features: list[str] | None = None,
+    prefix: str = "",
+) -> pl.LazyFrame:
+    """Extract NLP features from a text column in a Polars LazyFrame.
+
+    This function applies NLP feature extraction in parallel to each row of the specified
+    text column. The computation is lazy and will only execute when collected.
+
+    Args:
+        df: Input Polars LazyFrame containing the text column.
+        text_column: Name of the column containing text to analyze.
+        features: List of feature names to calculate. If None, calculates all features.
+            Available features: 'word_count', 'char_count', 'sentence_count',
+            'avg_word_length', 'avg_sentence_length', 'punctuation_count',
+            'digit_count', 'uppercase_count', 'unique_word_count', 'lexical_diversity'
+        prefix: Prefix to add to feature column names. If empty, uses 'feature_' prefix.
+
+    Returns:
+        LazyFrame with original columns plus new feature columns. Feature columns are
+        named as '{prefix}_feature_{feature_name}'.
+
+    Examples:
+        >>> import polars as pl
+        >>> df = pl.LazyFrame({"text": ["Hello world!", "Test text."]})
+        >>> result = extract_nlp_features_from_column(
+        ...     df,
+        ...     text_column="text",
+        ...     features=["word_count", "char_count"],
+        ...     prefix="doc"
+        ... )
+        >>> result.collect()
+        shape: (2, 3)
+        ┌──────────────┬─────────────────────┬─────────────────────┐
+        │ text         ┆ doc_feature_word... ┆ doc_feature_char... │
+        │ ---          ┆ ---                 ┆ ---                 │
+        │ str          ┆ i64                 ┆ i64                 │
+        ╞══════════════╪═════════════════════╪═════════════════════╡
+        │ Hello world! ┆ 2                   ┆ 12                  │
+        │ Test text.   ┆ 2                   ┆ 10                  │
+        └──────────────┴─────────────────────┴─────────────────────┘
+    """
+    # Create a struct with all requested features
+    feature_struct = (
+        pl.col(text_column)
+        .map_elements(
+            lambda text: calculate_nlp_features(text, features=features, prefix=prefix),
+            return_dtype=pl.Struct(
+                [
+                    pl.Field(
+                        f"{prefix}_feature_{feat}" if prefix else f"feature_{feat}",
+                        pl.Float64
+                        if "avg" in feat or "diversity" in feat
+                        else pl.Int64,
+                    )
+                    for feat in (
+                        features
+                        if features
+                        else [
+                            "word_count",
+                            "char_count",
+                            "sentence_count",
+                            "avg_word_length",
+                            "avg_sentence_length",
+                            "punctuation_count",
+                            "digit_count",
+                            "uppercase_count",
+                            "unique_word_count",
+                            "lexical_diversity",
+                        ]
+                    )
+                ]
+            ),
+        )
+        .alias("nlp_features")
+    )
+
+    # Add the struct column and then unnest it to create individual columns
+    return df.with_columns(feature_struct).unnest("nlp_features")
+
+
+#
+# def extract_nlp_features():
+#     def calculate_features(text):
+#         if text is None or text == "" or pd.isna(text):
+#             return pd.Series({
+#                 'word_count': 0,
+#                 'char_count': 0,
+#                 'sentence_count': 0,
+#                 'avg_word_length': 0.0,
+#                 'avg_sentence_length': 0.0,
+#                 'punctuation_count': 0,
+#                 'digit_count': 0,
+#                 'uppercase_count': 0,
+#                 'unique_word_count': 0,
+#                 'lexical_diversity': 0.0
+#             })
+#
+#         # Convert to string if not already
+#         text = str(text)
+#
+#         # Basic counts
+#         words = text.split()
+#         word_count = len(words)
+#         char_count = len(text)
+#
+#         # Clean words for frequency analysis
+#         clean_words = [word.lower().strip('.,!?;:()[]{}\"\'') for word in words if word.strip('.,!?;:()[]{}\"\'')]
+#         all_words.extend(clean_words)
+#
+#         # Sentence count (simple approach)
+#         sentences = re.split(r'[.!?]+', text)
+#         sentence_count = len([s for s in sentences if s.strip()])
+#
+#         # Average word length
+#         avg_word_length = sum(len(word.strip('.,!?;:')) for word in words) / word_count if word_count > 0 else 0
+#
+#         # Average sentence length
+#         avg_sentence_length = word_count / sentence_count if sentence_count > 0 else 0
+#
+#         # Punctuation count
+#         punctuation_count = len(re.findall(r'[.,!?;:\-()"\']', text))
+#
+#         # Digit count
+#         digit_count = len(re.findall(r'\d', text))
+#
+#         # Uppercase count
+#         uppercase_count = len(re.findall(r'[A-Z]', text))
+#
+#         # Unique words and lexical diversity
+#         unique_words = set(word.lower().strip('.,!?;:') for word in words)
+#         unique_word_count = len(unique_words)
+#         lexical_diversity = unique_word_count / word_count if word_count > 0 else 0
+#
+#         return pd.Series({
+#             f'{prefix}_feature_word_count': word_count,
+#             f'{prefix}_feature_char_count': char_count,
+#             f'{prefix}_feature_sentence_count': sentence_count,
+#             f'{prefix}_feature_avg_word_length': round(avg_word_length, 2),
+#             f'{prefix}_feature_avg_sentence_length': round(avg_sentence_length, 2),
+#             f'{prefix}_feature_punctuation_count': punctuation_count,
+#             f'{prefix}_feature_digit_count': digit_count,
+#             f'{prefix}_feature_uppercase_count': uppercase_count,
+#             f'{prefix}_feature_unique_word_count': unique_word_count,
+#             f'{prefix}_feature_lexical_diversity': round(lexical_diversity, 3)
+#         })
