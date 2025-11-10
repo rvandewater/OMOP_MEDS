@@ -1,3 +1,8 @@
+<div align="center">
+  <img src="https://github.com/rvandewater/OMOP_MEDS/blob/main/static/omop_to_meds_logo.svg?raw=true"
+alt="omop-to-meds logo" height="300">
+</div>
+
 # MEDS OMOP ETL
 
 [![PyPI - Version](https://img.shields.io/pypi/v/OMOP_MEDS)](https://pypi.org/project/OMOP_MEDS/)
