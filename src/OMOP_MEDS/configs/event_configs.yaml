@@ -11,6 +11,12 @@ person_birth_death:
     time: col(date_of_birth)
     time_format: "%Y-%m-%d %H:%M:%S"
     table_name: table_name
+  gender:
+    code:
+      - GENDER
+      - col(gender)
+    time: null
+    table_name: table_name
 
 # TODO: check how to handle vocabularies with these concepts
 
@@ -19,12 +25,6 @@ person:
     code:
       - RACE
       - col(race_concept_id)
-    time: null
-    table_name: table_name
-  gender:
-    code:
-      - GENDER
-      - col(gender_source_value)
     time: null
     table_name: table_name
   ethnicity:
@@ -215,12 +215,12 @@ condition_era:
     time: col(condition_era_end_date)
     numeric_value: col(condition_occurrence_count)
     table_name: col(table_name)
-note:
-  note:
-    code:
-      - col(preferred_vocabulary_name)
-      - col(preferred_concept_name)
-    time: col(note_datetime)
-    text_value: col(note_text)
-    visit_occurrence_id: col(visit_occurrence_id)
-    table_name: col(table_name)
+#note:
+#  note:
+#    code:
+#      - col(preferred_vocabulary_name)
+#      - col(preferred_concept_name)
+#    time: col(note_datetime)
+#    text_value: col(note_text)
+#    visit_occurrence_id: col(visit_occurrence_id)
+#    table_name: col(table_name)
