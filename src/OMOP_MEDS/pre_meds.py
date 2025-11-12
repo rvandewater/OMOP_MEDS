@@ -18,7 +18,7 @@ from .pre_meds_utils import (
     get_table_path,
     join_concept,
     load_raw_file,
-    extract_nlp_features_from_column,
+    extract_nlp_features,
 )
 
 # Name of the dataset
@@ -95,11 +95,36 @@ def main(cfg: DictConfig) -> None:
                     raise ValueError(
                         f"OMOP version {omop_version} not supported for {table_name}."
                     )
+
+            # Separate NLP features config from join_concept config
+            nlp_config = preprocessor_cfg.pop("nlp_features", None)
+
+            # Create join_concept function
             functions[table_name] = join_concept(
                 table_name=table_name,
                 **preprocessor_cfg,
                 prefer_source=cfg.prefer_source,
             )
+
+            # If NLP features are configured, wrap the function
+            if nlp_config and nlp_config.get("enabled", False):
+                base_fn = functions[table_name]
+                nlp_fn = extract_nlp_features(
+                    table_name=table_name,
+                    text_column=nlp_config["text_column"],
+                    features=nlp_config.get("features"),
+                    prefix=nlp_config.get("prefix", ""),
+                    output_data_cols=nlp_config.get("output_data_cols", []),
+                )
+
+                # Compose the two functions
+                def composed_fn(
+                    df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
+                ) -> pl.LazyFrame:
+                    df = base_fn(df, concept_df, person_df)
+                    return nlp_fn(df, person_df)
+
+                functions[table_name] = composed_fn
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
@@ -222,52 +247,52 @@ def main(cfg: DictConfig) -> None:
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
-        if pfx == "note":
-            df = extract_nlp_features_from_column(
-                df=df,
-                text_column="note_text",
-                features=[
-                    "word_count",
-                    "char_count",
-                    "sentence_count",
-                    "avg_word_length",
-                    "avg_sentence_length",
-                    "punctuation_count",
-                    "digit_count",
-                    "uppercase_count",
-                    "unique_word_count",
-                    "lexical_diversity",
-                ],
-            )
-            # df_collected = df.collect()
-            # Join with provider to get specialty
-            # provider_in_fp = get_table_path(input_dir, "provider")
-            # if not provider_in_fp:
-            #     logger.warning(
-            #         "No provider table found in the input directory. Skipping join with provider."
-            #     )
-            # else:
-            #     provider_df = load_raw_file(provider_in_fp, schema_loader)
-            #     processed_df = processed_df.join(
-            #         provider_df.select(
-            #             [
-            #                 pl.col("provider_id").alias("note_provider_id"),
-            #                 pl.col("specialty_concept_id").alias("provider_specialty_concept_id"),
-            #             ]
-            #         ),
-            #         on="note_provider_id",
-            #         how="left",
-            #     )
-            #     processed_df = processed_df.join(
-            #         concept_df.select(
-            #             [
-            #                 pl.col("concept_id").alias("provider_specialty_concept_id"),
-            #                 pl.col("concept_name").alias("provider_specialty_concept_name"),
-            #             ]
-            #         ),
-            #         on="provider_specialty_concept_id",
-            #         how="left",
-            #     )
+        # if pfx == "note":
+        #     processed_df = extract_nlp_features_from_column(
+        #         df=processed_df,
+        #         text_column="note_text",
+        #         features=[
+        #             "word_count",
+        #             "char_count",
+        #             "sentence_count",
+        #             "avg_word_length",
+        #             "avg_sentence_length",
+        #             "punctuation_count",
+        #             "digit_count",
+        #             "uppercase_count",
+        #             "unique_word_count",
+        #             "lexical_diversity",
+        #         ],
+        #     )
+        # df_collected = df.collect()
+        # Join with provider to get specialty
+        # provider_in_fp = get_table_path(input_dir, "provider")
+        # if not provider_in_fp:
+        #     logger.warning(
+        #         "No provider table found in the input directory. Skipping join with provider."
+        #     )
+        # else:
+        #     provider_df = load_raw_file(provider_in_fp, schema_loader)
+        #     processed_df = processed_df.join(
+        #         provider_df.select(
+        #             [
+        #                 pl.col("provider_id").alias("note_provider_id"),
+        #                 pl.col("specialty_concept_id").alias("provider_specialty_concept_id"),
+        #             ]
+        #         ),
+        #         on="note_provider_id",
+        #         how="left",
+        #     )
+        #     processed_df = processed_df.join(
+        #         concept_df.select(
+        #             [
+        #                 pl.col("concept_id").alias("provider_specialty_concept_id"),
+        #                 pl.col("concept_name").alias("provider_specialty_concept_name"),
+        #             ]
+        #         ),
+        #         on="provider_specialty_concept_id",
+        #         how="left",
+        #     )
         if pfx == "visit_occurrence":
             care_site_in_fp = get_table_path(input_dir, "care_site")
             if not care_site_in_fp:

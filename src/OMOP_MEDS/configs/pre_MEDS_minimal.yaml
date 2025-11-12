@@ -61,11 +61,10 @@ observation:
       ]
   5.4:
     reference_cols: ["observation_source_concept_id"]
-    output_data_cols:
-      [
-        "observation_id",
-        "observation_concept_id",
-        "observation_date",
+    output_data_cols: [
+        #        "observation_id",
+        #        "observation_concept_id",
+        #        "observation_date",
         "observation_datetime",
         "observation_type_concept_id",
         "value_as_number",
@@ -73,16 +72,13 @@ observation:
         "value_as_concept_id",
         "qualifier_concept_id",
         "unit_concept_id",
-        "provider_id",
+        #        "provider_id",
         "visit_occurrence_id",
         "visit_detail_id",
         "observation_source_value",
         "observation_source_concept_id",
-        "unit_source_value",
-        "qualifier_source_value",
-        "value_source_value",
-        "observation_event_id",
-        "obs_event_field_concept_id",
+        #        "unit_source_value",
+        #        "qualifier_source_value",
       ]
     concept_cols:
       [
@@ -126,31 +122,27 @@ measurement:
         "concept_name_source_concept_id",
       ]
   5.4:
-    reference_cols: ["measurement_source_concept_id"]
-    output_data_cols:
-      [
-        "measurement_id",
-        "measurement_concept_id",
-        "measurement_date",
+    reference_cols: ["measurement_concept_id", "measurement_source_concept_id"]
+    output_data_cols: [
+        #        "measurement_id",
+        #        "measurement_concept_id",
+        #        "measurement_date",
         "measurement_datetime",
-        "measurement_time",
-        "measurement_type_concept_id",
-        "operator_concept_id",
+        #        "measurement_time",
+        #        "measurement_type_concept_id",
+        #        "operator_concept_id",
         "value_as_number",
-        "value_as_concept_id",
+        #        "value_as_concept_id",
         "unit_concept_id",
-        "range_low",
-        "range_high",
-        "provider_id",
+        #        "range_low",
+        #        "range_high",
+        #        "provider_id",
         "visit_occurrence_id",
-        "visit_detail_id",
-        "measurement_source_value",
-        "unit_source_value",
-        "value_source_value",
-        "unit_source_concept_id",
-        "measurement_event_id",
-        "meas_event_field_concept_id",
-        "concept_code",
+        #        "visit_detail_id",
+        #        "measurement_source_value",
+        #        "measurement_source_concept_id",
+        #        "unit_source_value",
+        #        "value_source_value",
       ]
     concept_cols:
       [
@@ -575,6 +567,17 @@ note:
         "concept_code_source_concept_id",
         "concept_name_source_concept_id",
       ]
+    nlp_features:
+      enabled: true
+      text_column: "note_text"
+      features:
+        - word_count
+        - char_count
+        - lexical_diversity
+      prefix: "note"
+      output_data_cols:
+        - note_date
+        - note_type_concept_id
   5.4:
     reference_cols: ["note_type_concept_id"] # TODO check if correct join column
     output_data_cols:
@@ -605,6 +608,17 @@ note:
         "concept_code_source_concept_id",
         "concept_name_source_concept_id",
       ]
+    nlp_features:
+      enabled: true
+      text_column: "note_text"
+      features:
+        - word_count
+        - char_count
+        - lexical_diversity
+      prefix: "note"
+      output_data_cols:
+        - note_date
+        - note_type_concept_id
 # Todo: how to handle source ids for condition_era
 condition_era:
   reference_cols: ["condition_concept_id"]
