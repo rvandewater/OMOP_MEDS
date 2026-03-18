@@ -227,7 +227,7 @@ def main(cfg: DictConfig) -> None:
                     "No care_site table found in the input directory. Skipping join with care_site."
                 )
             else:
-                logger.warning(f"Processed columns: {processed_df.columns}")
+                logger.warning(f"Processed columns: {processed_df.collect_schema()}")
                 care_site_df = load_raw_file(care_site_in_fp, schema_loader)
                 care_site_df = care_site_df.select(["care_site_id", "care_site_name"])
 
