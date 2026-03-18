@@ -180,6 +180,18 @@ def main(cfg: DictConfig) -> None:
     )
     for in_fp in all_fps:
         pfx = get_shard_prefix(input_dir, in_fp)
+        out_fp = MEDS_input_dir / f"{pfx}.parquet"
+
+        if out_fp.is_file():
+            if cfg.do_overwrite:
+                logger.info(
+                    f"{str(out_fp.resolve())} already exists but do_overwrite=True, so re-processing {pfx}."
+                )
+            else:
+                logger.info(
+                    f"{str(out_fp.resolve())} already exists and do_overwrite=False, so skipping {pfx}."
+                )
+                continue
         if pfx in unused_tables:
             logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
             continue
@@ -202,8 +214,6 @@ def main(cfg: DictConfig) -> None:
                 )
             continue
 
-        out_fp = MEDS_input_dir / f"{pfx}.parquet"
-
         if out_fp.is_file():  # and not pfx == "data_float_h" :
             logger.info(f"Done with {pfx}. Continuing")
             continue
@@ -220,20 +230,21 @@ def main(cfg: DictConfig) -> None:
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
-        if pfx == "visit_occurrence":
-            care_site_in_fp = get_table_path(input_dir, "care_site")
-            if not care_site_in_fp:
-                logger.warning(
-                    "No care_site table found in the input directory. Skipping join with care_site."
-                )
-            else:
-                logger.warning(f"Processed columns: {processed_df.collect_schema()}")
-                care_site_df = load_raw_file(care_site_in_fp, schema_loader)
-                care_site_df = care_site_df.select(["care_site_id", "care_site_name"])
 
-                processed_df = processed_df.join(
-                    care_site_df, on="care_site_id", how="left"
-                )
+        # if pfx == "visit_occurrence":
+        #     care_site_in_fp = get_table_path(input_dir, "care_site")
+        #     if not care_site_in_fp:
+        #         logger.warning(
+        #             "No care_site table found in the input directory. Skipping join with care_site."
+        #         )
+        #     else:
+        #         logger.warning(f"Processed columns: {processed_df.collect_schema()}")
+        #         care_site_df = load_raw_file(care_site_in_fp, schema_loader)
+        #         care_site_df = care_site_df.select(["care_site_id", "care_site_name"])
+        #
+        #         processed_df = processed_df.join(
+        #             care_site_df, on="care_site_id", how="left"
+        #         )
 
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
