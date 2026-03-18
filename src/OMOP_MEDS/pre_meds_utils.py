@@ -71,7 +71,7 @@ def get_patient_link(
     visit_df: pl.LazyFrame,
     schema_loader: OMOPSchemaBase,
     limit: int = 0,
-    join_on_visit: bool = False,
+    join_on_visit: bool = True,
 ) -> pl.LazyFrame:
     """
     Process the persons table and death table to get an accurate birth and death datetime.
