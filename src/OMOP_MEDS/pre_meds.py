@@ -228,9 +228,12 @@ def main(cfg: DictConfig) -> None:
                 )
             else:
                 care_site_df = load_raw_file(care_site_in_fp, schema_loader)
+                care_site_df = care_site_df.select(["care_site_id", "care_site_name"])
+
                 processed_df = processed_df.join(
                     care_site_df, on="care_site_id", how="left"
                 )
+
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
         # unit_columns = []
