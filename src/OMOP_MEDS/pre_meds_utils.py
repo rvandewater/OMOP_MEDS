@@ -71,6 +71,7 @@ def get_patient_link(
     visit_df: pl.LazyFrame,
     schema_loader: OMOPSchemaBase,
     limit: int = 0,
+    join_on_visit: bool = False,
 ) -> pl.LazyFrame:
     """
     Process the persons table and death table to get an accurate birth and death datetime.
@@ -110,7 +111,19 @@ def get_patient_link(
     >>> result = get_patient_link(person_df, death_df, visit_df, schema_loader)
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
     """
-    person_df = person_df.join(visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="semi")
+    if join_on_visit:
+        # Keep only the persons that are in the visit table
+        person_df = person_df.join(
+            visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="semi"
+        )
+    else:
+        person_df_ids = person_df.join(
+            visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="anti"
+        )
+        logger.warning(
+            f"We will not require a visit per patient."
+            f"Found {person_df_ids.count().collect()[0, 0]} persons without visits."
+        )
     if limit > 0:
         # Limit the number of persons
         logger.info(f"Limiting the number of persons to {limit}")
