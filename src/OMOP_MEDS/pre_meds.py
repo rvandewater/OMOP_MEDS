@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import polars.selectors as cs
+
 from loguru import logger
 from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
 from omegaconf import DictConfig
@@ -18,6 +20,7 @@ from .pre_meds_utils import (
     get_table_path,
     join_concept,
     load_raw_file,
+    col_selector,
 )
 
 # Name of the dataset
@@ -85,6 +88,8 @@ def main(cfg: DictConfig) -> None:
             "admission_id",
             "raw_data_extensions",
             "expected_not_processed_tables",
+            "tables_to_ignore",
+            "metadata_cols_to_drop",
         ]:
             logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
             if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
@@ -99,6 +104,18 @@ def main(cfg: DictConfig) -> None:
                 **preprocessor_cfg,
                 prefer_source=cfg.prefer_source,
             )
+    if premeds_cfg.get("metadata_cols_to_drop", False):
+        metadata_cols_to_drop = premeds_cfg.get(
+            "metadata_cols_to_drop", {"columns": [], "patterns": []}
+        )
+        logger.info(metadata_cols_to_drop)
+        selector = ~col_selector(
+            columns=metadata_cols_to_drop.get("columns", []),
+            patterns=metadata_cols_to_drop.get("patterns", []),
+        )
+    else:
+        selector = cs.all()
+    logger.info(selector)
 
     unused_tables = {}
     person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
@@ -116,7 +133,7 @@ def main(cfg: DictConfig) -> None:
         if not concept_path:
             raise FileNotFoundError("No concept table found in the input directory.")
             # For some reason this is the concept table in the omop demo data
-        concept_df = load_raw_file(concept_path, schema_loader)
+        concept_df = load_raw_file(concept_path, schema_loader, selector)
         concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
         write_lazyframe(concept_df, concept_out_fp)
 
@@ -130,13 +147,13 @@ def main(cfg: DictConfig) -> None:
         logger.info("Processing patient table...")
         person_in_fp = get_table_path(input_dir, "person")
         if person_in_fp:
-            person_df = load_raw_file(person_in_fp, schema_loader)
+            person_df = load_raw_file(person_in_fp, schema_loader, selector)
         else:
             raise FileNotFoundError("No person table found in the input directory.")
 
         death_in_fp = get_table_path(input_dir, "death")
         if death_in_fp:
-            death_df = load_raw_file(death_in_fp, schema_loader)
+            death_df = load_raw_file(death_in_fp, schema_loader, selector)
         else:
             death_df = None
         # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
@@ -145,7 +162,7 @@ def main(cfg: DictConfig) -> None:
         # person_df = load_raw_file(admissions_fp)
         visit_in_fp = get_table_path(input_dir, "visit_occurrence")
 
-        visit_df = load_raw_file(visit_in_fp, schema_loader)
+        visit_df = load_raw_file(visit_in_fp, schema_loader, selector)
         patient_df = get_patient_link(
             person_df=person_df,
             death_df=death_df,
@@ -169,7 +186,9 @@ def main(cfg: DictConfig) -> None:
                 "No concept relationship table found in the input directory."
             )
         logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
-        concept_relationship_df = load_raw_file(concept_relationship_fp, schema_loader)
+        concept_relationship_df = load_raw_file(
+            concept_relationship_fp, schema_loader, selector
+        )
         write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
 
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
@@ -221,7 +240,7 @@ def main(cfg: DictConfig) -> None:
         out_fp.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Processing {pfx}...")
-        df = load_raw_file(in_fp, schema_loader)
+        df = load_raw_file(in_fp, schema_loader, selector)
 
         st = datetime.now()
         if df.limit(1).collect().is_empty():
@@ -231,20 +250,20 @@ def main(cfg: DictConfig) -> None:
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
 
-        # if pfx == "visit_occurrence":
-        #     care_site_in_fp = get_table_path(input_dir, "care_site")
-        #     if not care_site_in_fp:
-        #         logger.warning(
-        #             "No care_site table found in the input directory. Skipping join with care_site."
-        #         )
-        #     else:
-        #         logger.warning(f"Processed columns: {processed_df.collect_schema()}")
-        #         care_site_df = load_raw_file(care_site_in_fp, schema_loader)
-        #         care_site_df = care_site_df.select(["care_site_id", "care_site_name"])
-        #
-        #         processed_df = processed_df.join(
-        #             care_site_df, on="care_site_id", how="left"
-        #         )
+        if pfx == "visit_occurrence":
+            care_site_in_fp = get_table_path(input_dir, "care_site")
+            if not care_site_in_fp:
+                logger.warning(
+                    "No care_site table found in the input directory. Skipping join with care_site."
+                )
+            else:
+                logger.warning(f"Processed columns: {processed_df.collect_schema()}")
+                care_site_df = load_raw_file(care_site_in_fp, schema_loader, selector)
+                care_site_df = care_site_df.select(["care_site_id", "care_site_name"])
+
+                processed_df = processed_df.join(
+                    care_site_df, on="care_site_id", how="left"
+                )
 
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
@@ -278,6 +297,15 @@ def main(cfg: DictConfig) -> None:
             continue
 
         # write_lazyframe(processed_df, out_fp)
+        # if pfx == "visit_occurrence":
+        #     # TODO: check culprit of out of memory for visit_occurrence (likely with steps before the care_site join).
+        #     # If this is the visit_occurrence table, we want to write it in a way that preserves the partitioning by visit_id for downstream processing efficiency
+        #
+        #     for shard, shard_df in processed_df.partition_by("shard_key", as_dict=True).items():
+        #         shard_out_fp = out_fp.parent / f"{out_fp.stem}_{shard}.parquet"
+        #         shard_df.sink_parquet(shard_out_fp)
+        #         logger.info(f"Wrote shard {shard} to {shard_out_fp}")
+        # else:
         processed_df.sink_parquet(out_fp)
         logger.info(
             f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"

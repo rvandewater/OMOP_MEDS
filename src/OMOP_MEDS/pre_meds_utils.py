@@ -4,6 +4,9 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+import polars.selectors as cs
+from polars.type_aliases import SelectorType
+from typing import Optional
 from loguru import logger
 from omop_schema.convert import convert_to_schema_polars
 from omop_schema.schema.base import OMOPSchemaBase
@@ -311,7 +314,34 @@ def join_concept(
     return fn
 
 
-def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | None:
+def col_selector(
+    columns: Optional[list[str]] = None,
+    patterns: Optional[list[str]] = None,
+) -> SelectorType:
+    """
+    Returns a selector for explicit column names, a regex pattern, or both.
+    Raises if neither is provided.
+    """
+    if not columns and not patterns:
+        raise ValueError("Provide at least one of: columns, pattern")
+
+    selector = None
+
+    if columns:
+        selector = cs.by_name(*columns)
+    if patterns:
+        if isinstance(patterns, str):
+            patterns = [patterns]  # Ensure patterns is a list
+        for pattern in patterns:
+            regex_sel = cs.matches(pattern)
+            selector = regex_sel if selector is None else selector | regex_sel
+
+    return selector
+
+
+def load_raw_file(
+    fp: Path, schema_loader: OMOPSchemaBase, selector: SelectorType
+) -> pl.LazyFrame | None:
     """Retrieve all .csv/.csv.gz/.parquet files for the OMOP table given by fp
 
     Because OMOP tables can be quite large for datasets comprising millions
@@ -341,18 +371,17 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
     if fp.suffixes == [".csv", ".gz"]:
         file = pl.scan_csv(
             fp, compression="gzip", infer_schema=False, schema_overrides=schema
-        )
+        ).select(selector)
         logging.info(f"Loaded gzipped CSV file from {fp}")
     elif fp.suffix == ".csv":
         # Using schema_overrides to set the schema as the ordering could be different
         # and there could be extra columns
         file = pl.scan_csv(
             fp, infer_schema=False, has_header=True, schema_overrides=schema
-        )
+        ).select(selector)
         logging.info(f"Loaded CSV file from {fp}")
     elif fp.suffix == ".parquet":
-        file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
-        file = file.select(pl.all().name.to_lowercase())
+        file = pl.scan_parquet(fp).select(selector)
         file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
         logging.info(f"Loaded Parquet file from {fp}")
     elif fp.is_dir():
@@ -363,11 +392,12 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         if csv_files:
             file = pl.scan_csv(
                 fp, infer_schema=False, has_header=True, schema_overrides=schema
-            )
+            ).select(selector)
             logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
-            file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
-            file = file.select(pl.all().name.to_lowercase())
+            file = pl.scan_parquet(fp).select(
+                selector
+            )  # , schema=schema, allow_missing_columns=True)
             # if mismatching_schema_check:
             #     cast_files_to_schema(str(fp), schema, str(fp))
             file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
