@@ -83,6 +83,17 @@ def main(cfg: DictConfig) -> None:
             logger.warning(f"No files found for {table}")
 
     for table_name, preprocessor_cfg in preprocessors.items():
+        out_fp = MEDS_input_dir / f"{table_name}.parquet"
+        if out_fp.is_file():
+            if cfg.do_overwrite:
+                logger.info(
+                    f"{str(out_fp.resolve())} already exists but do_overwrite=True, so re-processing {table_name}."
+                )
+            else:
+                logger.info(
+                    f"{str(out_fp.resolve())} already exists and do_overwrite=False, so skipping {table_name}."
+                )
+                continue
         if table_name not in [
             "subject_id",
             "admission_id",
@@ -201,16 +212,6 @@ def main(cfg: DictConfig) -> None:
         pfx = get_shard_prefix(input_dir, in_fp)
         out_fp = MEDS_input_dir / f"{pfx}.parquet"
 
-        if out_fp.is_file():
-            if cfg.do_overwrite:
-                logger.info(
-                    f"{str(out_fp.resolve())} already exists but do_overwrite=True, so re-processing {pfx}."
-                )
-            else:
-                logger.info(
-                    f"{str(out_fp.resolve())} already exists and do_overwrite=False, so skipping {pfx}."
-                )
-                continue
         if pfx in unused_tables:
             logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
             continue
