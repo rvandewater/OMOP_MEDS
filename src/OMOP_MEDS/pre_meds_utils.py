@@ -407,7 +407,7 @@ def load_raw_file(
     else:
         return None
     file = file.select(pl.all().name.to_lowercase())
-    logging.info(f"Loaded {file} with schema: {file.collect_schema()}")
+    # logging.info(f"Loaded {file} with schema: {file.collect_columns}")
     return file
 
 

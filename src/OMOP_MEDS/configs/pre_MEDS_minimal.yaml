@@ -6,7 +6,7 @@ raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
 # No pseudotime in OMOP
 metadata_cols_to_drop: # optional — omit key to skip
   columns: []
-  patterns: ["(?i)xtn_", "(?i)etl_"]
+  patterns: ["(?i)xtn_", "(?i)etl_", "(?i)air_"]
 person:
   # No pseudotime in OMOP
   # Column that contains ID's to concepts
