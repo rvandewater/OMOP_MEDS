@@ -904,5 +904,7 @@ def scan_harmonized(
             all_schemas[path] = target_schema
 
     frames = [harmonize_shard(path, target_schema, all_schemas[path]) for path in paths]
-
+    logger.info(
+        f"Harmonized {len(frames)} shards in {directory!r} with target schema: {target_schema}"
+    )
     return pl.concat(frames, how="diagonal_relaxed")
