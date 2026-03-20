@@ -202,6 +202,7 @@ def join_concept(
 
     Examples:
         >>> from omop_schema.utils import get_schema_loader
+        >>> from OMOP_MEDS.pre_meds_utils import load_raw_file, join_concept, get_patient_link
         >>> func = join_concept(
         ...     "observation",
         ...     ["observation_source_concept_id"],  # Add a comma here
@@ -340,7 +341,7 @@ def col_selector(
 
 
 def load_raw_file(
-    fp: Path, schema_loader: OMOPSchemaBase, selector: SelectorType
+    fp: Path, schema_loader: OMOPSchemaBase, selector: SelectorType = cs.all()
 ) -> pl.LazyFrame | None:
     """Retrieve all .csv/.csv.gz/.parquet files for the OMOP table given by fp
 
