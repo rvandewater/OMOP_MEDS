@@ -895,6 +895,14 @@ def scan_harmonized(
     # Extend target to all paths (not just the sample) using cached schemas
     all_schemas = shard_schemas if not schema_sample else collect_shard_schemas(paths)
 
+    # Build schemas for all paths, using target_schema as fallback for unsampled paths
+    all_schemas = {}
+    for path in paths:
+        if path in shard_schemas:
+            all_schemas[path] = shard_schemas[path]
+        else:
+            all_schemas[path] = target_schema
+
     frames = [harmonize_shard(path, target_schema, all_schemas[path]) for path in paths]
 
     return pl.concat(frames, how="diagonal_relaxed")
