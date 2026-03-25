@@ -155,7 +155,7 @@ def main(cfg: DictConfig) -> None:
         patient_df = pl.scan_parquet(person_out_fp)
         # visit_df = pl.scan_parquet(visit_out_fp)
     else:
-        logger.info("Processing patient table...")
+        logger.info("Processing person table...")
         person_in_fp = get_table_path(input_dir, "person")
         if person_in_fp:
             person_df = load_raw_file(person_in_fp, schema_loader, selector)
@@ -247,7 +247,7 @@ def main(cfg: DictConfig) -> None:
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
-        if processed_df.limit(1).is_empty():
+        if processed_df.limit(1).collect().is_empty():
             logger.warning(
                 f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
             )
