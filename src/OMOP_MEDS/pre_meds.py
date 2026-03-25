@@ -244,13 +244,14 @@ def main(cfg: DictConfig) -> None:
         df = load_raw_file(in_fp, schema_loader, selector)
 
         st = datetime.now()
-        if df.limit(1).collect().is_empty():
-            logger.warning(f"Skipping {pfx} as it is empty.")
-            continue
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
-
+        if processed_df.fetch(1).is_empty():
+            logger.warning(
+                f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
+            )
+            continue
         if pfx == "visit_occurrence":
             care_site_in_fp = get_table_path(input_dir, "care_site")
             if not care_site_in_fp:
@@ -308,6 +309,22 @@ def main(cfg: DictConfig) -> None:
         #         logger.info(f"Wrote shard {shard} to {shard_out_fp}")
         # else:
         processed_df.sink_parquet(out_fp)
+        # if pfx == "measurement":
+        #     shard_col = "person_id"
+        #     n_buckets = 256
+        #     processed_df = processed_df.with_columns(
+        #         (pl.col(shard_col).hash() % n_buckets).alias("_bucket")
+        #     )
+        #     for b in range(n_buckets):
+        #         out_b = out_fp.parent / f"{out_fp.stem}_part_{b:03d}.parquet"
+        #         (
+        #             processed_df
+        #             .filter(pl.col("_bucket") == b)
+        #             .drop("_bucket")
+        #             .sink_parquet(out_b)
+        #         )
+        # else:
+        #     processed_df.sink_parquet(out_fp)
         logger.info(
             f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
         )

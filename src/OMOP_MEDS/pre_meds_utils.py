@@ -397,9 +397,7 @@ def load_raw_file(
             logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
             # pl.scan_parquet(fp)
-            file = scan_harmonized(fp).select(
-                selector
-            )  # , schema=schema, allow_missing_columns=True)
+            file = fp.select(selector)  # , schema=schema, allow_missing_columns=True)
             # if mismatching_schema_check:
             #     cast_files_to_schema(str(fp), schema, str(fp))
             file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
