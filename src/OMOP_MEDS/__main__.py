@@ -38,6 +38,8 @@ def main(cfg: DictConfig):
         if pre_MEDS_dir.exists():
             logger.info("Removing existing pre-MEDS directory.")
             shutil.rmtree(pre_MEDS_dir)
+    else:
+        logger.info("Not overwriting existing data as do_overwrite is False.")
     # Step 0: Data downloading
     if cfg.do_download:  # pragma: no cover
         if cfg.get("do_demo", False):
