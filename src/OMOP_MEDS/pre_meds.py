@@ -247,7 +247,7 @@ def main(cfg: DictConfig) -> None:
 
         fn = functions[pfx]
         processed_df = fn(df, concept_df, patient_df)
-        if processed_df.fetch(1).is_empty():
+        if processed_df.limit(1).is_empty():
             logger.warning(
                 f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
             )
