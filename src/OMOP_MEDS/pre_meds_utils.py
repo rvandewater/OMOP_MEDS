@@ -406,15 +406,38 @@ def load_raw_file(
             #     file, schema, allow_extra_columns=True, allow_missing_columns=True
             # )
             # Per-shard projection/cast to avoid building one huge harmonized concat plan.
-            shard_lfs: list[pl.LazyFrame] = []
-            for shard_fp in sorted(parquet_files):
-                shard_lf = pl.scan_parquet(shard_fp).select(selector)
-                shard_lf = project_to_target_schema(shard_lf, schema)
-                shard_lfs.append(shard_lf)
+            # shard_lfs: list[pl.LazyFrame] = []
+            # for shard_fp in sorted(parquet_files):
+            #     shard_lf = pl.scan_parquet(shard_fp).select(selector)
+            #     shard_lf = project_to_target_schema(shard_lf, schema)
+            #     shard_lfs.append(shard_lf)
+            #
+            # if not shard_lfs:
+            #     return None
+            # Safer for very large dirs: build aligned shards in bounded batches.
+            # This avoids one giant concat graph that can OOM/panic native Polars.
+            parquet_files = sorted(parquet_files)
+            batch_size = 64  # tune 32-128 based on memory
+            batch_lfs: list[pl.LazyFrame] = []
 
-            if not shard_lfs:
+            # Restrict schema to selected columns to lower memory.
+            # selector may be a callable selector; this path keeps full schema if unsure.
+            target_schema = schema
+
+            for i in range(0, len(parquet_files), batch_size):
+                chunk = parquet_files[i : i + batch_size]
+                shard_lfs: list[pl.LazyFrame] = []
+
+                for shard_fp in chunk:
+                    shard = pl.scan_parquet(shard_fp).select(selector)
+                    shard = _align_shard_to_schema(shard, target_schema)
+                    shard_lfs.append(shard)
+
+                if shard_lfs:
+                    batch_lfs.append(pl.concat(shard_lfs, how="vertical_relaxed"))
+
+            if not batch_lfs:
                 return None
-
             # vertical_relaxed allows minor dtype reconciliation without exploding memory.
             file = pl.concat(shard_lfs, how="vertical_relaxed")
             logging.info(f"Loaded Parquet files as directory from {fp}")
@@ -1057,4 +1080,18 @@ def project_to_target_schema(
             exprs.append(pl.col(col).cast(dtype, strict=False).alias(col))
         else:
             exprs.append(pl.lit(None, dtype=dtype).alias(col))
+    return lf.select(exprs)
+
+
+def _align_shard_to_schema(
+    lf: pl.LazyFrame, target_schema: dict[str, pl.DataType]
+) -> pl.LazyFrame:
+    """Project a shard to exactly target schema (add missing as null, cast permissively)."""
+    existing = set(lf.collect_schema().names())
+    exprs: list[pl.Expr] = []
+    for col, dtype in target_schema.items():
+        if col in existing:
+            exprs.append(pl.col(col).cast(dtype, strict=False).alias(col))
+        else:
+            exprs.append(pl.lit(None).cast(dtype).alias(col))
     return lf.select(exprs)
