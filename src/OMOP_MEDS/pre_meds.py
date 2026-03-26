@@ -91,9 +91,18 @@ def main(cfg: DictConfig) -> None:
             logger.warning(f"No files found for {table}")
 
     for table_name, preprocessor_cfg in preprocessors.items():
+        if table_name in [
+            "subject_id",
+            "admission_id",
+            "raw_data_extensions",
+            "expected_not_processed_tables",
+            "tables_to_ignore",
+            "metadata_cols_to_drop",
+        ]:
+            continue
         out_fp = MEDS_input_dir
         if (MEDS_input_dir / f"{table_name}.parquet").is_file() or (
-            MEDS_input_dir / table_name
+            MEDS_input_dir / (f"{table_name}.parquet")
         ).is_dir():
             output_file = (
                 MEDS_input_dir / f"{table_name}.parquet"
@@ -104,32 +113,29 @@ def main(cfg: DictConfig) -> None:
                 logger.info(
                     f"{str(output_file.resolve())} already exists but do_overwrite=True, so re-processing {table_name}."
                 )
+                logger.info(
+                    f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}"
+                )
+                if any(
+                    item in supported_omop_versions for item in preprocessor_cfg.keys()
+                ):
+                    if omop_version in preprocessor_cfg:
+                        preprocessor_cfg = preprocessor_cfg[omop_version]
+                    else:
+                        raise ValueError(
+                            f"OMOP version {omop_version} not supported for {table_name}."
+                        )
+                functions[table_name] = join_concept(
+                    table_name=table_name,
+                    **preprocessor_cfg,
+                    prefer_source=cfg.prefer_source,
+                )
             else:
                 logger.info(
                     f"{str(output_file.resolve())} already exists and do_overwrite=False, so skipping {table_name}."
                 )
                 continue
-        if table_name not in [
-            "subject_id",
-            "admission_id",
-            "raw_data_extensions",
-            "expected_not_processed_tables",
-            "tables_to_ignore",
-            "metadata_cols_to_drop",
-        ]:
-            logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
-            if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
-                if omop_version in preprocessor_cfg:
-                    preprocessor_cfg = preprocessor_cfg[omop_version]
-                else:
-                    raise ValueError(
-                        f"OMOP version {omop_version} not supported for {table_name}."
-                    )
-            functions[table_name] = join_concept(
-                table_name=table_name,
-                **preprocessor_cfg,
-                prefer_source=cfg.prefer_source,
-            )
+
     if premeds_cfg.get("metadata_cols_to_drop", False):
         metadata_cols_to_drop = premeds_cfg.get(
             "metadata_cols_to_drop", {"columns": [], "patterns": []}
