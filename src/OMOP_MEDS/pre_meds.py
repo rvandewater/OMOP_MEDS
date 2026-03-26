@@ -274,7 +274,7 @@ def main(cfg: DictConfig) -> None:
         #         logger.info(f"Wrote shard {shard} to {shard_out_fp}")
         # else:
 
-        ROW_THRESHOLD = 5_000_000
+        ROW_THRESHOLD = 50_000_000
 
         # {part} is the literal token Polars replaces with the zero-based file index.
         # The double-braces {{ }} prevent Python's f-string from consuming it early.
