@@ -54,7 +54,7 @@ def main(cfg: DictConfig) -> None:
     if limit > 0:
         logger.info(f"Limiting to {limit} subjects for debugging purposes.")
     done_fp = MEDS_input_dir / ".done"
-    if done_fp.is_dir() and not cfg.do_overwrite:
+    if done_fp.is_file() and not cfg.do_overwrite:
         logger.info(
             f"Pre-MEDS transformation already complete as {done_fp} exists and "
             f"do_overwrite={cfg.do_overwrite}. Returning."
@@ -278,12 +278,14 @@ def main(cfg: DictConfig) -> None:
 
         # {part} is the literal token Polars replaces with the zero-based file index.
         # The double-braces {{ }} prevent Python's f-string from consuming it early.
-        part_template = str(out_fp.parent / f"{out_fp.stem}_part_{{part}}.parquet")
+        # part_template = str(out_fp.parent / f"{out_fp.stem}_part_{{part}}.parquet")
 
         processed_df.sink_parquet(
-            pl.PartitionMaxSize(
-                part_template,
-                max_size=ROW_THRESHOLD,
+            pl.PartitionBy(
+                base_path=out_fp,
+                key=(pl.col(preprocessors.subject_id)),
+                max_rows_per_file=ROW_THRESHOLD,
+                include_key=True,
             ),
             row_group_size=128_000,
             mkdir=True,
