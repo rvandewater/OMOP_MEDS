@@ -195,7 +195,7 @@ def main(cfg: DictConfig) -> None:
                 )
             else:
                 logger.warning(
-                    f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED"
+                    f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED IF NOT ALREADY PROCESSED"
                 )
             continue
 

@@ -303,11 +303,11 @@ def join_concept(
                 )
         # df_collected = df.collect()
         output_data_cols.extend(concept_cols)
-        to_select = [
-            col for col in output_data_cols if col in df.collect_schema().names()
-        ]
+        schema_names = set(df.collect_schema().names())
+
+        to_select = [col for col in output_data_cols if col in schema_names]
         to_select.append(SUBJECT_ID)
-        if "preferred_concept_name" in df.collect_schema().names():
+        if "preferred_concept_name" in schema_names:
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
             df = df.with_columns(
                 pl.col("preferred_vocabulary_name").replace(None, f"OMOP_{table_name}")
@@ -398,14 +398,21 @@ def load_raw_file(
             ).select(selector)
             logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
-            # pl.scan_parquet(fp)
-            file = pl.scan_parquet(fp).select(
-                selector
-            )  # , schema=schema, allow_missing_columns=True)
-            # if mismatching_schema_check:
-            #     cast_files_to_schema(str(fp), schema, str(fp))
-            file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
-            logging.info(f"Loaded Parquet files as directory from {fp}")
+            # Memory-safe schema harmonization across shards
+            file = scan_harmonized(fp, glob="**/*.parquet")
+            # Keep only requested columns and cast to OMOP schema permissively
+            file = file.select(selector)
+            file = convert_to_schema_polars(
+                file, schema, allow_extra_columns=True, allow_missing_columns=True
+            )
+            # # pl.scan_parquet(fp)
+            # file = pl.scan_parquet(fp).select(
+            #     selector
+            # )  # , schema=schema, allow_missing_columns=True)
+            # # if mismatching_schema_check:
+            # #     cast_files_to_schema(str(fp), schema, str(fp))
+            # file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
+            # logging.info(f"Loaded Parquet files as directory from {fp}")
         else:
             return None
     else:
