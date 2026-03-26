@@ -54,14 +54,23 @@ def main(cfg: DictConfig) -> None:
     if limit > 0:
         logger.info(f"Limiting to {limit} subjects for debugging purposes.")
     done_fp = MEDS_input_dir / ".done"
-    if done_fp.is_file() and not cfg.do_overwrite:
+    if done_fp.is_dir() and not cfg.do_overwrite:
         logger.info(
             f"Pre-MEDS transformation already complete as {done_fp} exists and "
             f"do_overwrite={cfg.do_overwrite}. Returning."
         )
         exit(0)
-    else:
+    elif cfg.do_overwrite:
+        logger.info(
+            f"do_overwrite=True, removing existing pre-MEDS directory at {MEDS_input_dir}"
+        )
         shutil.rmtree(MEDS_input_dir, ignore_errors=True)
+        MEDS_input_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        if any(MEDS_input_dir.iterdir()):
+            logger.warning(
+                f"Partial run found at {MEDS_input_dir}; will not overwrite existing files"
+            )
     all_fps = []
     for table in omop_cfg_version["tables"]:
         # Check for .csv and .parquet files
@@ -82,15 +91,22 @@ def main(cfg: DictConfig) -> None:
             logger.warning(f"No files found for {table}")
 
     for table_name, preprocessor_cfg in preprocessors.items():
-        out_fp = MEDS_input_dir / f"{table_name}.parquet"
-        if out_fp.is_file():
+        out_fp = MEDS_input_dir
+        if (MEDS_input_dir / f"{table_name}.parquet").is_file() or (
+            MEDS_input_dir / table_name
+        ).is_dir():
+            output_file = (
+                MEDS_input_dir / f"{table_name}.parquet"
+                if (MEDS_input_dir / f"{table_name}.parquet").is_file()
+                else MEDS_input_dir / table_name
+            )
             if cfg.do_overwrite:
                 logger.info(
-                    f"{str(out_fp.resolve())} already exists but do_overwrite=True, so re-processing {table_name}."
+                    f"{str(output_file.resolve())} already exists but do_overwrite=True, so re-processing {table_name}."
                 )
             else:
                 logger.info(
-                    f"{str(out_fp.resolve())} already exists and do_overwrite=False, so skipping {table_name}."
+                    f"{str(output_file.resolve())} already exists and do_overwrite=False, so skipping {table_name}."
                 )
                 continue
         if table_name not in [
@@ -286,4 +302,6 @@ def main(cfg: DictConfig) -> None:
     logger.info(
         f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}"
     )
+    done_fp.write_text(f"completed_at={datetime.now().isoformat()}\n", encoding="utf-8")
+
     return
