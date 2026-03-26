@@ -399,12 +399,26 @@ def load_raw_file(
             logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
             # Memory-safe schema harmonization across shards
-            file = scan_harmonized(fp, glob="**/*.parquet")
-            # Keep only requested columns and cast to OMOP schema permissively
-            file = file.select(selector)
-            file = convert_to_schema_polars(
-                file, schema, allow_extra_columns=True, allow_missing_columns=True
-            )
+            # file = scan_harmonized(fp, glob="**/*.parquet")
+            # # Keep only requested columns and cast to OMOP schema permissively
+            # file = file.select(selector)
+            # file = convert_to_schema_polars(
+            #     file, schema, allow_extra_columns=True, allow_missing_columns=True
+            # )
+            # Per-shard projection/cast to avoid building one huge harmonized concat plan.
+            shard_lfs: list[pl.LazyFrame] = []
+            for shard_fp in sorted(parquet_files):
+                shard_lf = pl.scan_parquet(shard_fp).select(selector)
+                shard_lf = project_to_target_schema(shard_lf, schema)
+                shard_lfs.append(shard_lf)
+
+            if not shard_lfs:
+                return None
+
+            # vertical_relaxed allows minor dtype reconciliation without exploding memory.
+            file = pl.concat(shard_lfs, how="vertical_relaxed")
+            logging.info(f"Loaded Parquet files as directory from {fp}")
+
             # # pl.scan_parquet(fp)
             # file = pl.scan_parquet(fp).select(
             #     selector
@@ -1031,3 +1045,16 @@ def set_up_metadata(
         metadata.sink_parquet(codes_out_fp)
         logger.info(f"Wrote code metadata to {str(codes_out_fp.resolve())}")
     return concept_df, patient_df
+
+
+def project_to_target_schema(
+    lf: pl.LazyFrame, target_schema: dict[str, pl.DataType]
+) -> pl.LazyFrame:
+    existing = set(lf.collect_schema().names())
+    exprs: list[pl.Expr] = []
+    for col, dtype in target_schema.items():
+        if col in existing:
+            exprs.append(pl.col(col).cast(dtype, strict=False).alias(col))
+        else:
+            exprs.append(pl.lit(None, dtype=dtype).alias(col))
+    return lf.select(exprs)
