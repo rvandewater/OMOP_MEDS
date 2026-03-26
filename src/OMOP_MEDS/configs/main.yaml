@@ -28,6 +28,7 @@ prefer_source: False
 raw_input_dir: ${root_output_dir}/raw_input
 pre_MEDS_dir: ${root_output_dir}/pre_MEDS
 MEDS_cohort_dir: ${root_output_dir}/MEDS_cohort
+join_on_visit: False
 
 stage_runner_fp: null
 

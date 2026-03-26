@@ -5,6 +5,8 @@ from typing import Any
 
 import polars as pl
 import polars.selectors as cs
+from MEDS_transforms.utils import write_lazyframe
+from polars import Boolean
 from polars.type_aliases import SelectorType
 from typing import Optional
 from loguru import logger
@@ -908,3 +910,117 @@ def scan_harmonized(
         f"Harmonized {len(frames)} shards in {directory!r} with target schema: {target_schema}"
     )
     return pl.concat(frames, how="diagonal_relaxed")
+
+
+def set_up_metadata(
+    MEDS_input_dir: Path,
+    do_overwrite: Boolean,
+    OMOP_input_dir: Path,
+    join_on_visit: Boolean,
+    limit,
+    schema_loader: OMOPSchemaBase,
+    selector: SelectorType,
+) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+    person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
+    concept_out_fp = MEDS_input_dir / "concept.parquet"
+    concept_relationship_out_fp = MEDS_input_dir / "concept_relationship.parquet"
+    codes_out_fp = MEDS_input_dir / "codes.parquet"
+
+    if concept_out_fp.is_file() and do_overwrite:
+        logger.info(
+            f"Removing existing concept output {str(concept_out_fp.resolve())} because do_overwrite=True"
+        )
+        concept_out_fp.unlink()
+
+    if concept_out_fp.is_file():
+        logger.info(
+            f"Reloading processed concepts df from {str(concept_out_fp.resolve())}"
+        )
+        concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
+    else:
+        logger.info("Processing concepts table first...")
+        concept_path = get_table_path(OMOP_input_dir, "concept")
+        if not concept_path:
+            raise FileNotFoundError("No concept table found in the input directory.")
+        concept_df = load_raw_file(concept_path, schema_loader, selector)
+        concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
+        write_lazyframe(concept_df, concept_out_fp)
+
+    if person_out_fp.is_file() and do_overwrite:
+        logger.info(
+            f"Removing existing patient output {str(person_out_fp.resolve())} because do_overwrite=True"
+        )
+        person_out_fp.unlink()
+
+    if person_out_fp.is_file():
+        logger.info(
+            f"Reloading processed patient df from {str(person_out_fp.resolve())}"
+        )
+        patient_df = pl.scan_parquet(person_out_fp)
+    else:
+        logger.info("Processing person table...")
+        person_in_fp = get_table_path(OMOP_input_dir, "person")
+        if person_in_fp:
+            person_df = load_raw_file(person_in_fp, schema_loader, selector)
+        else:
+            raise FileNotFoundError("No person table found in the input directory.")
+
+        death_in_fp = get_table_path(OMOP_input_dir, "death")
+        if death_in_fp:
+            death_df = load_raw_file(death_in_fp, schema_loader, selector)
+        else:
+            death_df = None
+
+        visit_in_fp = get_table_path(OMOP_input_dir, "visit_occurrence")
+        visit_df = load_raw_file(visit_in_fp, schema_loader, selector)
+
+        patient_df = get_patient_link(
+            person_df=person_df,
+            death_df=death_df,
+            visit_df=visit_df,
+            schema_loader=schema_loader,
+            limit=limit,
+            join_on_visit=join_on_visit,
+        )
+        patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
+        patient_df.sink_parquet(person_out_fp)
+
+    if concept_relationship_out_fp.is_file() and do_overwrite:
+        logger.info(
+            "Removing existing concept_relationship output "
+            f"{str(concept_relationship_out_fp.resolve())} because do_overwrite=True"
+        )
+        concept_relationship_out_fp.unlink()
+
+    if concept_relationship_out_fp.is_file():
+        logger.info(
+            f"Reloading processed concept_relationship df from {str(concept_relationship_out_fp.resolve())}"
+        )
+        concept_relationship_df = pl.scan_parquet(concept_relationship_out_fp)
+    else:
+        logger.info("Processing concept_relationship table first...")
+        concept_relationship_fp = get_table_path(OMOP_input_dir, "concept_relationship")
+        if not concept_relationship_fp:
+            raise FileNotFoundError(
+                "No concept relationship table found in the input directory."
+            )
+        logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
+        concept_relationship_df = load_raw_file(
+            concept_relationship_fp, schema_loader, selector
+        )
+        write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
+
+    # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
+    if codes_out_fp.is_file() and do_overwrite:
+        logger.info(
+            f"Removing existing code metadata {str(codes_out_fp.resolve())} because do_overwrite=True"
+        )
+        codes_out_fp.unlink()
+
+    if codes_out_fp.is_file():
+        logger.info(f"Reusing existing code metadata at {str(codes_out_fp.resolve())}")
+    else:
+        metadata = extract_metadata(concept_df, concept_relationship_df)
+        metadata.sink_parquet(codes_out_fp)
+        logger.info(f"Wrote code metadata to {str(codes_out_fp.resolve())}")
+    return concept_df, patient_df

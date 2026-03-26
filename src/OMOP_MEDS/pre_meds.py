@@ -8,19 +8,18 @@ import polars as pl
 import polars.selectors as cs
 
 from loguru import logger
-from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
+from MEDS_transforms.utils import get_shard_prefix
 from omegaconf import DictConfig
 from omop_schema.utils import get_schema_loader
 
 from . import dataset_info, omop_cfg, premeds_cfg
 from .pre_meds_utils import (
     DATASET_NAME,
-    extract_metadata,
-    get_patient_link,
     get_table_path,
     join_concept,
     load_raw_file,
     col_selector,
+    set_up_metadata,
 )
 
 # Name of the dataset
@@ -48,7 +47,7 @@ def main(cfg: DictConfig) -> None:
             "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
             " This has major implications for downstream analysis."
         )
-    input_dir = Path(cfg.raw_input_dir)
+    OMOP_input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
     limit = cfg.get("limit_subjects", 0)
@@ -69,9 +68,9 @@ def main(cfg: DictConfig) -> None:
         if table in IGNORE_TABLES:
             logger.info(f"Skipping {table} as it is in the ignore list.")
             continue
-        csv_files = list(input_dir.glob(f"{table}.csv"))
-        parquet_files = list(input_dir.glob(f"{table}.parquet"))
-        directories = list(input_dir.glob(f"{table}"))
+        csv_files = list(OMOP_input_dir.glob(f"{table}.csv"))
+        parquet_files = list(OMOP_input_dir.glob(f"{table}.parquet"))
+        directories = list(OMOP_input_dir.glob(f"{table}"))
 
         if csv_files:
             all_fps.extend(csv_files)
@@ -129,87 +128,19 @@ def main(cfg: DictConfig) -> None:
     logger.info(selector)
 
     unused_tables = {}
-    person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
-    concept_out_fp = MEDS_input_dir / "concept.parquet"
-    concept_relationship_out_fp = MEDS_input_dir / "concept_relationship.parquet"
 
-    if concept_out_fp.is_file():
-        logger.info(
-            f"Reloading processed concepts df from {str(concept_out_fp.resolve())}"
-        )
-        concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
-    else:
-        logger.info("Processing concepts table first...")
-        concept_path = get_table_path(input_dir, "concept")
-        if not concept_path:
-            raise FileNotFoundError("No concept table found in the input directory.")
-            # For some reason this is the concept table in the omop demo data
-        concept_df = load_raw_file(concept_path, schema_loader, selector)
-        concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
-        write_lazyframe(concept_df, concept_out_fp)
-
-    if person_out_fp.is_file():  # and visit_out_fp.is_file():
-        logger.info(
-            f"Reloading processed patient df from {str(person_out_fp.resolve())}"
-        )
-        patient_df = pl.scan_parquet(person_out_fp)
-        # visit_df = pl.scan_parquet(visit_out_fp)
-    else:
-        logger.info("Processing person table...")
-        person_in_fp = get_table_path(input_dir, "person")
-        if person_in_fp:
-            person_df = load_raw_file(person_in_fp, schema_loader, selector)
-        else:
-            raise FileNotFoundError("No person table found in the input directory.")
-
-        death_in_fp = get_table_path(input_dir, "death")
-        if death_in_fp:
-            death_df = load_raw_file(death_in_fp, schema_loader, selector)
-        else:
-            death_df = None
-        # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
-
-        # logger.info(f"Loading {str(admissions_fp.resolve())}...")
-        # person_df = load_raw_file(admissions_fp)
-        visit_in_fp = get_table_path(input_dir, "visit_occurrence")
-
-        visit_df = load_raw_file(visit_in_fp, schema_loader, selector)
-        patient_df = get_patient_link(
-            person_df=person_df,
-            death_df=death_df,
-            visit_df=visit_df,
-            schema_loader=schema_loader,
-            limit=limit,
-        )
-        patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
-        patient_df.sink_parquet(person_out_fp)
-
-    if concept_relationship_out_fp.is_file():
-        logger.info(
-            f"Reloading processed concept_relationship df from {str(concept_relationship_out_fp.resolve())}"
-        )
-        concept_relationship_df = pl.scan_parquet(concept_relationship_out_fp)
-    else:
-        logger.info("Processing concept_relationship table first...")
-        concept_relationship_fp = get_table_path(input_dir, "concept_relationship")
-        if not concept_relationship_fp:
-            raise FileNotFoundError(
-                "No concept relationship table found in the input directory."
-            )
-        logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
-        concept_relationship_df = load_raw_file(
-            concept_relationship_fp, schema_loader, selector
-        )
-        write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
-
-    # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
-    metadata = extract_metadata(concept_df, concept_relationship_df)
-    metadata.sink_parquet(MEDS_input_dir / "codes.parquet")
-    logger.info(
-        f"Wrote code metadata to {str((MEDS_input_dir / 'codes.parquet').resolve())}"
+    concept_df, patient_df = set_up_metadata(
+        MEDS_input_dir=MEDS_input_dir,
+        do_overwrite=cfg.do_overwrite,
+        OMOP_input_dir=OMOP_input_dir,
+        limit=limit,
+        schema_loader=schema_loader,
+        selector=selector,
+        join_on_visit=cfg.join_on_visit,
     )
+
     for in_fp in all_fps:
-        pfx = get_shard_prefix(input_dir, in_fp)
+        pfx = get_shard_prefix(OMOP_input_dir, in_fp)
         out_fp = MEDS_input_dir / f"{pfx}.parquet"
 
         if pfx in unused_tables:
@@ -253,7 +184,7 @@ def main(cfg: DictConfig) -> None:
             )
             continue
         if pfx == "visit_occurrence":
-            care_site_in_fp = get_table_path(input_dir, "care_site")
+            care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
             if not care_site_in_fp:
                 logger.warning(
                     "No care_site table found in the input directory. Skipping join with care_site."
@@ -308,7 +239,30 @@ def main(cfg: DictConfig) -> None:
         #         shard_df.sink_parquet(shard_out_fp)
         #         logger.info(f"Wrote shard {shard} to {shard_out_fp}")
         # else:
-        processed_df.sink_parquet(out_fp)
+
+        ROW_THRESHOLD = 100_000_000
+
+        # {part} is the literal token Polars replaces with the zero-based file index.
+        # The double-braces {{ }} prevent Python's f-string from consuming it early.
+        part_template = str(out_fp.parent / f"{out_fp.stem}_part_{{part}}.parquet")
+
+        processed_df.sink_parquet(
+            pl.PartitionMaxSize(
+                part_template,
+                max_size=ROW_THRESHOLD,
+            ),
+            row_group_size=128_000,
+            mkdir=True,
+        )
+
+        # Discover written files by globbing the known pattern
+        written = sorted(out_fp.parent.glob(f"{out_fp.stem}_part_*.parquet"))
+
+        # Collapse to a single canonical file if no sharding actually occurred
+        if len(written) == 1:
+            written[0].rename(out_fp)
+
+        # processed_df.sink_parquet(out_fp)
         # if pfx == "measurement":
         #     shard_col = "person_id"
         #     n_buckets = 256
