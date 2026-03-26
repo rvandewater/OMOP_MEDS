@@ -283,9 +283,9 @@ def main(cfg: DictConfig) -> None:
         processed_df.sink_parquet(
             pl.PartitionBy(
                 base_path=out_fp,
-                key=(pl.col(preprocessors.subject_id)),
+                # key=(pl.col(preprocessors.subject_id)),
                 max_rows_per_file=ROW_THRESHOLD,
-                include_key=True,
+                # include_key=True,
             ),
             row_group_size=128_000,
             mkdir=True,
