@@ -280,6 +280,10 @@ def main(cfg: DictConfig) -> None:
         # The double-braces {{ }} prevent Python's f-string from consuming it early.
         # part_template = str(out_fp.parent / f"{out_fp.stem}_part_{{part}}.parquet")
 
+        logger.info(
+            f"{table_name}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
+        )
+
         processed_df.sink_parquet(
             pl.PartitionBy(
                 base_path=out_fp,

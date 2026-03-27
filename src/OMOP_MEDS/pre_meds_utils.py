@@ -439,7 +439,7 @@ def load_raw_file(
             if not batch_lfs:
                 return None
             # vertical_relaxed allows minor dtype reconciliation without exploding memory.
-            file = pl.concat(shard_lfs, how="vertical_relaxed")
+            file = pl.concat(batch_lfs, how="vertical_relaxed")
             logging.info(
                 f"Loaded Parquet files as directory from {fp} of {len(parquet_files)} shards"
             )
