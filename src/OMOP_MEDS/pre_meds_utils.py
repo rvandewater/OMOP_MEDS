@@ -429,7 +429,7 @@ def load_raw_file(
                 shard_lfs: list[pl.LazyFrame] = []
 
                 for shard_fp in chunk:
-                    shard = pl.scan_parquet(shard_fp).select(selector)
+                    shard = pl.scan_parquet(shard_fp, rechunk=False).select(selector)
                     shard = _align_shard_to_schema(shard, target_schema)
                     shard_lfs.append(shard)
 

@@ -21,6 +21,7 @@ from .pre_meds_utils import (
     col_selector,
     set_up_metadata,
 )
+from tqdm import tqdm
 
 # Name of the dataset
 # Column name for admission ID associated with this particular admission
@@ -284,17 +285,34 @@ def main(cfg: DictConfig) -> None:
         logger.info(
             f"{pfx}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
         )
+        if pfx in {"measurement", "observation"}:
+            out_dir = MEDS_input_dir / pfx
+            if out_dir.exists() and cfg.do_overwrite:
+                shutil.rmtree(out_dir, ignore_errors=True)
+            out_dir.mkdir(parents=True, exist_ok=True)
 
-        processed_df.sink_parquet(
-            pl.PartitionBy(
-                base_path=out_fp,
-                # key=(pl.col(preprocessors.subject_id)),
-                max_rows_per_file=ROW_THRESHOLD,
-                # include_key=True,
-            ),
-            row_group_size=128_000,
-            mkdir=True,
-        )
+            written = sink_partitioned_by_hash_bucket(
+                lf=processed_df,
+                out_dir=Path(f"{out_dir}.parquet"),
+                bucket_col=premeds_cfg.subject_id,  # usually person_id
+                n_buckets=256,
+                row_group_size=128_000,
+            )
+            if not written:
+                logger.warning(f"No non-empty shard written for {pfx}")
+            else:
+                logger.info(f"Wrote {len(written)} shard(s) for {pfx} to {out_dir}")
+        else:
+            processed_df.sink_parquet(
+                pl.PartitionBy(
+                    base_path=out_fp,
+                    # key=(pl.col(preprocessors.subject_id)),
+                    max_rows_per_file=ROW_THRESHOLD,
+                    # include_key=True,
+                ),
+                row_group_size=128_000,
+                mkdir=True,
+            )
 
         # Discover written files by globbing the known pattern
         written = sorted(out_fp.parent.glob(f"{out_fp.stem}_part_*.parquet"))
@@ -330,3 +348,43 @@ def main(cfg: DictConfig) -> None:
     done_fp.write_text(f"completed_at={datetime.now().isoformat()}\n", encoding="utf-8")
 
     return
+
+
+def sink_partitioned_by_hash_bucket(
+    lf: pl.LazyFrame,
+    out_dir: Path,
+    bucket_col: str,
+    n_buckets: int = 256,
+    row_group_size: int = 128_000,
+) -> list[Path]:
+    """
+    Write a large LazyFrame in bounded chunks by hashing `bucket_col`.
+    This avoids executing one huge sink plan that can OOM/segfault.
+
+    Returns the list of created parquet files.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+
+    # Build once; each bucket is a filtered sub-plan.
+    bucketed = lf.with_columns(
+        (pl.col(bucket_col).hash(seed=0) % pl.lit(n_buckets)).alias("_bucket")
+    )
+
+    for b in tqdm(range(n_buckets), desc="writing buckets", unit="bucket"):
+        out_fp = out_dir / f"part_{b:04d}.parquet"
+        (
+            bucketed.filter(pl.col("_bucket") == pl.lit(b))
+            .drop("_bucket")
+            .sink_parquet(out_fp, row_group_size=row_group_size)
+        )
+        # Keep only non-empty outputs
+        try:
+            if out_fp.exists() and out_fp.stat().st_size > 0:
+                written.append(out_fp)
+            elif out_fp.exists():
+                out_fp.unlink()
+        except FileNotFoundError:
+            pass
+
+    return written
