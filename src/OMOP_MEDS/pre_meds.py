@@ -108,6 +108,7 @@ def main(cfg: DictConfig) -> None:
             prefer_source=cfg.prefer_source,
         )
 
+    pl.Config.set_streaming_chunk_size(50_000)  # default is ~200k–1M; tune downward
     for table_name, preprocessor_cfg in preprocessors.items():
         if table_name in [
             "subject_id",
@@ -281,7 +282,7 @@ def main(cfg: DictConfig) -> None:
         # part_template = str(out_fp.parent / f"{out_fp.stem}_part_{{part}}.parquet")
 
         logger.info(
-            f"{table_name}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
+            f"{pfx}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
         )
 
         processed_df.sink_parquet(
