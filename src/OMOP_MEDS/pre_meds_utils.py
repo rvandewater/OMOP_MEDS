@@ -238,6 +238,9 @@ def join_concept(
     if isinstance(reference_cols, str):
         reference_cols = [reference_cols]
 
+    base_output_cols = list(output_data_cols)
+    base_concept_cols = list(concept_cols)
+
     def fn(
         df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
     ) -> pl.LazyFrame:
@@ -303,10 +306,16 @@ def join_concept(
                     prefer_source=prefer_source,
                 )
         # df_collected = df.collect()
-        output_data_cols.extend(concept_cols)
+        selected_cols = [*base_output_cols, *base_concept_cols]
         schema_names = set(df.collect_schema().names())
 
-        to_select = [col for col in output_data_cols if col in schema_names]
+        # Keep order stable while preventing duplicate projection names.
+        to_select: list[str] = []
+        seen: set[str] = set()
+        for col in selected_cols:
+            if col in schema_names and col not in seen:
+                to_select.append(col)
+                seen.add(col)
         to_select.append(SUBJECT_ID)
         if "preferred_concept_name" in schema_names:
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
