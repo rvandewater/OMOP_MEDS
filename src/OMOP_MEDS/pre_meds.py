@@ -235,7 +235,7 @@ def main(cfg: DictConfig) -> None:
 
             written_parts: list[Path] = []
             batch_iter = data_loader.iter_table_batches(pfx, in_fp)
-            estimated_batches = data_loader.estimate_batches(pfx, in_fp)
+            estimated_batches = data_loader.estimate_batches(in_fp)
             # Keep progress reporting cheap: no pre-counting/materialization, just streamed updates.
             for batch_idx, df in enumerate(
                 tqdm(
