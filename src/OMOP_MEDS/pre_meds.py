@@ -60,7 +60,7 @@ def main(cfg: DictConfig) -> None:
             f"Pre-MEDS transformation already complete as {done_fp} exists and "
             f"do_overwrite={cfg.do_overwrite}. Returning."
         )
-        exit(0)
+        return
     elif cfg.do_overwrite:
         logger.info(
             f"do_overwrite=True, removing existing pre-MEDS directory at {MEDS_input_dir}"
