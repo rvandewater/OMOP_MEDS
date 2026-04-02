@@ -35,7 +35,7 @@ chunked_tables: ["measurement", "observation"]
 batching_row_threshold: 10000000
 batch_mode: auto
 batch_size_shards: 1
-batch_input_rows: 0
+batch_input_rows: 10000000
 
 stage_runner_fp: null
 
