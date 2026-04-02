@@ -1,10 +1,11 @@
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 import polars.selectors as cs
+import pyarrow.parquet as pq
 from MEDS_transforms.utils import write_lazyframe
 from polars import Boolean
 from polars.type_aliases import SelectorType
@@ -459,6 +460,159 @@ def load_raw_file(
     file = file.select(pl.all().name.to_lowercase())
     # logging.info(f"Loaded {file} with schema: {file.collect_columns}")
     return file
+
+
+class ShardedTableDataLoader:
+    """Load OMOP tables with optional shard-wise batching for selected tables.
+
+    For non-selected tables this class defers to ``load_raw_file`` to preserve
+    existing behavior. For selected parquet directory tables, it can yield data
+    in bounded batches to lower peak memory.
+    """
+
+    def __init__(
+        self,
+        schema_loader: OMOPSchemaBase,
+        selector: SelectorType = cs.all(),
+        chunked_tables: list[str] | None = None,
+        batching_row_threshold: int = 1_000_000,
+        batch_mode: str = "auto",
+        batch_size_shards: int = 1,
+        batch_input_rows: int = 0,
+    ) -> None:
+        self.schema_loader = schema_loader
+        self.selector = selector
+        self.chunked_tables = set(chunked_tables or [])
+        self.batching_row_threshold = batching_row_threshold
+        self.batch_mode = batch_mode
+        self.batch_size_shards = max(1, int(batch_size_shards))
+        self.batch_input_rows = max(0, int(batch_input_rows))
+
+    def load_table(self, fp: Path) -> pl.LazyFrame | None:
+        """Load a table with existing non-batched semantics."""
+        return load_raw_file(fp, self.schema_loader, self.selector)
+
+    def should_batch(self, table_name: str, fp: Path) -> bool:
+        """Return whether batching should be used for this table/path."""
+        if table_name not in self.chunked_tables:
+            return False
+
+        estimated_rows = self.estimate_rows(fp)
+        if estimated_rows is None:
+            return False
+
+        if self.batching_row_threshold <= 0:
+            return True
+        return estimated_rows > self.batching_row_threshold
+
+    def iter_table_batches(self, table_name: str, fp: Path) -> Iterator[pl.LazyFrame]:
+        """Yield one or more LazyFrame batches for a table.
+
+        If batching is not enabled (or not applicable), yields exactly one frame.
+        """
+        if not self.should_batch(table_name, fp):
+            lf = self.load_table(fp)
+            if lf is not None:
+                yield lf
+            return
+
+        parquet_files = self._list_parquet_files(fp)
+        if not parquet_files:
+            lf = self.load_table(fp)
+            if lf is not None:
+                yield lf
+            return
+
+        for batch_files in self._build_batches(parquet_files):
+            yield self._scan_parquet_batch(batch_files, table_name)
+
+    def estimate_rows(self, fp: Path) -> int | None:
+        """Estimate total row count using parquet metadata only."""
+        parquet_files = self._list_parquet_files(fp)
+        if not parquet_files:
+            return None
+
+        total = 0
+        for path in parquet_files:
+            try:
+                total += pq.ParquetFile(path).metadata.num_rows
+            except Exception:
+                return None
+        return total
+
+    def _list_parquet_files(self, fp: Path) -> list[Path]:
+        if fp.is_file() and fp.suffix == ".parquet":
+            return [fp]
+        if fp.is_dir():
+            return sorted(p for p in fp.glob("**/*.parquet") if p.is_file())
+        return []
+
+    def _effective_batch_mode(self) -> str:
+        if self.batch_mode == "auto":
+            if self.batch_input_rows > 0:
+                return "by_rows"
+            if self.batch_size_shards > 1:
+                return "by_shards"
+            return "per_shard"
+        return self.batch_mode
+
+    def _build_batches(self, parquet_files: list[Path]) -> list[list[Path]]:
+        mode = self._effective_batch_mode()
+
+        if mode == "per_shard":
+            return [[p] for p in parquet_files]
+
+        if mode == "by_shards":
+            step = self.batch_size_shards
+            return [
+                parquet_files[i : i + step] for i in range(0, len(parquet_files), step)
+            ]
+
+        if mode == "by_rows":
+            if self.batch_input_rows <= 0:
+                return [[p] for p in parquet_files]
+
+            batches: list[list[Path]] = []
+            current: list[Path] = []
+            current_rows = 0
+            for path in parquet_files:
+                try:
+                    shard_rows = pq.ParquetFile(path).metadata.num_rows
+                except Exception:
+                    shard_rows = 0
+
+                if current and current_rows >= self.batch_input_rows:
+                    batches.append(current)
+                    current = []
+                    current_rows = 0
+
+                current.append(path)
+                current_rows += shard_rows
+
+            if current:
+                batches.append(current)
+            return batches
+
+        return [[p] for p in parquet_files]
+
+    def _scan_parquet_batch(
+        self, parquet_paths: list[Path], table_name: str
+    ) -> pl.LazyFrame:
+        schema = pyarrow_to_polars_schema(
+            self.schema_loader.get_pyarrow_schema(table_name)
+        )
+        shard_lfs: list[pl.LazyFrame] = []
+        for shard_fp in parquet_paths:
+            shard = pl.scan_parquet(shard_fp, rechunk=False)
+            shard = _align_shard_to_schema(shard, schema)
+            shard = shard.select(self.selector)
+            shard_lfs.append(shard)
+
+        if len(shard_lfs) == 1:
+            file = shard_lfs[0]
+        else:
+            file = pl.concat(shard_lfs, how="vertical_relaxed")
+        return file.select(pl.all().name.to_lowercase())
 
 
 def cast_files_to_schema(folder_path: str, target_schema: dict, output_folder: str):

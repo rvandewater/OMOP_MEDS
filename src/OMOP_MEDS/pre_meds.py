@@ -15,9 +15,9 @@ from omop_schema.utils import get_schema_loader
 from . import dataset_info, omop_cfg, premeds_cfg
 from .pre_meds_utils import (
     DATASET_NAME,
+    ShardedTableDataLoader,
     get_table_path,
     join_concept,
-    load_raw_file,
     col_selector,
     set_up_metadata,
 )
@@ -163,6 +163,17 @@ def main(cfg: DictConfig) -> None:
         selector = cs.all()
     logger.info(selector)
 
+    chunked_tables = list(cfg.get("chunked_tables", ["measurement", "observation"]))
+    data_loader = ShardedTableDataLoader(
+        schema_loader=schema_loader,
+        selector=selector,
+        chunked_tables=chunked_tables,
+        batching_row_threshold=int(cfg.get("batching_row_threshold", 1_000_000)),
+        batch_mode=str(cfg.get("batch_mode", "auto")),
+        batch_size_shards=int(cfg.get("batch_size_shards", 1)),
+        batch_input_rows=int(cfg.get("batch_input_rows", 0)),
+    )
+
     unused_tables = {}
 
     concept_df, patient_df = set_up_metadata(
@@ -201,18 +212,80 @@ def main(cfg: DictConfig) -> None:
                 )
             continue
 
-        if out_fp.is_file():  # and not pfx == "data_float_h" :
+        if out_fp.exists():
             logger.info(f"Done with {pfx}. Continuing")
             continue
 
         out_fp.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Processing {pfx}...")
-        df = load_raw_file(in_fp, schema_loader, selector)
-
         st = datetime.now()
-
         fn = functions[pfx]
+        use_batched_loading = data_loader.should_batch(pfx, in_fp)
+        if use_batched_loading:
+            estimated_rows = data_loader.estimate_rows(in_fp)
+            logger.info(
+                f"Using batched loading for {pfx} (estimated rows={estimated_rows})"
+            )
+
+            temp_out_dir = out_fp.parent / f".{pfx}_parts"
+            if temp_out_dir.exists():
+                shutil.rmtree(temp_out_dir, ignore_errors=True)
+            temp_out_dir.mkdir(parents=True, exist_ok=True)
+
+            written_parts: list[Path] = []
+            for batch_idx, df in enumerate(
+                data_loader.iter_table_batches(pfx, in_fp), start=1
+            ):
+                processed_df = fn(df, concept_df, patient_df)
+                if processed_df.limit(1).collect().is_empty():
+                    continue
+
+                if pfx == "visit_occurrence":
+                    care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
+                    if care_site_in_fp:
+                        care_site_df = data_loader.load_table(care_site_in_fp)
+                        if care_site_df is not None:
+                            care_site_df = care_site_df.select(
+                                ["care_site_id", "care_site_name"]
+                            )
+                            processed_df = processed_df.join(
+                                care_site_df, on="care_site_id", how="left"
+                            )
+
+                processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
+                part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
+                processed_df.sink_parquet(part_fp, row_group_size=128_000)
+                if part_fp.exists() and part_fp.stat().st_size > 0:
+                    written_parts.append(part_fp)
+                elif part_fp.exists():
+                    part_fp.unlink()
+
+            if not written_parts:
+                logger.warning(
+                    f"Skipping {pfx} as all processed batches were empty after preprocessing."
+                )
+                shutil.rmtree(temp_out_dir, ignore_errors=True)
+                continue
+
+            if len(written_parts) == 1:
+                written_parts[0].replace(out_fp)
+                shutil.rmtree(temp_out_dir, ignore_errors=True)
+                logger.info(
+                    f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
+                )
+            else:
+                temp_out_dir.replace(out_fp)
+                logger.info(
+                    f"Processed and wrote {len(written_parts)} parts to {str(out_fp.resolve())} in {datetime.now() - st}"
+                )
+            continue
+
+        df = data_loader.load_table(in_fp)
+        if df is None:
+            logger.warning(f"Skipping {pfx} because no readable files were found.")
+            continue
+
         processed_df = fn(df, concept_df, patient_df)
         if processed_df.limit(1).collect().is_empty():
             logger.warning(
@@ -227,12 +300,14 @@ def main(cfg: DictConfig) -> None:
                 )
             else:
                 logger.warning(f"Processed columns: {processed_df.collect_schema()}")
-                care_site_df = load_raw_file(care_site_in_fp, schema_loader, selector)
-                care_site_df = care_site_df.select(["care_site_id", "care_site_name"])
-
-                processed_df = processed_df.join(
-                    care_site_df, on="care_site_id", how="left"
-                )
+                care_site_df = data_loader.load_table(care_site_in_fp)
+                if care_site_df is not None:
+                    care_site_df = care_site_df.select(
+                        ["care_site_id", "care_site_name"]
+                    )
+                    processed_df = processed_df.join(
+                        care_site_df, on="care_site_id", how="left"
+                    )
 
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
@@ -267,7 +342,6 @@ def main(cfg: DictConfig) -> None:
 
         # write_lazyframe(processed_df, out_fp)
         # if pfx == "visit_occurrence":
-        #     # TODO: check culprit of out of memory for visit_occurrence (likely with steps before the care_site join).
         #     # If this is the visit_occurrence table, we want to write it in a way that preserves the partitioning by visit_id for downstream processing efficiency
         #
         #     for shard, shard_df in processed_df.partition_by("shard_key", as_dict=True).items():
@@ -276,50 +350,10 @@ def main(cfg: DictConfig) -> None:
         #         logger.info(f"Wrote shard {shard} to {shard_out_fp}")
         # else:
 
-        ROW_THRESHOLD = 50_000_000
-
-        # {part} is the literal token Polars replaces with the zero-based file index.
-        # The double-braces {{ }} prevent Python's f-string from consuming it early.
-        # part_template = str(out_fp.parent / f"{out_fp.stem}_part_{{part}}.parquet")
-
         logger.info(
             f"{pfx}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
         )
-        if pfx in {"measurement", "observation"}:
-            out_dir = MEDS_input_dir / pfx
-            if out_dir.exists() and cfg.do_overwrite:
-                shutil.rmtree(out_dir, ignore_errors=True)
-            out_dir.mkdir(parents=True, exist_ok=True)
-
-            written = sink_partitioned_by_hash_bucket(
-                lf=processed_df,
-                out_dir=Path(f"{out_dir}.parquet"),
-                bucket_col=premeds_cfg.subject_id,  # usually person_id
-                n_buckets=256,
-                row_group_size=128_000,
-            )
-            if not written:
-                logger.warning(f"No non-empty shard written for {pfx}")
-            else:
-                logger.info(f"Wrote {len(written)} shard(s) for {pfx} to {out_dir}")
-        else:
-            processed_df.sink_parquet(
-                pl.PartitionBy(
-                    base_path=out_fp,
-                    # key=(pl.col(preprocessors.subject_id)),
-                    max_rows_per_file=ROW_THRESHOLD,
-                    # include_key=True,
-                ),
-                row_group_size=128_000,
-                mkdir=True,
-            )
-
-        # Discover written files by globbing the known pattern
-        written = sorted(out_fp.parent.glob(f"{out_fp.stem}_part_*.parquet"))
-
-        # Collapse to a single canonical file if no sharding actually occurred
-        if len(written) == 1:
-            written[0].rename(out_fp)
+        processed_df.sink_parquet(out_fp, row_group_size=128_000)
 
         # processed_df.sink_parquet(out_fp)
         # if pfx == "measurement":
