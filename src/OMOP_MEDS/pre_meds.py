@@ -238,8 +238,8 @@ def main(cfg: DictConfig) -> None:
                 data_loader.iter_table_batches(pfx, in_fp), start=1
             ):
                 processed_df = fn(df, concept_df, patient_df)
-                if processed_df.limit(1).collect().is_empty():
-                    continue
+                # if processed_df.limit(1).collect().is_empty():
+                #     continue
 
                 if pfx == "visit_occurrence":
                     care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
