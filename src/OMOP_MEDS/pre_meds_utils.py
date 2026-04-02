@@ -14,6 +14,7 @@ from loguru import logger
 from omop_schema.convert import convert_to_schema_polars
 from omop_schema.schema.base import OMOPSchemaBase
 from omop_schema.utils import pyarrow_to_polars_schema
+import math
 
 from . import dataset_info, premeds_cfg
 
@@ -548,6 +549,45 @@ class ShardedTableDataLoader:
             except Exception:
                 return None
         return total
+
+    def estimate_batches(self, fp: Path) -> int | None:
+        """Estimate total batch count using parquet metadata only."""
+        parquet_files = self._list_parquet_files(fp)
+        if not parquet_files:
+            return None
+
+        mode = self._effective_batch_mode()
+
+        if mode == "per_shard":
+            return len(parquet_files)
+
+        if mode == "by_shards":
+            step = max(1, self.batch_size_shards)
+            return math.ceil(len(parquet_files) / step)
+
+        if mode == "by_rows":
+            if self.batch_input_rows <= 0:
+                return len(parquet_files)
+
+            batches = 0
+            current_rows = 0
+            for path in parquet_files:
+                try:
+                    shard_rows = pq.ParquetFile(path).metadata.num_rows
+                except Exception:
+                    shard_rows = 0
+
+                if current_rows > 0 and current_rows >= self.batch_input_rows:
+                    batches += 1
+                    current_rows = 0
+
+                current_rows += shard_rows
+
+            if current_rows > 0:
+                batches += 1
+            return batches
+
+        return len(parquet_files)
 
     def _list_parquet_files(self, fp: Path) -> list[Path]:
         if fp.is_file() and fp.suffix == ".parquet":

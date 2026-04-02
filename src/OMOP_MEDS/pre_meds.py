@@ -169,9 +169,9 @@ def main(cfg: DictConfig) -> None:
         selector=selector,
         chunked_tables=chunked_tables,
         batching_row_threshold=int(cfg.get("batching_row_threshold", 1_000_000)),
-        batch_mode=str(cfg.get("batch_mode", "auto")),
+        batch_mode=str(cfg.get("batch_mode", "by_rows")),
         batch_size_shards=int(cfg.get("batch_size_shards", 1)),
-        batch_input_rows=int(cfg.get("batch_input_rows", 0)),
+        batch_input_rows=int(cfg.get("batch_input_rows", 10_000_000)),
     )
 
     unused_tables = {}
@@ -235,6 +235,7 @@ def main(cfg: DictConfig) -> None:
 
             written_parts: list[Path] = []
             batch_iter = data_loader.iter_table_batches(pfx, in_fp)
+            estimated_batches = data_loader.estimate_batches(pfx, in_fp)
             # Keep progress reporting cheap: no pre-counting/materialization, just streamed updates.
             for batch_idx, df in enumerate(
                 tqdm(
@@ -243,6 +244,7 @@ def main(cfg: DictConfig) -> None:
                     unit="batch",
                     mininterval=5.0,
                     leave=False,
+                    total=estimated_batches,
                 ),
                 start=1,
             ):
