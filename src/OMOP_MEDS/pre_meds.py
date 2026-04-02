@@ -234,8 +234,17 @@ def main(cfg: DictConfig) -> None:
             temp_out_dir.mkdir(parents=True, exist_ok=True)
 
             written_parts: list[Path] = []
+            batch_iter = data_loader.iter_table_batches(pfx, in_fp)
+            # Keep progress reporting cheap: no pre-counting/materialization, just streamed updates.
             for batch_idx, df in enumerate(
-                data_loader.iter_table_batches(pfx, in_fp), start=1
+                tqdm(
+                    batch_iter,
+                    desc=f"{pfx} batches",
+                    unit="batch",
+                    mininterval=5.0,
+                    leave=False,
+                ),
+                start=1,
             ):
                 processed_df = fn(df, concept_df, patient_df)
                 # if processed_df.limit(1).collect().is_empty():
