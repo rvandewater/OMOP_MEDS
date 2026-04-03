@@ -27,6 +27,11 @@ not used in practice anymore. Please open pull requests if you want to add suppo
 - More information about OMOP can be found here: https://ohdsi.github.io/CommonDataModel/
 - More information about MEDS can be found here: https://medical-event-data-standard.github.io/
 
+For reading in OMOP in the right schema, we use the `omop-schema` package (developed for this ETL but can be used
+elswehere), which can be found here:
+https://github.com/rvandewater/omop_schema.
+If your OMOP schema is non-standard (but still approximately OMOP), you should be able to use the `omop-schema` package to define your own schema and use it in this ETL.
+
 ## Setup
 
 First install the package:
