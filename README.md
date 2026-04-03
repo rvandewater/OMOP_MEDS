@@ -105,6 +105,18 @@ OMOP_MEDS \
 - `do_download`: Set to `False` to skip downloading the dataset.
 - `++do_overwrite`: Set to `True` to overwrite existing files.
 - `++limit_subjects`: Limit the number of subjects to process.
+- `++prefer_source`: Set to `True` to prefer source concepts over mapped concepts.
+- `++join_on_visit`: Set to `True` to join person table on having any associated visits.
+
+Pre-meds batching settings. This is relevant if (some of) your input tables are very large, and you want to process
+them in batches. This can be useful to reduce memory usage, but it also increases the runtime, so use with caution.
+The batching settings are as follows:
+
+- `++chunked_tables`: List of tables to be eligible to process in batches (default: None).
+- `batching_row_threshold`: Row count threshold for batching (default: 1,000,000).
+- `batch_mode`: Batching mode ("auto", "per_shard", "by_shards", "by_rows"; default: "auto").
+- `batch_size_shards`: Number of shards per batch in "by_shards" mode (default: 1).
+- `batch_input_rows`: Max rows per batch in "by_rows" mode (default: 0, disabled).
 
 ## MEDS-transforms settings
 
@@ -143,4 +155,17 @@ be functional
 
 ## Citation
 
-If you use this dataset, please use the citation link in Github.
+If you use this ETL for your research, please use the citation link in Github, which points to the Zenodo DOI,
+and which is also included below:
+
+```
+@software{van_de_Water_OMOP_MEDS_ETL_2025,
+author = {van de Water, Robin Philippus},
+doi = {10.5281/zenodo.15132444},
+license = {MIT},
+month = feb,
+title = {{OMOP\_MEDS ETL}},
+url = {https://github.com/rvandewater/OMOP_MEDS},
+year = {2025}
+}
+```
