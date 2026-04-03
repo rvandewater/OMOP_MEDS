@@ -496,7 +496,7 @@ class ShardedTableDataLoader:
         Args:
             schema_loader (OMOPSchemaBase): The schema loader instance to retrieve table schemas.
             selector (SelectorType, optional): A column selector to filter columns during loading. Defaults to `cs.all()`.
-            chunked_tables (list[str] | None, optional): A list of table names that should be processed in chunks. Defaults to None.
+            chunked_tables (list[str] | None, optional): A list of table names that are eligible to be processed in chunks. Defaults to None.
             batching_row_threshold (int, optional): The row count threshold for enabling batching. Defaults to 1,000,000.
             batch_mode (str, optional): The batching mode. Can be "auto", "per_shard", "by_shards", or "by_rows". Defaults to "auto".
             batch_size_shards (int, optional): The number of shards to include in each batch when using "by_shards" mode. Defaults to 1.

@@ -1,4 +1,4 @@
-"""Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
+"""Performs pre-MEDS data wrangling for OMOP datasets."""
 
 import shutil
 from datetime import datetime
@@ -163,7 +163,7 @@ def main(cfg: DictConfig) -> None:
         selector = cs.all()
     logger.info(selector)
 
-    chunked_tables = list(cfg.get("chunked_tables", ["measurement", "observation"]))
+    chunked_tables = list(cfg.get("pre_meds_chunked_tables", None))
     data_loader = ShardedTableDataLoader(
         schema_loader=schema_loader,
         selector=selector,
@@ -224,61 +224,66 @@ def main(cfg: DictConfig) -> None:
 
     # Main loop that processes all tables with defined preprocessors, skipping those without and logging appropriately.
     # Uses batched loading and processing for large tables to avoid memory issues.
-    for in_fp in all_fps:
-        pfx = get_shard_prefix(OMOP_input_dir, in_fp)
-        out_fp = MEDS_input_dir / f"{pfx}.parquet"
 
-        if pfx in unused_tables:
-            logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
+    # Special tables are processed separately beforehand
+    special_tables = ["person", "death", "concept"]
+    for in_fp in all_fps:
+        tbl_prefix = get_shard_prefix(OMOP_input_dir, in_fp)
+        out_fp = MEDS_input_dir / f"{tbl_prefix}.parquet"
+
+        if tbl_prefix in unused_tables:
+            logger.warning(
+                f"Skipping {tbl_prefix} as it is not supported in this pipeline."
+            )
             continue
-        elif pfx not in functions:
-            if pfx in [
-                "person",
-                "death",
-                "concept",
-            ]:
+        elif tbl_prefix not in functions:
+            if tbl_prefix in special_tables:
                 logger.info(
-                    f"Skipping {pfx} as it has already been processed separately."
+                    f"Skipping {tbl_prefix} as it has already been processed separately."
                 )
-            elif pfx in cfg.get("tables_to_ignore", []):
+            elif tbl_prefix in cfg.get("tables_to_ignore", []):
                 logger.warning(
-                    f"{pfx} will not be processed; this is seen as expected."
+                    f"{tbl_prefix} will not be processed; this is seen as expected."
                 )
             else:
                 logger.warning(
-                    f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED IF NOT ALREADY PROCESSED"
+                    f"No function needed for {tbl_prefix}. For {DATASET_NAME}, "
+                    f"THIS IS COULD BE UNEXPECTED if {tbl_prefix} is in your OMOP source file and configuration."
                 )
             continue
 
         if out_fp.exists():
-            logger.info(f"Done with {pfx}. Continuing")
+            logger.info(f"Done with {tbl_prefix}. Continuing")
             continue
 
         out_fp.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Processing {pfx}...")
+        logger.info(f"Starting processing of {tbl_prefix}...")
         st = datetime.now()
-        fn = functions[pfx]
-        use_batched_loading = data_loader.should_batch(pfx, in_fp)
+        fn = functions[tbl_prefix]
+        use_batched_loading = data_loader.should_batch(tbl_prefix, in_fp)
         if use_batched_loading:
+            # Batched loading since Polars has trouble with ±2B rows in lazy mode, even with streaming.
+            # This is a common issue for e.g., measurement and observation tables in large datasets.
+
             estimated_rows = data_loader.estimate_rows(in_fp)
             logger.info(
-                f"Using batched loading for {pfx} (estimated rows={estimated_rows})"
+                f"Using batched loading for {tbl_prefix} (estimated rows={estimated_rows})"
             )
 
-            temp_out_dir = out_fp.parent / f".{pfx}_parts"
+            temp_out_dir = out_fp.parent / f".{tbl_prefix}_parts"
             if temp_out_dir.exists():
                 shutil.rmtree(temp_out_dir, ignore_errors=True)
             temp_out_dir.mkdir(parents=True, exist_ok=True)
 
             written_parts: list[Path] = []
-            batch_iter = data_loader.iter_table_batches(pfx, in_fp)
+            batch_iter = data_loader.iter_table_batches(tbl_prefix, in_fp)
             estimated_batches = data_loader.estimate_batches(in_fp)
-            # Keep progress reporting cheap: no pre-counting/materialization, just streamed updates.
+
             for batch_idx, df in enumerate(
                 tqdm(
                     batch_iter,
-                    desc=f"{pfx} batches",
+                    desc=f"{tbl_prefix} batches",
                     unit="batch",
                     mininterval=5.0,
                     leave=False,
@@ -287,9 +292,11 @@ def main(cfg: DictConfig) -> None:
                 start=1,
             ):
                 processed_df = fn(df, concept_df, patient_df)
-                processed_df = maybe_join_visit_occurrence_care_site(pfx, processed_df)
+                processed_df = maybe_join_visit_occurrence_care_site(
+                    tbl_prefix, processed_df
+                )
 
-                processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
+                processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
                 part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
                 processed_df.sink_parquet(part_fp, row_group_size=128_000)
                 if part_fp.exists() and part_fp.stat().st_size > 0:
@@ -299,7 +306,7 @@ def main(cfg: DictConfig) -> None:
 
             if not written_parts:
                 logger.warning(
-                    f"Skipping {pfx} as all processed batches were empty after preprocessing."
+                    f"Skipping {tbl_prefix} as all processed batches were empty after preprocessing."
                 )
                 shutil.rmtree(temp_out_dir, ignore_errors=True)
                 continue
@@ -315,87 +322,40 @@ def main(cfg: DictConfig) -> None:
                 logger.info(
                     f"Processed and wrote {len(written_parts)} parts to {str(out_fp.resolve())} in {datetime.now() - st}"
                 )
-            continue
+        else:
+            # Singular execution for smaller tables that Polars can handle
+            df = data_loader.load_table(in_fp)
+            if df is None:
+                logger.warning(
+                    f"Skipping {tbl_prefix} because no readable files were found."
+                )
+                continue
 
-        df = data_loader.load_table(in_fp)
-        if df is None:
-            logger.warning(f"Skipping {pfx} because no readable files were found.")
-            continue
-
-        processed_df = fn(df, concept_df, patient_df)
-        if processed_df.limit(1).collect().is_empty():
-            logger.warning(
-                f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
+            processed_df = fn(df, concept_df, patient_df)
+            if processed_df.limit(1).collect().is_empty():
+                logger.warning(
+                    f"Skipping {tbl_prefix} as it is empty after preprocessing (potentially due to filtering subjects)."
+                )
+                continue
+            processed_df = maybe_join_visit_occurrence_care_site(
+                tbl_prefix, processed_df
             )
-            continue
-        processed_df = maybe_join_visit_occurrence_care_site(pfx, processed_df)
 
-        # if "visit_occurrence_id" in schema.names():
-        #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
-        # unit_columns = []
-        # if "unit_source_value" in schema.names():
-        #     unit_columns.append(pl.col("unit_source_value"))
-        # if "unit_concept_id" in schema.names():
-        #     unit_columns.append(
-        #         pl.col("unit_concept_id").replace_strict(concept_id_map,
-        #         return_dtype=pl.Utf8(), default=None))
-        # if unit_columns:
-        #     metadata["unit"] = pl.coalesce(unit_columns)
-        #
-        # if "load_table_id" in schema.names():
-        #     metadata["clarity_table"] = pl.col("load_table_id")
-        #
-        # if "note_id" in schema.names():
-        #     metadata["note_id"] = pl.col("note_id")
-        #
-        # if (table_name + "_end_datetime") in schema.names():
-        #     end = cast_to_datetime(schema, table_name + "_end_datetime", move_to_end_of_day=True)
-        #     metadata["end"] = end
-        # logger.info(
-        #     f"processed_df schema: {processed_df.collect_schema()}"
-        # )
-        processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
-        if processed_df.limit(1).collect().is_empty():
-            logger.warning(
-                f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
+            processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
+            if processed_df.limit(1).collect().is_empty():
+                logger.warning(
+                    f"Skipping {tbl_prefix} as it is empty after preprocessing (potentially due to filtering subjects)."
+                )
+                continue
+
+            logger.info(
+                f"{tbl_prefix}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
             )
-            continue
+            processed_df.sink_parquet(out_fp, row_group_size=128_000)
 
-        # write_lazyframe(processed_df, out_fp)
-        # if pfx == "visit_occurrence":
-        #     # If this is the visit_occurrence table, we want to write it in a way that preserves the partitioning by visit_id for downstream processing efficiency
-        #
-        #     for shard, shard_df in processed_df.partition_by("shard_key", as_dict=True).items():
-        #         shard_out_fp = out_fp.parent / f"{out_fp.stem}_{shard}.parquet"
-        #         shard_df.sink_parquet(shard_out_fp)
-        #         logger.info(f"Wrote shard {shard} to {shard_out_fp}")
-        # else:
-
-        logger.info(
-            f"{pfx}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
-        )
-        processed_df.sink_parquet(out_fp, row_group_size=128_000)
-
-        # processed_df.sink_parquet(out_fp)
-        # if pfx == "measurement":
-        #     shard_col = "person_id"
-        #     n_buckets = 256
-        #     processed_df = processed_df.with_columns(
-        #         (pl.col(shard_col).hash() % n_buckets).alias("_bucket")
-        #     )
-        #     for b in range(n_buckets):
-        #         out_b = out_fp.parent / f"{out_fp.stem}_part_{b:03d}.parquet"
-        #         (
-        #             processed_df
-        #             .filter(pl.col("_bucket") == b)
-        #             .drop("_bucket")
-        #             .sink_parquet(out_b)
-        #         )
-        # else:
-        #     processed_df.sink_parquet(out_fp)
-        logger.info(
-            f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
-        )
+            logger.info(
+                f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
+            )
 
     logger.info(
         f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}"
@@ -403,43 +363,3 @@ def main(cfg: DictConfig) -> None:
     done_fp.write_text(f"completed_at={datetime.now().isoformat()}\n", encoding="utf-8")
 
     return
-
-
-def sink_partitioned_by_hash_bucket(
-    lf: pl.LazyFrame,
-    out_dir: Path,
-    bucket_col: str,
-    n_buckets: int = 256,
-    row_group_size: int = 128_000,
-) -> list[Path]:
-    """
-    Write a large LazyFrame in bounded chunks by hashing `bucket_col`.
-    This avoids executing one huge sink plan that can OOM/segfault.
-
-    Returns the list of created parquet files.
-    """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-
-    # Build once; each bucket is a filtered sub-plan.
-    bucketed = lf.with_columns(
-        (pl.col(bucket_col).hash(seed=0) % pl.lit(n_buckets)).alias("_bucket")
-    )
-
-    for b in tqdm(range(n_buckets), desc="writing buckets", unit="bucket"):
-        out_fp = out_dir / f"part_{b:04d}.parquet"
-        (
-            bucketed.filter(pl.col("_bucket") == pl.lit(b))
-            .drop("_bucket")
-            .sink_parquet(out_fp, row_group_size=row_group_size)
-        )
-        # Keep only non-empty outputs
-        try:
-            if out_fp.exists() and out_fp.stat().st_size > 0:
-                written.append(out_fp)
-            elif out_fp.exists():
-                out_fp.unlink()
-        except FileNotFoundError:
-            pass
-
-    return written
