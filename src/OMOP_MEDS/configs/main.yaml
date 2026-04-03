@@ -30,12 +30,12 @@ pre_MEDS_dir: ${root_output_dir}/pre_MEDS
 MEDS_cohort_dir: ${root_output_dir}/MEDS_cohort
 join_on_visit: False
 
-# Selective low-memory input batching for very large parquet directory tables.
-chunked_tables: ["measurement", "observation"]
-batching_row_threshold: 10000000
-batch_mode: auto
-batch_size_shards: 1
-batch_input_rows: 10000000
+# Selective low-memory input batching for very large parquet input.
+pre_meds_chunked_tables: ["measurement", "observation"]
+pre_meds_batching_row_threshold: 10000000
+pre_meds_batch_mode: auto
+pre_meds_batch_size_shards: 1
+pre_meds_batch_input_rows: 10000000
 
 stage_runner_fp: null
 

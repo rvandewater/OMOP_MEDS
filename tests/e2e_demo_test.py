@@ -2,10 +2,12 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
-# import pytest
+import pytest
 
 
-# @pytest.mark.skip(reason="If you have a demo dataset, re-enable this test in your downstream repositories.")
+@pytest.mark.skip(
+    reason="If you have a demo dataset, re-enable this test in your downstream repositories."
+)
 def test_e2e():
     with TemporaryDirectory() as temp_dir:
         os.environ["HYDRA_FULL_ERROR"] = "1"

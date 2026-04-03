@@ -168,10 +168,12 @@ def main(cfg: DictConfig) -> None:
         schema_loader=schema_loader,
         selector=selector,
         chunked_tables=chunked_tables,
-        batching_row_threshold=int(cfg.get("batching_row_threshold", 1_000_000)),
-        batch_mode=str(cfg.get("batch_mode", "by_rows")),
-        batch_size_shards=int(cfg.get("batch_size_shards", 1)),
-        batch_input_rows=int(cfg.get("batch_input_rows", 10_000_000)),
+        batching_row_threshold=int(
+            cfg.get("pre_meds_batching_row_threshold", 1_000_000)
+        ),
+        batch_mode=str(cfg.get("pre_meds_batch_mode", "by_rows")),
+        batch_size_shards=int(cfg.get("pre_meds_batch_size_shards", 1)),
+        batch_input_rows=int(cfg.get("pre_meds_batch_input_rows", 10_000_000)),
     )
 
     unused_tables = {}
@@ -186,6 +188,42 @@ def main(cfg: DictConfig) -> None:
         join_on_visit=cfg.join_on_visit,
     )
 
+    # Cache care_site lookup once per run; False means unavailable and skip subsequent attempts.
+    care_site_lookup: pl.LazyFrame | bool | None = None
+
+    def maybe_join_visit_occurrence_care_site(
+        table_name: str, table_df: pl.LazyFrame
+    ) -> pl.LazyFrame:
+        nonlocal care_site_lookup
+        if table_name != "visit_occurrence":
+            return table_df
+
+        if care_site_lookup is False:
+            return table_df
+
+        if care_site_lookup is None:
+            care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
+            if not care_site_in_fp:
+                logger.warning(
+                    "No care_site table found in the input directory. Skipping join with care_site."
+                )
+                care_site_lookup = False
+                return table_df
+
+            loaded = data_loader.load_table(care_site_in_fp)
+            if loaded is None:
+                logger.warning(
+                    "Could not read care_site table from input directory. Skipping join with care_site."
+                )
+                care_site_lookup = False
+                return table_df
+
+            care_site_lookup = loaded.select(["care_site_id", "care_site_name"])
+
+        return table_df.join(care_site_lookup, on="care_site_id", how="left")
+
+    # Main loop that processes all tables with defined preprocessors, skipping those without and logging appropriately.
+    # Uses batched loading and processing for large tables to avoid memory issues.
     for in_fp in all_fps:
         pfx = get_shard_prefix(OMOP_input_dir, in_fp)
         out_fp = MEDS_input_dir / f"{pfx}.parquet"
@@ -249,20 +287,7 @@ def main(cfg: DictConfig) -> None:
                 start=1,
             ):
                 processed_df = fn(df, concept_df, patient_df)
-                # if processed_df.limit(1).collect().is_empty():
-                #     continue
-
-                if pfx == "visit_occurrence":
-                    care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
-                    if care_site_in_fp:
-                        care_site_df = data_loader.load_table(care_site_in_fp)
-                        if care_site_df is not None:
-                            care_site_df = care_site_df.select(
-                                ["care_site_id", "care_site_name"]
-                            )
-                            processed_df = processed_df.join(
-                                care_site_df, on="care_site_id", how="left"
-                            )
+                processed_df = maybe_join_visit_occurrence_care_site(pfx, processed_df)
 
                 processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
                 part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
@@ -303,22 +328,7 @@ def main(cfg: DictConfig) -> None:
                 f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
             )
             continue
-        if pfx == "visit_occurrence":
-            care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
-            if not care_site_in_fp:
-                logger.warning(
-                    "No care_site table found in the input directory. Skipping join with care_site."
-                )
-            else:
-                logger.warning(f"Processed columns: {processed_df.collect_schema()}")
-                care_site_df = data_loader.load_table(care_site_in_fp)
-                if care_site_df is not None:
-                    care_site_df = care_site_df.select(
-                        ["care_site_id", "care_site_name"]
-                    )
-                    processed_df = processed_df.join(
-                        care_site_df, on="care_site_id", how="left"
-                    )
+        processed_df = maybe_join_visit_occurrence_care_site(pfx, processed_df)
 
         # if "visit_occurrence_id" in schema.names():
         #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
