@@ -92,6 +92,7 @@ def get_patient_link(
         visit_df: A Polars LazyFrame containing visit data.
         schema_loader: An instance of OMOPSchemaBase to load the schema.
         limit: An optional limit on the number of rows to process.
+        join_on_visit: Whether to join the visit table with the person table or not.
 
     Returns:
         A Polars LazyFrame with the processed patient data, including date of birth and date of death.
