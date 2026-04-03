@@ -1,24 +1,27 @@
-"""Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
+"""Performs pre-MEDS data wrangling for OMOP datasets."""
 
 import shutil
 from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import polars.selectors as cs
+
 from loguru import logger
-from MEDS_transforms.utils import get_shard_prefix, write_lazyframe
+from MEDS_transforms.utils import get_shard_prefix
 from omegaconf import DictConfig
 from omop_schema.utils import get_schema_loader
 
 from . import dataset_info, omop_cfg, premeds_cfg
 from .pre_meds_utils import (
     DATASET_NAME,
-    extract_metadata,
-    get_patient_link,
+    ShardedTableDataLoader,
     get_table_path,
     join_concept,
-    load_raw_file,
+    col_selector,
+    set_up_metadata,
 )
+from tqdm import tqdm
 
 # Name of the dataset
 # Column name for admission ID associated with this particular admission
@@ -45,7 +48,7 @@ def main(cfg: DictConfig) -> None:
             "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
             " This has major implications for downstream analysis."
         )
-    input_dir = Path(cfg.raw_input_dir)
+    OMOP_input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
     limit = cfg.get("limit_subjects", 0)
@@ -57,18 +60,27 @@ def main(cfg: DictConfig) -> None:
             f"Pre-MEDS transformation already complete as {done_fp} exists and "
             f"do_overwrite={cfg.do_overwrite}. Returning."
         )
-        exit(0)
-    else:
+        return
+    elif cfg.do_overwrite:
+        logger.info(
+            f"do_overwrite=True, removing existing pre-MEDS directory at {MEDS_input_dir}"
+        )
         shutil.rmtree(MEDS_input_dir, ignore_errors=True)
+        MEDS_input_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        if any(MEDS_input_dir.iterdir()):
+            logger.warning(
+                f"Partial run found at {MEDS_input_dir}; will not overwrite existing files"
+            )
     all_fps = []
     for table in omop_cfg_version["tables"]:
         # Check for .csv and .parquet files
         if table in IGNORE_TABLES:
             logger.info(f"Skipping {table} as it is in the ignore list.")
             continue
-        csv_files = list(input_dir.glob(f"{table}.csv"))
-        parquet_files = list(input_dir.glob(f"{table}.parquet"))
-        directories = list(input_dir.glob(f"{table}"))
+        csv_files = list(OMOP_input_dir.glob(f"{table}.csv"))
+        parquet_files = list(OMOP_input_dir.glob(f"{table}.parquet"))
+        directories = list(OMOP_input_dir.glob(f"{table}"))
 
         if csv_files:
             all_fps.extend(csv_files)
@@ -79,196 +91,275 @@ def main(cfg: DictConfig) -> None:
         else:
             logger.warning(f"No files found for {table}")
 
+    def add_preprocessor(
+        table_name,
+        preprocessor_cfg,
+    ):
+        logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
+        if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
+            if omop_version in preprocessor_cfg:
+                preprocessor_cfg = preprocessor_cfg[omop_version]
+            else:
+                raise ValueError(
+                    f"OMOP version {omop_version} not supported for {table_name}."
+                )
+        functions[table_name] = join_concept(
+            table_name=table_name,
+            **preprocessor_cfg,
+            prefer_source=cfg.prefer_source,
+        )
+
+    pl.Config.set_streaming_chunk_size(50_000)  # default is ~200k–1M; tune downward
     for table_name, preprocessor_cfg in preprocessors.items():
-        if table_name not in [
+        if table_name in [
             "subject_id",
             "admission_id",
             "raw_data_extensions",
             "expected_not_processed_tables",
+            "tables_to_ignore",
+            "metadata_cols_to_drop",
         ]:
-            logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
-            if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
-                if omop_version in preprocessor_cfg:
-                    preprocessor_cfg = preprocessor_cfg[omop_version]
-                else:
-                    raise ValueError(
-                        f"OMOP version {omop_version} not supported for {table_name}."
-                    )
-            functions[table_name] = join_concept(
-                table_name=table_name,
-                **preprocessor_cfg,
-                prefer_source=cfg.prefer_source,
+            # These are config variables and not tables
+            continue
+        out_fp = MEDS_input_dir
+        if (MEDS_input_dir / f"{table_name}.parquet").is_file() or (
+            MEDS_input_dir / (f"{table_name}.parquet")
+        ).is_dir():
+            output_file = (
+                MEDS_input_dir / f"{table_name}.parquet"
+                if (MEDS_input_dir / f"{table_name}.parquet").is_file()
+                else MEDS_input_dir / table_name
             )
+            if cfg.do_overwrite:
+                # If the output file already exists and do_overwrite is True, remove it before adding the preprocessor
+                logger.info(
+                    f"{str(output_file.resolve())} already exists but do_overwrite=True, so removing and re-processing {table_name}."
+                )
+                if output_file.is_file():
+                    output_file.unlink()
+                elif output_file.is_dir():
+                    shutil.rmtree(output_file)
+                add_preprocessor(table_name, preprocessor_cfg)
+            else:
+                # If the output file already exists and do_overwrite is False, skip adding the preprocessor for this table
+                logger.info(
+                    f"{str(output_file.resolve())} already exists and do_overwrite=False, so skipping {table_name}."
+                )
+                continue
+        else:
+            # If the output file does not exist, add the preprocessor for this table
+            add_preprocessor(table_name, preprocessor_cfg)
+
+    if premeds_cfg.get("metadata_cols_to_drop", False):
+        metadata_cols_to_drop = premeds_cfg.get(
+            "metadata_cols_to_drop", {"columns": [], "patterns": []}
+        )
+        logger.info(metadata_cols_to_drop)
+        selector = ~col_selector(
+            columns=metadata_cols_to_drop.get("columns", []),
+            patterns=metadata_cols_to_drop.get("patterns", []),
+        )
+    else:
+        selector = cs.all()
+    logger.info(selector)
+
+    chunked_tables = list(cfg.get("pre_meds_chunked_tables", None))
+    data_loader = ShardedTableDataLoader(
+        schema_loader=schema_loader,
+        selector=selector,
+        chunked_tables=chunked_tables,
+        batching_row_threshold=int(
+            cfg.get("pre_meds_batching_row_threshold", 1_000_000)
+        ),
+        batch_mode=str(cfg.get("pre_meds_batch_mode", "by_rows")),
+        batch_size_shards=int(cfg.get("pre_meds_batch_size_shards", 1)),
+        batch_input_rows=int(cfg.get("pre_meds_batch_input_rows", 10_000_000)),
+    )
 
     unused_tables = {}
-    person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
-    concept_out_fp = MEDS_input_dir / "concept.parquet"
-    concept_relationship_out_fp = MEDS_input_dir / "concept_relationship.parquet"
 
-    if concept_out_fp.is_file():
-        logger.info(
-            f"Reloading processed concepts df from {str(concept_out_fp.resolve())}"
-        )
-        concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
-    else:
-        logger.info("Processing concepts table first...")
-        concept_path = get_table_path(input_dir, "concept")
-        if not concept_path:
-            raise FileNotFoundError("No concept table found in the input directory.")
-            # For some reason this is the concept table in the omop demo data
-        concept_df = load_raw_file(concept_path, schema_loader)
-        concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
-        write_lazyframe(concept_df, concept_out_fp)
-
-    if person_out_fp.is_file():  # and visit_out_fp.is_file():
-        logger.info(
-            f"Reloading processed patient df from {str(person_out_fp.resolve())}"
-        )
-        patient_df = pl.scan_parquet(person_out_fp)
-        # visit_df = pl.scan_parquet(visit_out_fp)
-    else:
-        logger.info("Processing patient table...")
-        person_in_fp = get_table_path(input_dir, "person")
-        if person_in_fp:
-            person_df = load_raw_file(person_in_fp, schema_loader)
-        else:
-            raise FileNotFoundError("No person table found in the input directory.")
-
-        death_in_fp = get_table_path(input_dir, "death")
-        if death_in_fp:
-            death_df = load_raw_file(death_in_fp, schema_loader)
-        else:
-            death_df = None
-        # visit_df = load_raw_file(input_dir / "visit_occurrence.csv")
-
-        # logger.info(f"Loading {str(admissions_fp.resolve())}...")
-        # person_df = load_raw_file(admissions_fp)
-        visit_in_fp = get_table_path(input_dir, "visit_occurrence")
-
-        visit_df = load_raw_file(visit_in_fp, schema_loader)
-        patient_df = get_patient_link(
-            person_df=person_df,
-            death_df=death_df,
-            visit_df=visit_df,
-            schema_loader=schema_loader,
-            limit=limit,
-        )
-        patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
-        patient_df.sink_parquet(person_out_fp)
-
-    if concept_relationship_out_fp.is_file():
-        logger.info(
-            f"Reloading processed concept_relationship df from {str(concept_relationship_out_fp.resolve())}"
-        )
-        concept_relationship_df = pl.scan_parquet(concept_relationship_out_fp)
-    else:
-        logger.info("Processing concept_relationship table first...")
-        concept_relationship_fp = get_table_path(input_dir, "concept_relationship")
-        if not concept_relationship_fp:
-            raise FileNotFoundError(
-                "No concept relationship table found in the input directory."
-            )
-        logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
-        concept_relationship_df = load_raw_file(concept_relationship_fp, schema_loader)
-        write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
-
-    # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
-    metadata = extract_metadata(concept_df, concept_relationship_df)
-    metadata.sink_parquet(MEDS_input_dir / "codes.parquet")
-    logger.info(
-        f"Wrote code metadata to {str((MEDS_input_dir / 'codes.parquet').resolve())}"
+    concept_df, patient_df = set_up_metadata(
+        MEDS_input_dir=MEDS_input_dir,
+        do_overwrite=cfg.do_overwrite,
+        OMOP_input_dir=OMOP_input_dir,
+        limit=limit,
+        schema_loader=schema_loader,
+        selector=selector,
+        join_on_visit=cfg.join_on_visit,
     )
-    for in_fp in all_fps:
-        pfx = get_shard_prefix(input_dir, in_fp)
-        if pfx in unused_tables:
-            logger.warning(f"Skipping {pfx} as it is not supported in this pipeline.")
-            continue
-        elif pfx not in functions:
-            if pfx in [
-                "person",
-                "death",
-                "concept",
-            ]:
-                logger.info(
-                    f"Skipping {pfx} as it has already been processed separately."
-                )
-            elif pfx in cfg.get("tables_to_ignore", []):
-                logger.warning(
-                    f"{pfx} will not be processed; this is seen as expected."
-                )
-            else:
-                logger.warning(
-                    f"No function needed for {pfx}. For {DATASET_NAME}, THIS IS COULD BE UNEXPECTED"
-                )
-            continue
 
-        out_fp = MEDS_input_dir / f"{pfx}.parquet"
+    # Cache care_site lookup once per run; False means unavailable and skip subsequent attempts.
+    care_site_lookup: pl.LazyFrame | bool | None = None
 
-        if out_fp.is_file():  # and not pfx == "data_float_h" :
-            logger.info(f"Done with {pfx}. Continuing")
-            continue
+    def maybe_join_visit_occurrence_care_site(
+        table_name: str, table_df: pl.LazyFrame
+    ) -> pl.LazyFrame:
+        nonlocal care_site_lookup
+        if table_name != "visit_occurrence":
+            return table_df
 
-        out_fp.parent.mkdir(parents=True, exist_ok=True)
+        if care_site_lookup is False:
+            return table_df
 
-        logger.info(f"Processing {pfx}...")
-        df = load_raw_file(in_fp, schema_loader)
-
-        st = datetime.now()
-        if df.limit(1).collect().is_empty():
-            logger.warning(f"Skipping {pfx} as it is empty.")
-            continue
-
-        fn = functions[pfx]
-        processed_df = fn(df, concept_df, patient_df)
-        if pfx == "visit_occurrence":
-            care_site_in_fp = get_table_path(input_dir, "care_site")
+        if care_site_lookup is None:
+            care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
             if not care_site_in_fp:
                 logger.warning(
                     "No care_site table found in the input directory. Skipping join with care_site."
                 )
-            else:
-                care_site_df = load_raw_file(care_site_in_fp, schema_loader)
-                processed_df = processed_df.join(
-                    care_site_df, on="care_site_id", how="left"
+                care_site_lookup = False
+                return table_df
+
+            loaded = data_loader.load_table(care_site_in_fp)
+            if loaded is None:
+                logger.warning(
+                    "Could not read care_site table from input directory. Skipping join with care_site."
                 )
-        # if "visit_occurrence_id" in schema.names():
-        #     metadata["visit_id"] = pl.col("visit_occurrence_id").cast(pl.Int64)
-        # unit_columns = []
-        # if "unit_source_value" in schema.names():
-        #     unit_columns.append(pl.col("unit_source_value"))
-        # if "unit_concept_id" in schema.names():
-        #     unit_columns.append(
-        #         pl.col("unit_concept_id").replace_strict(concept_id_map,
-        #         return_dtype=pl.Utf8(), default=None))
-        # if unit_columns:
-        #     metadata["unit"] = pl.coalesce(unit_columns)
-        #
-        # if "load_table_id" in schema.names():
-        #     metadata["clarity_table"] = pl.col("load_table_id")
-        #
-        # if "note_id" in schema.names():
-        #     metadata["note_id"] = pl.col("note_id")
-        #
-        # if (table_name + "_end_datetime") in schema.names():
-        #     end = cast_to_datetime(schema, table_name + "_end_datetime", move_to_end_of_day=True)
-        #     metadata["end"] = end
-        # logger.info(
-        #     f"processed_df schema: {processed_df.collect_schema()}"
-        # )
-        processed_df = processed_df.with_columns(table_name=pl.lit(pfx))
-        if processed_df.limit(1).collect().is_empty():
+                care_site_lookup = False
+                return table_df
+
+            care_site_lookup = loaded.select(["care_site_id", "care_site_name"])
+
+        return table_df.join(care_site_lookup, on="care_site_id", how="left")
+
+    # Main loop that processes all tables with defined preprocessors, skipping those without and logging appropriately.
+    # Uses batched loading and processing for large tables to avoid memory issues.
+
+    # Special tables are processed separately beforehand
+    special_tables = ["person", "death", "concept"]
+    for in_fp in all_fps:
+        tbl_prefix = get_shard_prefix(OMOP_input_dir, in_fp)
+        out_fp = MEDS_input_dir / f"{tbl_prefix}.parquet"
+
+        if tbl_prefix in unused_tables:
             logger.warning(
-                f"Skipping {pfx} as it is empty after preprocessing (potentially due to filtering subjects)."
+                f"Skipping {tbl_prefix} as it is not supported in this pipeline."
             )
             continue
+        elif tbl_prefix not in functions:
+            if tbl_prefix in special_tables:
+                logger.info(
+                    f"Skipping {tbl_prefix} as it has already been processed separately."
+                )
+            elif tbl_prefix in cfg.get("tables_to_ignore", []):
+                logger.warning(
+                    f"{tbl_prefix} will not be processed; this is seen as expected."
+                )
+            else:
+                logger.warning(
+                    f"No function needed for {tbl_prefix}. For {DATASET_NAME}, "
+                    f"THIS IS COULD BE UNEXPECTED if {tbl_prefix} is in your OMOP source file and configuration."
+                )
+            continue
 
-        # write_lazyframe(processed_df, out_fp)
-        processed_df.sink_parquet(out_fp)
-        logger.info(
-            f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
-        )
+        if out_fp.exists():
+            logger.info(f"Done with {tbl_prefix}. Continuing")
+            continue
+
+        out_fp.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Starting processing of {tbl_prefix}...")
+        st = datetime.now()
+        fn = functions[tbl_prefix]
+        use_batched_loading = data_loader.should_batch(tbl_prefix, in_fp)
+        if use_batched_loading:
+            # Batched loading since Polars has trouble with ±2B rows in lazy mode, even with streaming.
+            # This is a common issue for e.g., measurement and observation tables in large datasets.
+
+            estimated_rows = data_loader.estimate_rows(in_fp)
+            logger.info(
+                f"Using batched loading for {tbl_prefix} (estimated rows={estimated_rows})"
+            )
+
+            temp_out_dir = out_fp.parent / f".{tbl_prefix}_parts"
+            if temp_out_dir.exists():
+                shutil.rmtree(temp_out_dir, ignore_errors=True)
+            temp_out_dir.mkdir(parents=True, exist_ok=True)
+
+            written_parts: list[Path] = []
+            batch_iter = data_loader.iter_table_batches(tbl_prefix, in_fp)
+            estimated_batches = data_loader.estimate_batches(in_fp)
+
+            for batch_idx, df in enumerate(
+                tqdm(
+                    batch_iter,
+                    desc=f"{tbl_prefix} batches",
+                    unit="batch",
+                    mininterval=5.0,
+                    leave=False,
+                    total=estimated_batches,
+                ),
+                start=1,
+            ):
+                processed_df = fn(df, concept_df, patient_df)
+                processed_df = maybe_join_visit_occurrence_care_site(
+                    tbl_prefix, processed_df
+                )
+
+                processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
+                part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
+                processed_df.sink_parquet(part_fp, row_group_size=128_000)
+                if part_fp.exists() and part_fp.stat().st_size > 0:
+                    written_parts.append(part_fp)
+                elif part_fp.exists():
+                    part_fp.unlink()
+
+            if not written_parts:
+                logger.warning(
+                    f"Skipping {tbl_prefix} as all processed batches were empty after preprocessing."
+                )
+                shutil.rmtree(temp_out_dir, ignore_errors=True)
+                continue
+
+            if len(written_parts) == 1:
+                written_parts[0].replace(out_fp)
+                shutil.rmtree(temp_out_dir, ignore_errors=True)
+                logger.info(
+                    f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
+                )
+            else:
+                temp_out_dir.replace(out_fp)
+                logger.info(
+                    f"Processed and wrote {len(written_parts)} parts to {str(out_fp.resolve())} in {datetime.now() - st}"
+                )
+        else:
+            # Singular execution for smaller tables that Polars can handle
+            df = data_loader.load_table(in_fp)
+            if df is None:
+                logger.warning(
+                    f"Skipping {tbl_prefix} because no readable files were found."
+                )
+                continue
+
+            processed_df = fn(df, concept_df, patient_df)
+            if processed_df.limit(1).collect().is_empty():
+                logger.warning(
+                    f"Skipping {tbl_prefix} as it is empty after preprocessing (potentially due to filtering subjects)."
+                )
+                continue
+            processed_df = maybe_join_visit_occurrence_care_site(
+                tbl_prefix, processed_df
+            )
+
+            processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
+            if processed_df.limit(1).collect().is_empty():
+                logger.warning(
+                    f"Skipping {tbl_prefix} as it is empty after preprocessing (potentially due to filtering subjects)."
+                )
+                continue
+
+            logger.info(
+                f"{tbl_prefix}: rows before final sink={processed_df.select(pl.len()).collect().item(0, 0)}"
+            )
+            processed_df.sink_parquet(out_fp, row_group_size=128_000)
+
+            logger.info(
+                f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
+            )
 
     logger.info(
         f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}"
     )
+    done_fp.write_text(f"completed_at={datetime.now().isoformat()}\n", encoding="utf-8")
+
     return

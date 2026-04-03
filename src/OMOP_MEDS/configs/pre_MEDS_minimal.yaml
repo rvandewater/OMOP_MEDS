@@ -2,9 +2,9 @@
 subject_id: "person_id"
 admission_id: "visit_occurrence_id"
 raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
-# No offset in MIMIC-IV OMOP
-# No pseudotime in OMOP
-
+metadata_cols_to_drop: # optional, removes metadata columns when scanning (lazily loading) — omit key to skip
+  columns: []
+  patterns: ["(?i)xtn_", "(?i)etl_", "(?i)air_"]
 person:
   # No pseudotime in OMOP
   # Column that contains ID's to concepts
@@ -167,7 +167,6 @@ visit_occurrence:
     output_data_cols:
       [
         "visit_occurrence_id",
-        "visit_concept_id",
         "visit_start_date",
         "visit_start_datetime",
         "visit_end_date",
@@ -175,8 +174,8 @@ visit_occurrence:
         "visit_type_concept_id",
         "provider_id",
         "care_site_id",
+        "care_site_name",
         "visit_source_value",
-        "visit_source_concept_id",
         "admitting_source_concept_id",
         "admitting_source_value",
         "discharge_to_concept_id",

@@ -18,7 +18,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "meds-transforms~=0.2.4", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars", "omop_schema", "meds~=0.3.3"
+  "meds-transforms==0.2.4", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars", "omop_schema", "meds~=0.3.3",
+    "tqdm"
 ]
 
 [tool.setuptools_scm]

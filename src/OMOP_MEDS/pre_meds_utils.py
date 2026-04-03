@@ -1,13 +1,20 @@
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 import polars as pl
+import polars.selectors as cs
+import pyarrow.parquet as pq
+from MEDS_transforms.utils import write_lazyframe
+from polars import Boolean
+from polars.type_aliases import SelectorType
+from typing import Optional
 from loguru import logger
 from omop_schema.convert import convert_to_schema_polars
 from omop_schema.schema.base import OMOPSchemaBase
 from omop_schema.utils import pyarrow_to_polars_schema
+import math
 
 from . import dataset_info, premeds_cfg
 
@@ -71,6 +78,7 @@ def get_patient_link(
     visit_df: pl.LazyFrame,
     schema_loader: OMOPSchemaBase,
     limit: int = 0,
+    join_on_visit: bool = True,
 ) -> pl.LazyFrame:
     """
     Process the persons table and death table to get an accurate birth and death datetime.
@@ -84,6 +92,7 @@ def get_patient_link(
         visit_df: A Polars LazyFrame containing visit data.
         schema_loader: An instance of OMOPSchemaBase to load the schema.
         limit: An optional limit on the number of rows to process.
+        join_on_visit: Whether to join the visit table with the person table or not.
 
     Returns:
         A Polars LazyFrame with the processed patient data, including date of birth and date of death.
@@ -110,7 +119,19 @@ def get_patient_link(
     >>> result = get_patient_link(person_df, death_df, visit_df, schema_loader)
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
     """
-    person_df = person_df.join(visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="semi")
+    if join_on_visit:
+        # Keep only the persons that are in the visit table
+        person_df = person_df.join(
+            visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="semi"
+        )
+    else:
+        person_df_ids = person_df.join(
+            visit_df.select(SUBJECT_ID), on=SUBJECT_ID, how="anti"
+        )
+        logger.warning(
+            f"We will not require a visit per patient."
+            f"Found {person_df_ids.count().collect()[0, 0]} persons without visits."
+        )
     if limit > 0:
         # Limit the number of persons
         logger.info(f"Limiting the number of persons to {limit}")
@@ -186,6 +207,7 @@ def join_concept(
 
     Examples:
         >>> from omop_schema.utils import get_schema_loader
+        >>> from OMOP_MEDS.pre_meds_utils import load_raw_file, join_concept, get_patient_link
         >>> func = join_concept(
         ...     "observation",
         ...     ["observation_source_concept_id"],  # Add a comma here
@@ -217,6 +239,9 @@ def join_concept(
 
     if isinstance(reference_cols, str):
         reference_cols = [reference_cols]
+
+    base_output_cols = list(output_data_cols)
+    base_concept_cols = list(concept_cols)
 
     def fn(
         df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
@@ -283,12 +308,18 @@ def join_concept(
                     prefer_source=prefer_source,
                 )
         # df_collected = df.collect()
-        output_data_cols.extend(concept_cols)
-        to_select = [
-            col for col in output_data_cols if col in df.collect_schema().names()
-        ]
+        selected_cols = [*base_output_cols, *base_concept_cols]
+        schema_names = set(df.collect_schema().names())
+
+        # Keep order stable while preventing duplicate projection names.
+        to_select: list[str] = []
+        seen: set[str] = set()
+        for col in selected_cols:
+            if col in schema_names and col not in seen:
+                to_select.append(col)
+                seen.add(col)
         to_select.append(SUBJECT_ID)
-        if "preferred_concept_name" in df.collect_schema().names():
+        if "preferred_concept_name" in schema_names:
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
             df = df.with_columns(
                 pl.col("preferred_vocabulary_name").replace(None, f"OMOP_{table_name}")
@@ -298,7 +329,34 @@ def join_concept(
     return fn
 
 
-def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | None:
+def col_selector(
+    columns: Optional[list[str]] = None,
+    patterns: Optional[list[str]] = None,
+) -> SelectorType:
+    """
+    Returns a selector for explicit column names, a regex pattern, or both.
+    Raises if neither is provided.
+    """
+    if not columns and not patterns:
+        raise ValueError("Provide at least one of: columns, pattern")
+
+    selector = None
+
+    if columns:
+        selector = cs.by_name(*columns)
+    if patterns:
+        if isinstance(patterns, str):
+            patterns = [patterns]  # Ensure patterns is a list
+        for pattern in patterns:
+            regex_sel = cs.matches(pattern)
+            selector = regex_sel if selector is None else selector | regex_sel
+
+    return selector
+
+
+def load_raw_file(
+    fp: Path, schema_loader: OMOPSchemaBase, selector: SelectorType = cs.all()
+) -> pl.LazyFrame | None:
     """Retrieve all .csv/.csv.gz/.parquet files for the OMOP table given by fp
 
     Because OMOP tables can be quite large for datasets comprising millions
@@ -328,18 +386,17 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
     if fp.suffixes == [".csv", ".gz"]:
         file = pl.scan_csv(
             fp, compression="gzip", infer_schema=False, schema_overrides=schema
-        )
+        ).select(selector)
         logging.info(f"Loaded gzipped CSV file from {fp}")
     elif fp.suffix == ".csv":
         # Using schema_overrides to set the schema as the ordering could be different
         # and there could be extra columns
         file = pl.scan_csv(
             fp, infer_schema=False, has_header=True, schema_overrides=schema
-        )
+        ).select(selector)
         logging.info(f"Loaded CSV file from {fp}")
     elif fp.suffix == ".parquet":
-        file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
-        file = file.select(pl.all().name.to_lowercase())
+        file = pl.scan_parquet(fp).select(selector)
         file = convert_to_schema_polars(file, schema, allow_extra_columns=True)
         logging.info(f"Loaded Parquet file from {fp}")
     elif fp.is_dir():
@@ -350,21 +407,277 @@ def load_raw_file(fp: Path, schema_loader: OMOPSchemaBase) -> pl.LazyFrame | Non
         if csv_files:
             file = pl.scan_csv(
                 fp, infer_schema=False, has_header=True, schema_overrides=schema
-            )
+            ).select(selector)
             logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
-            file = pl.scan_parquet(fp)  # , schema=schema, allow_missing_columns=True)
-            file = file.select(pl.all().name.to_lowercase())
-            # if mismatching_schema_check:
-            #     cast_files_to_schema(str(fp), schema, str(fp))
-            file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
-            logging.info(f"Loaded Parquet files as directory from {fp}")
+            # Memory-safe schema harmonization across shards
+            # file = scan_harmonized(fp, glob="**/*.parquet")
+            # # Keep only requested columns and cast to OMOP schema permissively
+            # file = file.select(selector)
+            # file = convert_to_schema_polars(
+            #     file, schema, allow_extra_columns=True, allow_missing_columns=True
+            # )
+            # Per-shard projection/cast to avoid building one huge harmonized concat plan.
+            # shard_lfs: list[pl.LazyFrame] = []
+            # for shard_fp in sorted(parquet_files):
+            #     shard_lf = pl.scan_parquet(shard_fp).select(selector)
+            #     shard_lf = project_to_target_schema(shard_lf, schema)
+            #     shard_lfs.append(shard_lf)
+            #
+            # if not shard_lfs:
+            #     return None
+            # Safer for very large dirs: build aligned shards in bounded batches.
+            # This avoids one giant concat graph that can OOM/panic native Polars.
+            parquet_files = sorted(parquet_files)
+            batch_size = 64  # tune 32-128 based on memory
+            batch_lfs: list[pl.LazyFrame] = []
+
+            # Restrict schema to selected columns to lower memory.
+            # selector may be a callable selector; this path keeps full schema if unsure.
+            target_schema = schema
+
+            for i in range(0, len(parquet_files), batch_size):
+                chunk = parquet_files[i : i + batch_size]
+                shard_lfs: list[pl.LazyFrame] = []
+
+                for shard_fp in chunk:
+                    shard = pl.scan_parquet(shard_fp, rechunk=False).select(selector)
+                    shard = _align_shard_to_schema(shard, target_schema)
+                    shard_lfs.append(shard)
+
+                if shard_lfs:
+                    batch_lfs.append(pl.concat(shard_lfs, how="vertical_relaxed"))
+
+            if not batch_lfs:
+                return None
+            # vertical_relaxed allows minor dtype reconciliation without exploding memory.
+            file = pl.concat(batch_lfs, how="vertical_relaxed")
+            logging.info(
+                f"Loaded Parquet files as directory from {fp} of {len(parquet_files)} shards"
+            )
+
+            # # pl.scan_parquet(fp)
+            # file = pl.scan_parquet(fp).select(
+            #     selector
+            # )  # , schema=schema, allow_missing_columns=True)
+            # # if mismatching_schema_check:
+            # #     cast_files_to_schema(str(fp), schema, str(fp))
+            # file = convert_to_schema_polars(file, schema, allow_extra_columns=False)
+            # logging.info(f"Loaded Parquet files as directory from {fp}")
         else:
             return None
     else:
         return None
     file = file.select(pl.all().name.to_lowercase())
+    # logging.info(f"Loaded {file} with schema: {file.collect_columns}")
     return file
+
+
+class ShardedTableDataLoader:
+    """Load OMOP tables with optional shard-wise batching for selected tables.
+
+    For non-selected tables this class defers to ``load_raw_file`` to preserve
+    existing behavior. For selected parquet directory tables, it can yield data
+    in bounded batches to lower peak memory.
+    """
+
+    def __init__(
+        self,
+        schema_loader: OMOPSchemaBase,
+        selector: SelectorType = cs.all(),
+        chunked_tables: list[str] | None = None,
+        batching_row_threshold: int = 1_000_000,
+        batch_mode: str = "auto",
+        batch_size_shards: int = 1,
+        batch_input_rows: int = 0,
+    ) -> None:
+        """
+        Initializes the ShardedTableDataLoader.
+
+        Args:
+            schema_loader (OMOPSchemaBase): The schema loader instance to retrieve table schemas.
+            selector (SelectorType, optional): A column selector to filter columns during loading. Defaults to `cs.all()`.
+            chunked_tables (list[str] | None, optional): A list of table names that are eligible to be processed in chunks. Defaults to None.
+            batching_row_threshold (int, optional): The row count threshold for enabling batching. Defaults to 1,000,000.
+            batch_mode (str, optional): The batching mode. Can be "auto", "per_shard", "by_shards", or "by_rows". Defaults to "auto".
+            batch_size_shards (int, optional): The number of shards to include in each batch when using "by_shards" mode. Defaults to 1.
+            batch_input_rows (int, optional): The maximum number of rows per batch when using "by_rows" mode. Defaults to 0 (disabled).
+
+        Returns:
+            None
+        """
+        self.schema_loader = schema_loader
+        self.selector = selector
+        self.chunked_tables = set(chunked_tables or [])
+        self.batching_row_threshold = batching_row_threshold
+        self.batch_mode = batch_mode
+        self.batch_size_shards = max(1, int(batch_size_shards))
+        self.batch_input_rows = max(0, int(batch_input_rows))
+
+    def load_table(self, fp: Path) -> pl.LazyFrame | None:
+        """Load a table with existing non-batched semantics."""
+        return load_raw_file(fp, self.schema_loader, self.selector)
+
+    def should_batch(self, table_name: str, fp: Path) -> bool:
+        """Return whether batching should be used for this table/path."""
+        if table_name not in self.chunked_tables:
+            return False
+
+        estimated_rows = self.estimate_rows(fp)
+        if estimated_rows is None:
+            return False
+
+        if self.batching_row_threshold <= 0:
+            return True
+        return estimated_rows > self.batching_row_threshold
+
+    def iter_table_batches(self, table_name: str, fp: Path) -> Iterator[pl.LazyFrame]:
+        """Yield one or more LazyFrame batches for a table.
+
+        If batching is not enabled (or not applicable), yields exactly one frame.
+        """
+        if not self.should_batch(table_name, fp):
+            lf = self.load_table(fp)
+            if lf is not None:
+                yield lf
+            return
+
+        parquet_files = self._list_parquet_files(fp)
+        if not parquet_files:
+            lf = self.load_table(fp)
+            if lf is not None:
+                yield lf
+            return
+
+        for batch_files in self._build_batches(parquet_files):
+            yield self._scan_parquet_batch(batch_files, table_name)
+
+    def estimate_rows(self, fp: Path) -> int | None:
+        """Estimate total row count using parquet metadata only."""
+        parquet_files = self._list_parquet_files(fp)
+        if not parquet_files:
+            return None
+
+        total = 0
+        for path in parquet_files:
+            try:
+                total += pq.ParquetFile(path).metadata.num_rows
+            except Exception:
+                return None
+        return total
+
+    def estimate_batches(self, fp: Path) -> int | None:
+        """Estimate total batch count using parquet metadata only."""
+        parquet_files = self._list_parquet_files(fp)
+        if not parquet_files:
+            return None
+
+        mode = self._effective_batch_mode()
+
+        if mode == "per_shard":
+            return len(parquet_files)
+
+        if mode == "by_shards":
+            step = max(1, self.batch_size_shards)
+            return math.ceil(len(parquet_files) / step)
+
+        if mode == "by_rows":
+            if self.batch_input_rows <= 0:
+                return len(parquet_files)
+
+            batches = 0
+            current_rows = 0
+            for path in parquet_files:
+                try:
+                    shard_rows = pq.ParquetFile(path).metadata.num_rows
+                except Exception:
+                    shard_rows = 0
+
+                if current_rows > 0 and current_rows >= self.batch_input_rows:
+                    batches += 1
+                    current_rows = 0
+
+                current_rows += shard_rows
+
+            if current_rows > 0:
+                batches += 1
+            return batches
+
+        return len(parquet_files)
+
+    def _list_parquet_files(self, fp: Path) -> list[Path]:
+        if fp.is_file() and fp.suffix == ".parquet":
+            return [fp]
+        if fp.is_dir():
+            return sorted(p for p in fp.glob("**/*.parquet") if p.is_file())
+        return []
+
+    def _effective_batch_mode(self) -> str:
+        if self.batch_mode == "auto":
+            if self.batch_input_rows > 0:
+                return "by_rows"
+            if self.batch_size_shards > 1:
+                return "by_shards"
+            return "per_shard"
+        return self.batch_mode
+
+    def _build_batches(self, parquet_files: list[Path]) -> list[list[Path]]:
+        mode = self._effective_batch_mode()
+
+        if mode == "per_shard":
+            return [[p] for p in parquet_files]
+
+        if mode == "by_shards":
+            step = self.batch_size_shards
+            return [
+                parquet_files[i : i + step] for i in range(0, len(parquet_files), step)
+            ]
+
+        if mode == "by_rows":
+            if self.batch_input_rows <= 0:
+                return [[p] for p in parquet_files]
+
+            batches: list[list[Path]] = []
+            current: list[Path] = []
+            current_rows = 0
+            for path in parquet_files:
+                try:
+                    shard_rows = pq.ParquetFile(path).metadata.num_rows
+                except Exception:
+                    shard_rows = 0
+
+                if current and current_rows >= self.batch_input_rows:
+                    batches.append(current)
+                    current = []
+                    current_rows = 0
+
+                current.append(path)
+                current_rows += shard_rows
+
+            if current:
+                batches.append(current)
+            return batches
+
+        return [[p] for p in parquet_files]
+
+    def _scan_parquet_batch(
+        self, parquet_paths: list[Path], table_name: str
+    ) -> pl.LazyFrame:
+        schema = pyarrow_to_polars_schema(
+            self.schema_loader.get_pyarrow_schema(table_name)
+        )
+        shard_lfs: list[pl.LazyFrame] = []
+        for shard_fp in parquet_paths:
+            shard = pl.scan_parquet(shard_fp, rechunk=False)
+            shard = _align_shard_to_schema(shard, schema)
+            shard = shard.select(self.selector)
+            shard_lfs.append(shard)
+
+        if len(shard_lfs) == 1:
+            file = shard_lfs[0]
+        else:
+            file = pl.concat(shard_lfs, how="vertical_relaxed")
+        return file.select(pl.all().name.to_lowercase())
 
 
 def cast_files_to_schema(folder_path: str, target_schema: dict, output_folder: str):
@@ -708,3 +1021,298 @@ def rename_demo_files(directory: Path):
         new_path = file_path.with_name(new_name)
         file_path.rename(new_path)
         logger.info(f"Renamed: {file_path} to {new_path}")
+
+
+# ── Type resolution ────────────────────────────────────────────────────────────
+
+
+def _resolve_conflict(dtypes: set[pl.DataType]) -> pl.DataType:
+    """Given a set of conflicting types for the same column, pick a safe common type."""
+    if len(dtypes) == 1:
+        return next(iter(dtypes))
+
+    # Decimal[p1,s] vs Decimal[p2,s] → Float64 (covers your exact error)
+    if any(d.is_decimal() for d in dtypes):
+        return pl.Float64
+
+    # Mixed int widths → widest signed int, or Float64 if floats involved
+    if all(d.is_numeric() for d in dtypes):
+        if any(d.is_float() for d in dtypes):
+            return pl.Float64
+        # All integers: pick widest
+        int_widths = {
+            pl.Int8: 8,
+            pl.Int16: 16,
+            pl.Int32: 32,
+            pl.Int64: 64,
+            pl.UInt8: 8,
+            pl.UInt16: 16,
+            pl.UInt32: 32,
+            pl.UInt64: 64,
+        }
+        return max((d for d in dtypes if d in int_widths), key=lambda d: int_widths[d])
+
+    # Datetime with differing time_unit or time_zone → normalize to us / UTC
+    if all(isinstance(d, pl.Datetime) for d in dtypes):
+        return pl.Datetime("us", "UTC")
+
+    # Fallback: String is always safe
+    return pl.String
+
+
+# ── Schema inspection (metadata-only, no data read) ───────────────────────────
+
+
+def collect_shard_schemas(
+    paths: list[Path],
+) -> dict[Path, dict[str, pl.DataType]]:
+    """Read only parquet footer metadata — zero data loaded."""
+    return {p: pl.read_parquet_schema(p) for p in paths}
+
+
+def resolve_target_schema(
+    shard_schemas: dict[Path, dict[str, pl.DataType]],
+    keep_columns: Optional[list[str]] = None,
+) -> dict[str, pl.DataType]:
+    """
+    Build a unified target schema from all shard schemas.
+    - Union of all columns (shards missing a column will get a null literal)
+    - Type conflicts resolved via _resolve_conflict()
+    - If keep_columns is given, output is restricted to those columns
+    """
+    col_types: dict[str, set[pl.DataType]] = {}
+    for schema in shard_schemas.values():
+        for col, dtype in schema.items():
+            col_types.setdefault(col, set()).add(dtype)
+
+    target = {col: _resolve_conflict(types) for col, types in col_types.items()}
+
+    if keep_columns:
+        missing = set(keep_columns) - set(target)
+        if missing:
+            raise ValueError(f"Requested columns not found in any shard: {missing}")
+        target = {c: target[c] for c in keep_columns}
+
+    return target
+
+
+# ── Per-shard harmonization (fully lazy) ──────────────────────────────────────
+
+
+def harmonize_shard(
+    path: Path,
+    target_schema: dict[str, pl.DataType],
+    shard_schema: dict[str, pl.DataType],
+) -> pl.LazyFrame:
+    """
+    Return a LazyFrame for one shard that:
+      - adds missing columns as typed nulls
+      - drops extra columns not in target_schema
+      - casts columns whose type differs from target
+    All operations are lazy — nothing is collected.
+    """
+    lf = pl.scan_parquet(path)
+    exprs: list[pl.Expr] = []
+
+    for col, target_dtype in target_schema.items():
+        if col not in shard_schema:
+            # Column absent in this shard → null literal
+            exprs.append(pl.lit(None).cast(target_dtype).alias(col))
+        elif shard_schema[col] != target_dtype:
+            # Type mismatch → cast (use try_cast to avoid hard failures on bad values)
+            exprs.append(pl.col(col).cast(target_dtype, strict=False).alias(col))
+        else:
+            exprs.append(pl.col(col))
+
+    return lf.select(exprs)
+
+
+# ── Public entry point ─────────────────────────────────────────────────────────
+
+
+def scan_harmonized(
+    directory: str | Path,
+    glob: str = "**/*.parquet",
+    keep_columns: Optional[list[str]] = None,
+    schema_sample: Optional[int] = None,
+) -> pl.LazyFrame:
+    """
+    Lazily scan all parquet shards in a directory, harmonizing schemas.
+
+    Args:
+        directory:     Root folder containing sharded parquet files.
+        glob:          Glob pattern to find shards (default: all parquet recursively).
+        keep_columns:  If set, only these columns are retained in the output.
+        schema_sample: If set, only inspect the first N shards for schema inference
+                       (useful when there are thousands of shards with stable schemas).
+
+    Returns:
+        A single lazy LazyFrame with a unified, harmonized schema.
+    """
+    paths = sorted(Path(directory).glob(glob))
+    if not paths:
+        raise FileNotFoundError(
+            f"No parquet files found in {directory!r} with {glob!r}"
+        )
+
+    sample = paths[:schema_sample] if schema_sample else paths
+    shard_schemas = collect_shard_schemas(sample)
+    target_schema = resolve_target_schema(shard_schemas, keep_columns=keep_columns)
+
+    # Extend target to all paths (not just the sample) using cached schemas
+    all_schemas = shard_schemas if not schema_sample else collect_shard_schemas(paths)
+
+    # Build schemas for all paths, using target_schema as fallback for unsampled paths
+    all_schemas = {}
+    for path in paths:
+        if path in shard_schemas:
+            all_schemas[path] = shard_schemas[path]
+        else:
+            all_schemas[path] = target_schema
+
+    frames = [harmonize_shard(path, target_schema, all_schemas[path]) for path in paths]
+    logger.info(
+        f"Harmonized {len(frames)} shards in {directory!r} with target schema: {target_schema}"
+    )
+    return pl.concat(frames, how="diagonal_relaxed")
+
+
+def set_up_metadata(
+    MEDS_input_dir: Path,
+    do_overwrite: Boolean,
+    OMOP_input_dir: Path,
+    join_on_visit: Boolean,
+    limit,
+    schema_loader: OMOPSchemaBase,
+    selector: SelectorType,
+) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+    person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
+    concept_out_fp = MEDS_input_dir / "concept.parquet"
+    concept_relationship_out_fp = MEDS_input_dir / "concept_relationship.parquet"
+    codes_out_fp = MEDS_input_dir / "codes.parquet"
+
+    if concept_out_fp.is_file() and do_overwrite:
+        logger.info(
+            f"Removing existing concept output {str(concept_out_fp.resolve())} because do_overwrite=True"
+        )
+        concept_out_fp.unlink()
+
+    if concept_out_fp.is_file():
+        logger.info(
+            f"Reloading processed concepts df from {str(concept_out_fp.resolve())}"
+        )
+        concept_df = pl.read_parquet(concept_out_fp, use_pyarrow=True).lazy()
+    else:
+        logger.info("Processing concepts table first...")
+        concept_path = get_table_path(OMOP_input_dir, "concept")
+        if not concept_path:
+            raise FileNotFoundError("No concept table found in the input directory.")
+        concept_df = load_raw_file(concept_path, schema_loader, selector)
+        concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
+        write_lazyframe(concept_df, concept_out_fp)
+
+    if person_out_fp.is_file() and do_overwrite:
+        logger.info(
+            f"Removing existing patient output {str(person_out_fp.resolve())} because do_overwrite=True"
+        )
+        person_out_fp.unlink()
+
+    if person_out_fp.is_file():
+        logger.info(
+            f"Reloading processed patient df from {str(person_out_fp.resolve())}"
+        )
+        patient_df = pl.scan_parquet(person_out_fp)
+    else:
+        logger.info("Processing person table...")
+        person_in_fp = get_table_path(OMOP_input_dir, "person")
+        if person_in_fp:
+            person_df = load_raw_file(person_in_fp, schema_loader, selector)
+        else:
+            raise FileNotFoundError("No person table found in the input directory.")
+
+        death_in_fp = get_table_path(OMOP_input_dir, "death")
+        if death_in_fp:
+            death_df = load_raw_file(death_in_fp, schema_loader, selector)
+        else:
+            death_df = None
+
+        visit_in_fp = get_table_path(OMOP_input_dir, "visit_occurrence")
+        visit_df = load_raw_file(visit_in_fp, schema_loader, selector)
+
+        patient_df = get_patient_link(
+            person_df=person_df,
+            death_df=death_df,
+            visit_df=visit_df,
+            schema_loader=schema_loader,
+            limit=limit,
+            join_on_visit=join_on_visit,
+        )
+        patient_df = patient_df.with_columns(table_name=pl.lit("person_death"))
+        patient_df.sink_parquet(person_out_fp)
+
+    if concept_relationship_out_fp.is_file() and do_overwrite:
+        logger.info(
+            "Removing existing concept_relationship output "
+            f"{str(concept_relationship_out_fp.resolve())} because do_overwrite=True"
+        )
+        concept_relationship_out_fp.unlink()
+
+    if concept_relationship_out_fp.is_file():
+        logger.info(
+            f"Reloading processed concept_relationship df from {str(concept_relationship_out_fp.resolve())}"
+        )
+        concept_relationship_df = pl.scan_parquet(concept_relationship_out_fp)
+    else:
+        logger.info("Processing concept_relationship table first...")
+        concept_relationship_fp = get_table_path(OMOP_input_dir, "concept_relationship")
+        if not concept_relationship_fp:
+            raise FileNotFoundError(
+                "No concept relationship table found in the input directory."
+            )
+        logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
+        concept_relationship_df = load_raw_file(
+            concept_relationship_fp, schema_loader, selector
+        )
+        write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
+
+    # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
+    if codes_out_fp.is_file() and do_overwrite:
+        logger.info(
+            f"Removing existing code metadata {str(codes_out_fp.resolve())} because do_overwrite=True"
+        )
+        codes_out_fp.unlink()
+
+    if codes_out_fp.is_file():
+        logger.info(f"Reusing existing code metadata at {str(codes_out_fp.resolve())}")
+    else:
+        metadata = extract_metadata(concept_df, concept_relationship_df)
+        metadata.sink_parquet(codes_out_fp)
+        logger.info(f"Wrote code metadata to {str(codes_out_fp.resolve())}")
+    return concept_df, patient_df
+
+
+def project_to_target_schema(
+    lf: pl.LazyFrame, target_schema: dict[str, pl.DataType]
+) -> pl.LazyFrame:
+    existing = set(lf.collect_schema().names())
+    exprs: list[pl.Expr] = []
+    for col, dtype in target_schema.items():
+        if col in existing:
+            exprs.append(pl.col(col).cast(dtype, strict=False).alias(col))
+        else:
+            exprs.append(pl.lit(None, dtype=dtype).alias(col))
+    return lf.select(exprs)
+
+
+def _align_shard_to_schema(
+    lf: pl.LazyFrame, target_schema: dict[str, pl.DataType]
+) -> pl.LazyFrame:
+    """Project a shard to exactly target schema (add missing as null, cast permissively)."""
+    existing = set(lf.collect_schema().names())
+    exprs: list[pl.Expr] = []
+    for col, dtype in target_schema.items():
+        if col in existing:
+            exprs.append(pl.col(col).cast(dtype, strict=False).alias(col))
+        else:
+            exprs.append(pl.lit(None).cast(dtype).alias(col))
+    return lf.select(exprs)
