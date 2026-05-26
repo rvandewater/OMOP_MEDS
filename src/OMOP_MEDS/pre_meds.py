@@ -75,22 +75,14 @@ def main(cfg: DictConfig) -> None:
             )
     all_fps = []
     for table in omop_cfg_version["tables"]:
-        # Check for .csv and .parquet files
         if table in IGNORE_TABLES:
             logger.info(f"Skipping {table} as it is in the ignore list.")
             continue
-        csv_files = list(OMOP_input_dir.glob(f"{table}.csv"))
-        parquet_files = list(OMOP_input_dir.glob(f"{table}.parquet"))
-        directories = list(OMOP_input_dir.glob(f"{table}"))
-
-        if csv_files:
-            all_fps.extend(csv_files)
-        elif parquet_files:
-            all_fps.extend(parquet_files)
-        elif directories:
-            all_fps.extend(directories)
-        else:
+        table_path = get_table_path(OMOP_input_dir, table)
+        if table_path is None:
             logger.warning(f"No files found for {table}")
+            continue
+        all_fps.append(table_path)
 
     def add_preprocessor(
         table_name,
