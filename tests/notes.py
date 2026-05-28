@@ -19,6 +19,13 @@ def create_demo_omop_with_notes(output_dir: Path):
             "person_id": [1, 2, 3],
             "gender_concept_id": [8507, 8532, 8507],  # Male, Female, Male
             "year_of_birth": [1980, 1975, 1990],
+            "month_of_birth": [1, 2, 3],
+            "day_of_birth": [1, 2, 3],
+            "birth_datetime": [
+                "1980-01-01 00:00:00",
+                "1975-02-02 00:00:00",
+                "1990-03-03 00:00:00",
+            ],
             "race_concept_id": [8527, 8527, 8527],
             "ethnicity_concept_id": [38003564, 38003564, 38003564],
         }
@@ -33,6 +40,20 @@ def create_demo_omop_with_notes(output_dir: Path):
             "visit_concept_id": [9201, 9201, 9202],  # Inpatient, Inpatient, Outpatient
             "visit_start_date": ["2023-01-15", "2023-02-20", "2023-03-10"],
             "visit_end_date": ["2023-01-20", "2023-02-25", "2023-03-10"],
+            "visit_start_datetime": [
+                "2023-01-15 08:00:00",
+                "2023-02-20 09:00:00",
+                "2023-03-10 10:00:00",
+            ],
+            "visit_end_datetime": [
+                "2023-01-20 12:00:00",
+                "2023-02-25 11:30:00",
+                "2023-03-10 10:30:00",
+            ],
+            "visit_source_concept_id": [0, 0, 0],
+            "provider_id": [201, 202, 203],
+            "care_site_id": [301, 302, 303],
+            "care_site_name": ["Ward A", "Ward B", "Clinic C"],
         }
     )
     visit_df.write_csv(output_dir / "visit_occurrence.csv")
@@ -42,11 +63,11 @@ def create_demo_omop_with_notes(output_dir: Path):
         {
             "note_id": [1001, 1002, 1003, 1004, 1005],
             "person_id": [
-                3589912774911670296,
-                -3210373572193940939,
-                -775517641933593374,
-                -2575767131279873665,
-                -8970844422700220177,
+                1,
+                1,
+                2,
+                2,
+                3,
             ],
             "visit_occurrence_id": [101, 101, 102, 102, 103],
             "note_date": [
@@ -64,7 +85,15 @@ def create_demo_omop_with_notes(output_dir: Path):
                 "2023-03-10 15:30:00",
             ],
             "note_type_concept_id": [44814637, 44814638, 44814637, 44814639, 44814637],
-            "note_provider_id": [201, 202, 203, 204, 205],
+            "note_class_concept_id": [706391, 706391, 706391, 706391, 706391],
+            "note_title": [
+                "Chest Pain Follow-up",
+                "Improving Symptoms",
+                "Severe Headache",
+                "Discharge Summary",
+                "Annual Physical",
+            ],
+            "provider_id": [201, 202, 203, 204, 205],
             # Progress note, Discharge summary, etc.
             "note_text": [
                 "Patient presents with chest pain. History of hypertension and diabetes mellitus type 2. Physical exam reveals elevated blood pressure 145/92. EKG shows normal sinus rhythm. Plan: Continue current medications, schedule follow-up in 2 weeks.",
@@ -74,6 +103,9 @@ def create_demo_omop_with_notes(output_dir: Path):
                 "Annual physical examination. Patient denies any complaints. Vitals stable. Lab results pending.",
             ],
             "encoding_concept_id": [32678, 32678, 32678, 32678, 32678],  # UTF-8
+            "language_concept_id": [4180186, 4180186, 4180186, 4180186, 4180186],
+            "visit_detail_id": [None, None, None, None, None],
+            "note_source_value": ["EHR", "EHR", "EHR", "EHR", "EHR"],
         }
     )
     note_df.write_csv(output_dir / "note.csv")
@@ -85,8 +117,21 @@ def create_demo_omop_with_notes(output_dir: Path):
             "person_id": [1, 2, 3],
             "observation_concept_id": [4298794, 4298794, 4298794],
             "observation_date": ["2023-01-15", "2023-02-20", "2023-03-10"],
+            "observation_datetime": [
+                "2023-01-15 08:00:00",
+                "2023-02-20 09:00:00",
+                "2023-03-10 10:00:00",
+            ],
             "observation_type_concept_id": [38000280, 38000280, 38000280],
             "value_as_number": [145.0, 180.0, 120.0],
+            "value_as_string": [None, None, None],
+            "value_as_concept_id": [None, None, None],
+            "qualifier_concept_id": [None, None, None],
+            "unit_concept_id": [0, 0, 0],
+            "visit_occurrence_id": [101, 102, 103],
+            "visit_detail_id": [None, None, None],
+            "observation_source_value": ["BP", "BP", "BP"],
+            "observation_source_concept_id": [0, 0, 0],
         }
     )
     observation_df.write_csv(output_dir / "observation.csv")
@@ -154,14 +199,27 @@ def create_demo_omop_with_notes(output_dir: Path):
     )
     concept_df.write_csv(output_dir / "concept.csv")
 
+    # Concept relationship table (minimal, enough for metadata generation)
+    concept_relationship_df = pl.DataFrame(
+        {
+            "concept_id_1": [44814637, 44814638, 44814639],
+            "concept_id_2": [44814637, 44814638, 44814639],
+            "relationship_id": ["Maps to", "Maps to", "Maps to"],
+            "valid_start_date": ["2000-01-01", "2000-01-01", "2000-01-01"],
+            "valid_end_date": ["2099-12-31", "2099-12-31", "2099-12-31"],
+            "invalid_reason": [None, None, None],
+        }
+    )
+    concept_relationship_df.write_csv(output_dir / "concept_relationship.csv")
+
 
 def test_e2e_with_notes():
     """Test end-to-end pipeline with NLP feature extraction from notes."""
-    with TemporaryDirectory() as temp_dir:
+    with TemporaryDirectory() as temp_dir, TemporaryDirectory() as input_temp_dir:
         root = Path(temp_dir)
 
-        # Create demo OMOP dataset
-        omop_dir = root / "omop_demo"
+        # Create demo OMOP dataset outside the output root so do_overwrite doesn't delete it
+        omop_dir = Path(input_temp_dir) / "omop_demo"
         create_demo_omop_with_notes(omop_dir)
 
         do_overwrite = True
@@ -203,8 +261,17 @@ def test_e2e_with_notes():
 
         assert len(data_files) > 0, f"No data files found in {data_path}"
 
-        # Verify NLP features were extracted
-        notes_data = pl.read_parquet(data_path / "notes*.parquet")
+        # Verify NLP features were extracted in pre-MEDS output (the final cohort drops them)
+        pre_meds_note_path = root / "pre_MEDS" / "note.parquet"
+        if pre_meds_note_path.is_dir():
+            pre_meds_note_files = list(pre_meds_note_path.rglob("*.parquet"))
+            assert pre_meds_note_files, (
+                f"No pre-MEDS note parquet files found in {pre_meds_note_path}"
+            )
+            notes_data = pl.read_parquet(pre_meds_note_files)
+        else:
+            notes_data = pl.read_parquet(pre_meds_note_path)
+        assert notes_data.height > 0, f"No note rows found in {pre_meds_note_path}"
 
         # Check that NLP feature columns exist
         expected_columns = [
@@ -222,18 +289,18 @@ def test_e2e_with_notes():
             )
 
         # Verify feature values are reasonable
-        assert (notes_data["note_feature_word_count"] > 0).all(), (
+        assert all(v > 0 for v in notes_data["note_feature_word_count"].to_list()), (
             "All notes should have non-zero word count"
         )
-        assert (notes_data["note_feature_char_count"] > 0).all(), (
+        assert all(v > 0 for v in notes_data["note_feature_char_count"].to_list()), (
             "All notes should have non-zero character count"
         )
-        assert (notes_data["note_feature_lexical_diversity"] > 0).all(), (
-            "All notes should have positive lexical diversity"
-        )
-        assert (notes_data["note_feature_lexical_diversity"] <= 1).all(), (
-            "Lexical diversity should not exceed 1.0"
-        )
+        assert all(
+            v > 0 for v in notes_data["note_feature_lexical_diversity"].to_list()
+        ), "All notes should have positive lexical diversity"
+        assert all(
+            v <= 1 for v in notes_data["note_feature_lexical_diversity"].to_list()
+        ), "Lexical diversity should not exceed 1.0"
 
         # Verify metadata
         metadata_path = root / "MEDS_cohort" / "metadata"
