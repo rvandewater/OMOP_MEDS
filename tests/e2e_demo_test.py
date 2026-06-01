@@ -3,7 +3,6 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
-import pytest
 
 import polars as pl
 from omegaconf import OmegaConf
@@ -38,9 +37,9 @@ def _stage_local_demo_omop(raw_input_dir: Path) -> Path:
     return raw_input_dir
 
 
-@pytest.mark.skip(
-    reason="If you have a demo dataset, re-enable this test in your downstream repositories."
-)
+# @pytest.mark.skip(
+#     reason="If you have a demo dataset, re-enable this test in your downstream repositories."
+# )
 def test_e2e():
     with TemporaryDirectory() as temp_dir:
         os.environ["HYDRA_FULL_ERROR"] = "1"
