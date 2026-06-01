@@ -10,7 +10,6 @@ from omegaconf import OmegaConf
 from OMOP_MEDS.__main__ import main as run_omop_meds
 from OMOP_MEDS import MAIN_CFG
 
-
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 
 
@@ -35,6 +34,57 @@ def _stage_local_demo_omop(raw_input_dir: Path) -> Path:
         concept_relationship_df.write_csv(raw_input_dir / "concept_relationship.csv")
 
     return raw_input_dir
+
+
+def test_local_e2e_demo_resources():
+    """Run a local end-to-end smoke test against the checked-in demo resources."""
+    with (
+        TemporaryDirectory() as output_temp_dir,
+        TemporaryDirectory() as input_temp_dir,
+    ):
+        root = Path(output_temp_dir)
+        raw_input_dir = _stage_local_demo_omop(Path(input_temp_dir) / "raw_input")
+
+        cfg = OmegaConf.load(MAIN_CFG)
+        cfg.root_output_dir = str(root.resolve())
+        cfg.raw_input_dir = str(raw_input_dir.resolve())
+        cfg.pre_MEDS_dir = str((root / "pre_MEDS").resolve())
+        cfg.MEDS_cohort_dir = str((root / "MEDS_cohort").resolve())
+        cfg.do_download = False
+        cfg.do_demo = False
+        cfg.do_overwrite = True
+        cfg.prefer_source = False
+        cfg.join_on_visit = False
+
+        run_omop_meds.__wrapped__(cfg)
+
+        data_path = root / "MEDS_cohort" / "data"
+        data_files = list(data_path.glob("*.parquet")) + list(
+            data_path.glob("**/*.parquet")
+        )
+        all_files = [x for x in data_path.glob("**/*") if x.is_file()]
+
+        assert len(data_files) > 0, (
+            f"No data files found in {data_path}; found {all_files}"
+        )
+
+        metadata_path = root / "MEDS_cohort" / "metadata"
+        all_files = [x for x in metadata_path.glob("**/*") if x.is_file()]
+
+        dataset_metadata = metadata_path / "dataset.json"
+        assert dataset_metadata.exists(), (
+            f"Dataset metadata not found in {metadata_path}; found {all_files}"
+        )
+
+        codes_metadata = metadata_path / "codes.parquet"
+        assert codes_metadata.exists(), (
+            f"Codes metadata not found in {metadata_path}; found {all_files}"
+        )
+
+        subject_splits = metadata_path / "subject_splits.parquet"
+        assert subject_splits.exists(), (
+            f"Subject splits not found in {metadata_path}; found {all_files}"
+        )
 
 
 # @pytest.mark.skip(
@@ -75,57 +125,6 @@ def test_e2e():
             data_path.glob("**/*.parquet")
         )
 
-        all_files = [x for x in data_path.glob("**/*") if x.is_file()]
-
-        assert len(data_files) > 0, (
-            f"No data files found in {data_path}; found {all_files}"
-        )
-
-        metadata_path = root / "MEDS_cohort" / "metadata"
-        all_files = [x for x in metadata_path.glob("**/*") if x.is_file()]
-
-        dataset_metadata = metadata_path / "dataset.json"
-        assert dataset_metadata.exists(), (
-            f"Dataset metadata not found in {metadata_path}; found {all_files}"
-        )
-
-        codes_metadata = metadata_path / "codes.parquet"
-        assert codes_metadata.exists(), (
-            f"Codes metadata not found in {metadata_path}; found {all_files}"
-        )
-
-        subject_splits = metadata_path / "subject_splits.parquet"
-        assert subject_splits.exists(), (
-            f"Subject splits not found in {metadata_path}; found {all_files}"
-        )
-
-
-def test_local_e2e_demo_resources():
-    """Run a local end-to-end smoke test against the checked-in demo resources."""
-    with (
-        TemporaryDirectory() as output_temp_dir,
-        TemporaryDirectory() as input_temp_dir,
-    ):
-        root = Path(output_temp_dir)
-        raw_input_dir = _stage_local_demo_omop(Path(input_temp_dir) / "raw_input")
-
-        cfg = OmegaConf.load(MAIN_CFG)
-        cfg.root_output_dir = str(root.resolve())
-        cfg.raw_input_dir = str(raw_input_dir.resolve())
-        cfg.pre_MEDS_dir = str((root / "pre_MEDS").resolve())
-        cfg.MEDS_cohort_dir = str((root / "MEDS_cohort").resolve())
-        cfg.do_download = False
-        cfg.do_demo = False
-        cfg.do_overwrite = True
-        cfg.prefer_source = False
-        cfg.join_on_visit = False
-
-        run_omop_meds.__wrapped__(cfg)
-
-        data_path = root / "MEDS_cohort" / "data"
-        data_files = list(data_path.glob("*.parquet")) + list(
-            data_path.glob("**/*.parquet")
-        )
         all_files = [x for x in data_path.glob("**/*") if x.is_file()]
 
         assert len(data_files) > 0, (
