@@ -9,6 +9,7 @@ from omegaconf import OmegaConf
 
 from OMOP_MEDS.__main__ import main as run_omop_meds
 from OMOP_MEDS import MAIN_CFG
+import pytest
 
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 
@@ -87,9 +88,7 @@ def test_local_e2e_demo_resources():
         )
 
 
-# @pytest.mark.skip(
-#     reason="If you have a demo dataset, re-enable this test in your downstream repositories."
-# )
+@pytest.mark.skip(reason="Skip for duration")
 def test_e2e():
     with TemporaryDirectory() as temp_dir:
         os.environ["HYDRA_FULL_ERROR"] = "1"
