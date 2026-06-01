@@ -65,7 +65,7 @@ visit_occurrence:
       - start
     time: col(visit_start_datetime)
     visit_occurrence_id: col(visit_occurrence_id)
-    text: col(care_site_name)
+    text_value: col(care_site_name)
     table_name: col(table_name)
   visit_end:
     code:
