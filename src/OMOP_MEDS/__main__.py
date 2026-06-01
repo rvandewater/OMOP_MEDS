@@ -108,7 +108,8 @@ def main(cfg: DictConfig):
             f"pipeline_config_fp={str(ETL_CFG.resolve())}",
         ]
     )
-    if int(os.getenv("N_WORKERS", 1)) <= 1:
+    if int(os.getenv("OMOP_MEDS_FORCE_SERIAL", 0) == 1):
+        # if int(os.getenv("N_WORKERS", 1)) <= 1:
         logger.info("Running in serial mode as N_WORKERS is not set.")
         command_parts.append("~parallelize")
 
