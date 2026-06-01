@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="1" tests="22" time="7.304" timestamp="2026-06-01T11:35:37.096295+00:00" hostname="runnervm3jyl0"><testcase classname="src.OMOP_MEDS.commands" name="OMOP_MEDS.commands.run_command" time="0.007"><failure message="024     Examples:&#10;025         &gt;&gt;&gt; def fake_shell_succeed(cmd, shell, capture_output):&#10;026         ...     print(cmd)&#10;027         ...     return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b&quot;&quot;, stderr=b&quot;&quot;)&#10;028         &gt;&gt;&gt; def fake_shell_fail(cmd, shell, capture_output):&#10;029         ...     print(cmd)&#10;030         ...     return subprocess.CompletedProcess(args=cmd, returncode=1, stdout=b&quot;&quot;, stderr=b&quot;&quot;)&#10;031         &gt;&gt;&gt; run_command([&quot;echo&quot;, &quot;hello&quot;], runner_fn=fake_shell_succeed)&#10;032         echo hello&#10;033         &gt;&gt;&gt; run_command([&quot;echo&quot;, &quot;hello&quot;], runner_fn=fake_shell_fail)&#10;Differences (unified diff with -expected +actual):&#10;    @@ -1,3 +1,13 @@&#10;    +echo hello&#10;     Traceback (most recent call last):&#10;    -    ...&#10;    +  File &quot;/usr/lib/python3.12/doctest.py&quot;, line 1361, in __run&#10;    +    exec(compile(example.source, filename, &quot;single&quot;,&#10;    +  File &quot;&lt;doctest OMOP_MEDS.commands.run_command[3]&gt;&quot;, line 1, in &lt;module&gt;&#10;    +    run_command([&quot;echo&quot;, &quot;hello&quot;], runner_fn=fake_shell_fail)&#10;    +  File &quot;/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/commands.py&quot;, line 81, in run_command&#10;    +    raise ValueError(&#10;     ValueError: Command failed with return code 1.&#10;    +stdout:&#10;    +&lt;BLANKLINE&gt;&#10;    +stderr:&#10;    +&lt;BLANKLINE&gt;&#10;&#10;/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/commands.py:33: DocTestFailure">024     Examples:
+025         &gt;&gt;&gt; def fake_shell_succeed(cmd, shell, capture_output):
+026         ...     print(cmd)
+027         ...     return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b"", stderr=b"")
+028         &gt;&gt;&gt; def fake_shell_fail(cmd, shell, capture_output):
+029         ...     print(cmd)
+030         ...     return subprocess.CompletedProcess(args=cmd, returncode=1, stdout=b"", stderr=b"")
+031         &gt;&gt;&gt; run_command(["echo", "hello"], runner_fn=fake_shell_succeed)
+032         echo hello
+033         &gt;&gt;&gt; run_command(["echo", "hello"], runner_fn=fake_shell_fail)
+Differences (unified diff with -expected +actual):
+    @@ -1,3 +1,13 @@
+    +echo hello
+     Traceback (most recent call last):
+    -    ...
+    +  File "/usr/lib/python3.12/doctest.py", line 1361, in __run
+    +    exec(compile(example.source, filename, "single",
+    +  File "&lt;doctest OMOP_MEDS.commands.run_command[3]&gt;", line 1, in &lt;module&gt;
+    +    run_command(["echo", "hello"], runner_fn=fake_shell_fail)
+    +  File "/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/commands.py", line 81, in run_command
+    +    raise ValueError(
+     ValueError: Command failed with return code 1.
+    +stdout:
+    +&lt;BLANKLINE&gt;
+    +stderr:
+    +&lt;BLANKLINE&gt;
+
+/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/commands.py:33: DocTestFailure</failure></testcase><testcase classname="src.OMOP_MEDS.download" name="OMOP_MEDS.download.crawl_and_download" time="0.006" /><testcase classname="src.OMOP_MEDS.download" name="OMOP_MEDS.download.download_data" time="0.011" /><testcase classname="src.OMOP_MEDS.download" name="OMOP_MEDS.download.download_file" time="0.003" /><testcase classname="src.OMOP_MEDS.pre_meds_utils" name="OMOP_MEDS.pre_meds_utils.calculate_nlp_features" time="0.001"><failure message="1364             Available features: 'word_count', 'char_count', 'sentence_count',&#10;1365             'avg_word_length', 'avg_sentence_length', 'punctuation_count',&#10;1366             'digit_count', 'uppercase_count', 'unique_word_count', 'lexical_diversity'&#10;1367         prefix: Prefix to add to feature names in output dictionary.&#10;1368 &#10;1369     Returns:&#10;1370         Dictionary mapping feature names to their calculated values.&#10;1371 &#10;1372     Examples:&#10;1373         &gt;&gt;&gt; calculate_nlp_features(&quot;Hello world!&quot;, features=[&quot;word_count&quot;, &quot;char_count&quot;])&#10;Expected:&#10;    {'word_count': 2, 'char_count': 12}&#10;Got:&#10;    {'feature_word_count': 2, 'feature_char_count': 12}&#10;&#10;/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/pre_meds_utils.py:1373: DocTestFailure">1364             Available features: 'word_count', 'char_count', 'sentence_count',
+1365             'avg_word_length', 'avg_sentence_length', 'punctuation_count',
+1366             'digit_count', 'uppercase_count', 'unique_word_count', 'lexical_diversity'
+1367         prefix: Prefix to add to feature names in output dictionary.
+1368 
+1369     Returns:
+1370         Dictionary mapping feature names to their calculated values.
+1371 
+1372     Examples:
+1373         &gt;&gt;&gt; calculate_nlp_features("Hello world!", features=["word_count", "char_count"])
+Expected:
+    {'word_count': 2, 'char_count': 12}
+Got:
+    {'feature_word_count': 2, 'feature_char_count': 12}
+
+/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/pre_meds_utils.py:1373: DocTestFailure</failure></testcase><testcase classname="src.OMOP_MEDS.pre_meds_utils" name="OMOP_MEDS.pre_meds_utils.determine_concept_id" time="0.003" /><testcase classname="src.OMOP_MEDS.pre_meds_utils" name="OMOP_MEDS.pre_meds_utils.extract_nlp_features" time="0.019" /><testcase classname="src.OMOP_MEDS.pre_meds_utils" name="OMOP_MEDS.pre_meds_utils.get_patient_link" time="0.004" /><testcase classname="src.OMOP_MEDS.pre_meds_utils" name="OMOP_MEDS.pre_meds_utils.join_concept" time="0.009" /><testcase classname="src.OMOP_MEDS.pre_meds_utils" name="OMOP_MEDS.pre_meds_utils.load_raw_file" time="0.002" /><testcase classname="tests.e2e_demo_test" name="test_local_e2e_demo_resources" time="2.581"><failure message="ValueError: Command failed with return code 1.&#10;stdout:&#10;[2026-06-01 11:35:42,248][MEDS_transforms.runner][INFO] - Running stage: shard_events&#10;[2026-06-01 11:35:42,285][MEDS_transforms.runner][INFO] - Running command: MEDS_extract-shard_events --config-dir=/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/configs --config-name=ETL --multirun 'hydra.searchpath=[pkg://MEDS_transforms.configs]' stage=shard_events worker=&quot;range(0,1)&quot; hydra/launcher=joblib&#10;[2026-06-01 11:35:43,891][MEDS_transforms.runner][INFO] - Command output:&#10;[2026-06-01 11:35:42,970][HYDRA] Joblib.Parallel(n_jobs=-1,backend=loky,prefer=processes,require=None,verbose=0,timeout=None,pre_dispatch=2*n_jobs,batch_size=auto,temp_folder=None,max_nbytes=None,mmap_mode=r) is launching 1 jobs&#10;[2026-06-01 11:35:42,970][HYDRA] Launching jobs, sweep output dir : /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/.logs&#10;[2026-06-01 11:35:42,970][HYDRA] &#09;#0 : stage=shard_events worker=0&#10;[2026-06-01 11:35:43,631][MEDS_transforms.extract.shard_events][INFO] - Running with config:&#10;input_dir: ${oc.env:PRE_MEDS_DIR}&#10;cohort_dir: ${oc.env:MEDS_COHORT_DIR}&#10;_default_description: 'This is a MEDS pipeline ETL. Please set a more detailed description&#10;  at the top of your specific pipeline&#10;&#10;  configuration file.'&#10;log_dir: ${stage_cfg.output_dir}/.logs&#10;do_overwrite: false&#10;seed: 1&#10;stages:&#10;- shard_events&#10;- split_and_shard_subjects&#10;- convert_to_sharded_events&#10;- merge_to_MEDS_cohort&#10;- extract_code_metadata&#10;- finalize_MEDS_metadata&#10;- finalize_MEDS_data&#10;stage_configs:&#10;  shard_events:&#10;    row_chunksize: 20000000000&#10;    infer_schema_length: 999999999&#10;    data_input_dir: ${input_dir}&#10;  split_and_shard_subjects:&#10;    is_metadata: true&#10;    output_dir: ${cohort_dir}/metadata&#10;    n_subjects_per_shard: ${oc.decode:${oc.env:N_SUBJECTS_PER_SHARD, 10000}}&#10;    external_splits_json_fp: null&#10;    split_fracs:&#10;      train: 0.8&#10;      tuning: 0.1&#10;      held_out: 0.1&#10;  convert_to_sharded_events:&#10;    do_dedup_text_and_numeric: true&#10;  merge_to_MEDS_cohort:&#10;    unique_by: '*'&#10;    additional_sort_by: null&#10;  extract_code_metadata:&#10;    is_metadata: true&#10;    description_separator: '&#10;&#10;      '&#10;  finalize_MEDS_metadata:&#10;    is_metadata: true&#10;    do_retype: true&#10;  finalize_MEDS_data:&#10;    do_retype: true&#10;worker: 0&#10;polling_time: 300&#10;stage: shard_events&#10;stage_cfg: ${oc.create:${populate_stage:${stage}, ${input_dir}, ${cohort_dir}, ${stages},&#10;  ${stage_configs}}}&#10;etl_metadata:&#10;  pipeline_name: ???&#10;  dataset_name: ${oc.env:DATASET_NAME}&#10;  dataset_version: ${oc.env:DATASET_VERSION}&#10;  package_name: ${get_package_name:}&#10;  package_version: ${get_package_version:}&#10;etl_metadata.pipeline_name: extract&#10;description: &quot;This pipeline extracts a dataset in longitudinal, sparse form from an\&#10;  \ input dataset meeting\nselect criteria and converts them to the MEDS format.\n\&#10;  \nThis pipeline is for the ${etl_metadata.dataset_name} dataset version ${etl_metadata.dataset_version}.\n\&#10;  \nKey variables for this pipeline are\n  - `input_dir=$PATH_TO_INPUT_DIR`\n  - `cohort_dir=$PATH_TO_OUTPUT_DIR`.\n\&#10;  \  - `event_conversion_config_fp=$PATH_TO_EVENT_CONVERSION_CONFIG_FP`\n\nSee the\&#10;  \ MEDS-Transforms Extract documentation for configuration file details.&quot;&#10;event_conversion_config_fp: ${oc.env:EVENT_CONVERSION_CONFIG_FP}&#10;shards_map_fp: ${cohort_dir}/metadata/.shards.json&#10;parallelize:&#10;  n_workers: ${oc.env:N_WORKERS}&#10;  launcher: joblib&#10;&#10;Stage: shard_events&#10;&#10;Stage config:&#10;row_chunksize: 20000000000&#10;infer_schema_length: 999999999&#10;data_input_dir: /tmp/tmpxg46dgrf/pre_MEDS&#10;is_metadata: false&#10;metadata_input_dir: /tmp/tmpxg46dgrf/pre_MEDS/metadata&#10;output_dir: /tmp/tmpxg46dgrf/MEDS_cohort/shard_events&#10;reducer_output_dir: null&#10;&#10;[2026-06-01 11:35:43,637][MEDS_transforms.extract.shard_events][INFO] - Reading event conversion config from /tmp/tmpxg46dgrf/pre_MEDS/event_configs.yaml to identify needed columns.&#10;[2026-06-01 11:35:43,646][MEDS_transforms.extract.shard_events][WARNING] - Skipping /tmp/tmpxg46dgrf/pre_MEDS/concept_relationship.parquet as it is not specified in the event conversion configuration.&#10;[2026-06-01 11:35:43,646][MEDS_transforms.extract.shard_events][WARNING] - Skipping /tmp/tmpxg46dgrf/pre_MEDS/codes.parquet as it is not specified in the event conversion configuration.&#10;[2026-06-01 11:35:43,647][MEDS_transforms.extract.shard_events][WARNING] - Skipping /tmp/tmpxg46dgrf/pre_MEDS/concept.parquet as it is not specified in the event conversion configuration.&#10;[2026-06-01 11:35:43,647][MEDS_transforms.extract.shard_events][INFO] - Starting event sub-sharding. Sub-sharding 5 files:&#10;  * /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet&#10;  * /tmp/tmpxg46dgrf/pre_MEDS/visit_occurrence.parquet&#10;  * /tmp/tmpxg46dgrf/pre_MEDS/person.parquet&#10;  * /tmp/tmpxg46dgrf/pre_MEDS/person_birth_death.parquet&#10;  * /tmp/tmpxg46dgrf/pre_MEDS/note.parquet&#10;[2026-06-01 11:35:43,650][MEDS_transforms.extract.shard_events][INFO] - Will read raw data from /tmp/tmpxg46dgrf/pre_MEDS/$IN_FILE.parquet and write sub-sharded data to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/$IN_FILE/$ROW_START-$ROW_END.parquet&#10;[2026-06-01 11:35:43,653][MEDS_transforms.extract.shard_events][INFO] - Processing /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation.&#10;[2026-06-01 11:35:43,653][MEDS_transforms.extract.shard_events][INFO] - Performing preliminary read of /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet to determine row count.&#10;[2026-06-01 11:35:43,656][MEDS_transforms.extract.shard_events][INFO] - Ignoring infer_schema_length=999999999 for Parquet files.&#10;[2026-06-01 11:35:43,661][MEDS_transforms.extract.shard_events][INFO] - Read 31390 rows from /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet.&#10;[2026-06-01 11:35:43,661][MEDS_transforms.extract.shard_events][INFO] - Splitting /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet into 1 row-chunks of size 20000000000.&#10;[2026-06-01 11:35:43,661][MEDS_transforms.extract.shard_events][INFO] - Writing file 1/1: /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet row-chunk [0-31390) to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation/[0-31390).parquet.&#10;[2026-06-01 11:35:43,664][MEDS_transforms.mapreduce.utils][INFO] - Reading input dataframe from /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet&#10;[2026-06-01 11:35:43,664][MEDS_transforms.extract.shard_events][INFO] - Ignoring infer_schema_length=999999999 for Parquet files.&#10;[2026-06-01 11:35:43,665][MEDS_transforms.mapreduce.utils][INFO] - Read dataset&#10;[2026-06-01 11:35:43,665][MEDS_transforms.mapreduce.utils][INFO] - Writing final output to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation/[0-31390).parquet&#10;[2026-06-01 11:35:43,678][MEDS_transforms.mapreduce.utils][INFO] - Succeeded in 0:00:00.013540&#10;&#10;[2026-06-01 11:35:43,891][MEDS_transforms.runner][INFO] - Command error:&#10;Can't find main function in __main__ module. Using sys.argv[0] as a fallback.&#10;Can't find main function in __main__ module. Using sys.argv[0] as a fallback.&#10;Error executing job with overrides: ['stage=shard_events', 'worker=0']&#10;Traceback (most recent call last):&#10;  File &quot;/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/utils.py&quot;, line 220, in run_and_report&#10;    return func()&#10;           ^^^^^^&#10;  File &quot;/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/utils.py&quot;, line 466, in &lt;lambda&gt;&#10;    lambda: hydra.multirun(&#10;            ^^^^^^^^^^^^^^^&#10;  File &quot;/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/hydra.py&quot;, line 162, in multirun&#10;    ret = sweeper.sweep(arguments=task_overrides)&#10;          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;  File &quot;/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/core_plugins/basic_sweeper.py&quot;, line 181, in sweep&#10;    _ = r.return_value&#10;        ^^^^^^^^^^^^^^&#10;  File &quot;/home/runner/.local/lib/python3.12/site-packages/hydra/core/utils.py&quot;, line 260, in return_value&#10;    raise self._return_value&#10;FileNotFoundError: [Errno 2] No such file or directory: '/tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation/[0-31390).parquet.lock'&#10;&#10;&#10;stderr:&#10;Error executing job with overrides: ['pipeline_config_fp=/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/configs/ETL.yaml', '++do_overwrite=True']&#10;Traceback (most recent call last):&#10;  File &quot;/home/runner/.local/lib/python3.12/site-packages/MEDS_transforms/runner.py&quot;, line 329, in main&#10;    run_stage(cfg, stage, default_parallelization_cfg=default_parallelization_cfg)&#10;  File &quot;/home/runner/.local/lib/python3.12/site-packages/MEDS_transforms/runner.py&quot;, line 271, in run_stage&#10;    raise ValueError(&#10;ValueError: Stage shard_events failed via MEDS_extract-shard_events --config-dir=/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/configs --config-name=ETL --multirun 'hydra.searchpath=[pkg://MEDS_transforms.configs]' stage=shard_events worker=&quot;range(0,1)&quot; hydra/launcher=joblib with return code 1.&#10;&#10;Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.">def test_local_e2e_demo_resources():
+        """Run a local end-to-end smoke test against the checked-in demo resources."""
+        with (
+            TemporaryDirectory() as output_temp_dir,
+            TemporaryDirectory() as input_temp_dir,
+        ):
+            root = Path(output_temp_dir)
+            raw_input_dir = _stage_local_demo_omop(Path(input_temp_dir) / "raw_input")
+    
+            cfg = OmegaConf.load(MAIN_CFG)
+            cfg.root_output_dir = str(root.resolve())
+            cfg.raw_input_dir = str(raw_input_dir.resolve())
+            cfg.pre_MEDS_dir = str((root / "pre_MEDS").resolve())
+            cfg.MEDS_cohort_dir = str((root / "MEDS_cohort").resolve())
+            cfg.do_download = False
+            cfg.do_demo = False
+            cfg.do_overwrite = True
+            cfg.prefer_source = False
+            cfg.join_on_visit = False
+    
+&gt;           run_omop_meds.__wrapped__(cfg)
+
+tests/e2e_demo_test.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/OMOP_MEDS/__main__.py:121: in main
+    run_command(command_parts, cfg)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+command_parts = ['DATASET_NAME=MIMIC_IV_OMOP_DEMO', 'DATASET_VERSION=0.9:0.1.1.dev20+g198483411:OMOP_5.3', 'EVENT_CONVERSION_CONFIG_FP...'PRE_MEDS_DIR=/tmp/tmpxg46dgrf/pre_MEDS', 'MEDS_COHORT_DIR=/tmp/tmpxg46dgrf/MEDS_cohort', 'MEDS_transform-runner', ...]
+cfg = {'defaults': ['_self_'], 'root_output_dir': '/tmp/tmpxg46dgrf', 'tables_to_ignore': ['note_nlp', 'fact_relationship', ...': {'name': 'full_extraction_${now:%Y-%m-%d_%H-%M-%S}'}, 'run': {'dir': '${log_dir}'}, 'sweep': {'dir': '${log_dir}'}}}
+runner_fn = &lt;function run at 0x7f37ea1f2fc0&gt;
+
+    def run_command(
+        command_parts: list[str],
+        cfg: DictConfig | None = None,
+        runner_fn: callable = subprocess.run,
+    ):
+        """Runs a command with the specified runner function.
+    
+        Args:
+            command_parts: A list of the arguments to be run as a shell command.
+            cfg: The configuration for the command.
+            runner_fn: The function to run the command with (added for dependency injection).
+    
+        Raises:
+            ValueError: If the command fails
+    
+        Examples:
+            &gt;&gt;&gt; def fake_shell_succeed(cmd, shell, capture_output):
+            ...     print(cmd)
+            ...     return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b"", stderr=b"")
+            &gt;&gt;&gt; def fake_shell_fail(cmd, shell, capture_output):
+            ...     print(cmd)
+            ...     return subprocess.CompletedProcess(args=cmd, returncode=1, stdout=b"", stderr=b"")
+            &gt;&gt;&gt; run_command(["echo", "hello"], runner_fn=fake_shell_succeed)
+            echo hello
+            &gt;&gt;&gt; run_command(["echo", "hello"], runner_fn=fake_shell_fail)
+            Traceback (most recent call last):
+                ...
+            ValueError: Command failed with return code 1.
+            &gt;&gt;&gt; run_command(["hello"], cfg={"do_overwrite": True}, runner_fn=fake_shell_succeed)
+            hello ++do_overwrite=True
+            &gt;&gt;&gt; run_command(["hello"], cfg={"do_overwrite": False}, runner_fn=fake_shell_succeed)
+            hello ++do_overwrite=False
+            &gt;&gt;&gt; run_command(["hello"], cfg={"do_profile": True}, runner_fn=fake_shell_succeed)
+            hello ++hydra.callbacks.profiler._target_=hydra_profiler.profiler.ProfilerCallback
+            &gt;&gt;&gt; run_command(["hello"], cfg={"do_profile": False}, runner_fn=fake_shell_succeed)
+            hello
+            &gt;&gt;&gt; run_command(["hello"], cfg={"seed": 42}, runner_fn=fake_shell_succeed)
+            hello ++seed=42
+        """
+    
+        if cfg is None:
+            do_overwrite = None
+            do_profile = False
+            seed = None
+        else:
+            do_overwrite = cfg.get("do_overwrite", None)
+            do_profile = cfg.get("do_profile", False)
+            seed = cfg.get("seed", None)
+    
+        if do_overwrite is not None:
+            command_parts.append(f"++do_overwrite={do_overwrite}")
+        if seed is not None:
+            command_parts.append(f"++seed={seed}")
+        if do_profile:
+            command_parts.append(
+                "++hydra.callbacks.profiler._target_=hydra_profiler.profiler.ProfilerCallback"
+            )
+    
+        full_cmd = " ".join(command_parts)
+        logger.info(f"Running command: {full_cmd}")
+        command_out = runner_fn(full_cmd, shell=True, capture_output=True)
+    
+        # https://stackoverflow.com/questions/21953835/run-subprocess-and-print-output-to-logging
+    
+        stderr = command_out.stderr.decode()
+        stdout = command_out.stdout.decode()
+    
+        logger.info(f"Command stdout:\n{stdout}")
+        if stderr:
+            logger.warning(f"Command stderr:\n{stderr}")
+    
+        if command_out.returncode != 0:
+&gt;           raise ValueError(
+                "Command failed with return code "
+                f"{command_out.returncode}.\n"
+                f"stdout:\n{stdout}\n"
+                f"stderr:\n{stderr}"
+            )
+E           ValueError: Command failed with return code 1.
+E           stdout:
+E           [2026-06-01 11:35:42,248][MEDS_transforms.runner][INFO] - Running stage: shard_events
+E           [2026-06-01 11:35:42,285][MEDS_transforms.runner][INFO] - Running command: MEDS_extract-shard_events --config-dir=/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/configs --config-name=ETL --multirun 'hydra.searchpath=[pkg://MEDS_transforms.configs]' stage=shard_events worker="range(0,1)" hydra/launcher=joblib
+E           [2026-06-01 11:35:43,891][MEDS_transforms.runner][INFO] - Command output:
+E           [2026-06-01 11:35:42,970][HYDRA] Joblib.Parallel(n_jobs=-1,backend=loky,prefer=processes,require=None,verbose=0,timeout=None,pre_dispatch=2*n_jobs,batch_size=auto,temp_folder=None,max_nbytes=None,mmap_mode=r) is launching 1 jobs
+E           [2026-06-01 11:35:42,970][HYDRA] Launching jobs, sweep output dir : /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/.logs
+E           [2026-06-01 11:35:42,970][HYDRA] 	#0 : stage=shard_events worker=0
+E           [2026-06-01 11:35:43,631][MEDS_transforms.extract.shard_events][INFO] - Running with config:
+E           input_dir: ${oc.env:PRE_MEDS_DIR}
+E           cohort_dir: ${oc.env:MEDS_COHORT_DIR}
+E           _default_description: 'This is a MEDS pipeline ETL. Please set a more detailed description
+E             at the top of your specific pipeline
+E           
+E             configuration file.'
+E           log_dir: ${stage_cfg.output_dir}/.logs
+E           do_overwrite: false
+E           seed: 1
+E           stages:
+E           - shard_events
+E           - split_and_shard_subjects
+E           - convert_to_sharded_events
+E           - merge_to_MEDS_cohort
+E           - extract_code_metadata
+E           - finalize_MEDS_metadata
+E           - finalize_MEDS_data
+E           stage_configs:
+E             shard_events:
+E               row_chunksize: 20000000000
+E               infer_schema_length: 999999999
+E               data_input_dir: ${input_dir}
+E             split_and_shard_subjects:
+E               is_metadata: true
+E               output_dir: ${cohort_dir}/metadata
+E               n_subjects_per_shard: ${oc.decode:${oc.env:N_SUBJECTS_PER_SHARD, 10000}}
+E               external_splits_json_fp: null
+E               split_fracs:
+E                 train: 0.8
+E                 tuning: 0.1
+E                 held_out: 0.1
+E             convert_to_sharded_events:
+E               do_dedup_text_and_numeric: true
+E             merge_to_MEDS_cohort:
+E               unique_by: '*'
+E               additional_sort_by: null
+E             extract_code_metadata:
+E               is_metadata: true
+E               description_separator: '
+E           
+E                 '
+E             finalize_MEDS_metadata:
+E               is_metadata: true
+E               do_retype: true
+E             finalize_MEDS_data:
+E               do_retype: true
+E           worker: 0
+E           polling_time: 300
+E           stage: shard_events
+E           stage_cfg: ${oc.create:${populate_stage:${stage}, ${input_dir}, ${cohort_dir}, ${stages},
+E             ${stage_configs}}}
+E           etl_metadata:
+E             pipeline_name: ???
+E             dataset_name: ${oc.env:DATASET_NAME}
+E             dataset_version: ${oc.env:DATASET_VERSION}
+E             package_name: ${get_package_name:}
+E             package_version: ${get_package_version:}
+E           etl_metadata.pipeline_name: extract
+E           description: "This pipeline extracts a dataset in longitudinal, sparse form from an\
+E             \ input dataset meeting\nselect criteria and converts them to the MEDS format.\n\
+E             \nThis pipeline is for the ${etl_metadata.dataset_name} dataset version ${etl_metadata.dataset_version}.\n\
+E             \nKey variables for this pipeline are\n  - `input_dir=$PATH_TO_INPUT_DIR`\n  - `cohort_dir=$PATH_TO_OUTPUT_DIR`.\n\
+E             \  - `event_conversion_config_fp=$PATH_TO_EVENT_CONVERSION_CONFIG_FP`\n\nSee the\
+E             \ MEDS-Transforms Extract documentation for configuration file details."
+E           event_conversion_config_fp: ${oc.env:EVENT_CONVERSION_CONFIG_FP}
+E           shards_map_fp: ${cohort_dir}/metadata/.shards.json
+E           parallelize:
+E             n_workers: ${oc.env:N_WORKERS}
+E             launcher: joblib
+E           
+E           Stage: shard_events
+E           
+E           Stage config:
+E           row_chunksize: 20000000000
+E           infer_schema_length: 999999999
+E           data_input_dir: /tmp/tmpxg46dgrf/pre_MEDS
+E           is_metadata: false
+E           metadata_input_dir: /tmp/tmpxg46dgrf/pre_MEDS/metadata
+E           output_dir: /tmp/tmpxg46dgrf/MEDS_cohort/shard_events
+E           reducer_output_dir: null
+E           
+E           [2026-06-01 11:35:43,637][MEDS_transforms.extract.shard_events][INFO] - Reading event conversion config from /tmp/tmpxg46dgrf/pre_MEDS/event_configs.yaml to identify needed columns.
+E           [2026-06-01 11:35:43,646][MEDS_transforms.extract.shard_events][WARNING] - Skipping /tmp/tmpxg46dgrf/pre_MEDS/concept_relationship.parquet as it is not specified in the event conversion configuration.
+E           [2026-06-01 11:35:43,646][MEDS_transforms.extract.shard_events][WARNING] - Skipping /tmp/tmpxg46dgrf/pre_MEDS/codes.parquet as it is not specified in the event conversion configuration.
+E           [2026-06-01 11:35:43,647][MEDS_transforms.extract.shard_events][WARNING] - Skipping /tmp/tmpxg46dgrf/pre_MEDS/concept.parquet as it is not specified in the event conversion configuration.
+E           [2026-06-01 11:35:43,647][MEDS_transforms.extract.shard_events][INFO] - Starting event sub-sharding. Sub-sharding 5 files:
+E             * /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet
+E             * /tmp/tmpxg46dgrf/pre_MEDS/visit_occurrence.parquet
+E             * /tmp/tmpxg46dgrf/pre_MEDS/person.parquet
+E             * /tmp/tmpxg46dgrf/pre_MEDS/person_birth_death.parquet
+E             * /tmp/tmpxg46dgrf/pre_MEDS/note.parquet
+E           [2026-06-01 11:35:43,650][MEDS_transforms.extract.shard_events][INFO] - Will read raw data from /tmp/tmpxg46dgrf/pre_MEDS/$IN_FILE.parquet and write sub-sharded data to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/$IN_FILE/$ROW_START-$ROW_END.parquet
+E           [2026-06-01 11:35:43,653][MEDS_transforms.extract.shard_events][INFO] - Processing /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation.
+E           [2026-06-01 11:35:43,653][MEDS_transforms.extract.shard_events][INFO] - Performing preliminary read of /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet to determine row count.
+E           [2026-06-01 11:35:43,656][MEDS_transforms.extract.shard_events][INFO] - Ignoring infer_schema_length=999999999 for Parquet files.
+E           [2026-06-01 11:35:43,661][MEDS_transforms.extract.shard_events][INFO] - Read 31390 rows from /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet.
+E           [2026-06-01 11:35:43,661][MEDS_transforms.extract.shard_events][INFO] - Splitting /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet into 1 row-chunks of size 20000000000.
+E           [2026-06-01 11:35:43,661][MEDS_transforms.extract.shard_events][INFO] - Writing file 1/1: /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet row-chunk [0-31390) to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation/[0-31390).parquet.
+E           [2026-06-01 11:35:43,664][MEDS_transforms.mapreduce.utils][INFO] - Reading input dataframe from /tmp/tmpxg46dgrf/pre_MEDS/observation.parquet
+E           [2026-06-01 11:35:43,664][MEDS_transforms.extract.shard_events][INFO] - Ignoring infer_schema_length=999999999 for Parquet files.
+E           [2026-06-01 11:35:43,665][MEDS_transforms.mapreduce.utils][INFO] - Read dataset
+E           [2026-06-01 11:35:43,665][MEDS_transforms.mapreduce.utils][INFO] - Writing final output to /tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation/[0-31390).parquet
+E           [2026-06-01 11:35:43,678][MEDS_transforms.mapreduce.utils][INFO] - Succeeded in 0:00:00.013540
+E           
+E           [2026-06-01 11:35:43,891][MEDS_transforms.runner][INFO] - Command error:
+E           Can't find main function in __main__ module. Using sys.argv[0] as a fallback.
+E           Can't find main function in __main__ module. Using sys.argv[0] as a fallback.
+E           Error executing job with overrides: ['stage=shard_events', 'worker=0']
+E           Traceback (most recent call last):
+E             File "/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/utils.py", line 220, in run_and_report
+E               return func()
+E                      ^^^^^^
+E             File "/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/utils.py", line 466, in &lt;lambda&gt;
+E               lambda: hydra.multirun(
+E                       ^^^^^^^^^^^^^^^
+E             File "/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/hydra.py", line 162, in multirun
+E               ret = sweeper.sweep(arguments=task_overrides)
+E                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             File "/home/runner/.local/lib/python3.12/site-packages/hydra/_internal/core_plugins/basic_sweeper.py", line 181, in sweep
+E               _ = r.return_value
+E                   ^^^^^^^^^^^^^^
+E             File "/home/runner/.local/lib/python3.12/site-packages/hydra/core/utils.py", line 260, in return_value
+E               raise self._return_value
+E           FileNotFoundError: [Errno 2] No such file or directory: '/tmp/tmpxg46dgrf/MEDS_cohort/shard_events/observation/[0-31390).parquet.lock'
+E           
+E           
+E           stderr:
+E           Error executing job with overrides: ['pipeline_config_fp=/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/configs/ETL.yaml', '++do_overwrite=True']
+E           Traceback (most recent call last):
+E             File "/home/runner/.local/lib/python3.12/site-packages/MEDS_transforms/runner.py", line 329, in main
+E               run_stage(cfg, stage, default_parallelization_cfg=default_parallelization_cfg)
+E             File "/home/runner/.local/lib/python3.12/site-packages/MEDS_transforms/runner.py", line 271, in run_stage
+E               raise ValueError(
+E           ValueError: Stage shard_events failed via MEDS_extract-shard_events --config-dir=/tmp/workspace/rvandewater/OMOP_MEDS/src/OMOP_MEDS/configs --config-name=ETL --multirun 'hydra.searchpath=[pkg://MEDS_transforms.configs]' stage=shard_events worker="range(0,1)" hydra/launcher=joblib with return code 1.
+E           
+E           Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+
+src/OMOP_MEDS/commands.py:81: ValueError</failure></testcase><testcase classname="tests.e2e_demo_test" name="test_e2e" time="0.000"><skipped type="pytest.skip" message="Skip for duration">/tmp/workspace/rvandewater/OMOP_MEDS/tests/e2e_demo_test.py:91: Skip for duration</skipped></testcase><testcase classname="tests.test_get_patient_link_join_on_visit" name="test_get_patient_link_includes_patients_without_visits_when_join_on_visit_false" time="0.004" /><testcase classname="tests.test_get_patient_link_join_on_visit" name="test_get_patient_link_filters_patients_without_visits_when_join_on_visit_true" time="0.003" /><testcase classname="tests.test_join_concept_batch_safety" name="test_join_concept_does_not_accumulate_output_columns_across_calls" time="0.002" /><testcase classname="tests.test_nlp_feature_extraction" name="test_extract_nlp_features_from_demo_notes" time="0.009" /><testcase classname="tests.test_nlp_feature_extraction" name="test_calculate_nlp_features_handles_empty_and_none_text" time="0.000" /><testcase classname="tests.test_sharded_table_data_loader" name="test_should_batch_uses_metadata_row_estimate" time="0.159" /><testcase classname="tests.test_sharded_table_data_loader" name="test_should_batch_false_for_non_chunked_table" time="0.003" /><testcase classname="tests.test_sharded_table_data_loader" name="test_iter_table_batches_per_shard_mode" time="0.006" /><testcase classname="tests.test_sharded_table_data_loader" name="test_iter_table_batches_by_shards_mode" time="0.008" /><testcase classname="tests.test_sharded_table_data_loader" name="test_iter_table_batches_auto_prefers_row_target" time="0.006" /></testsuite></testsuites>
