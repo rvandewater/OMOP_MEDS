@@ -21,6 +21,11 @@ from .pre_meds_utils import rename_demo_files
 logger = logging.getLogger(__name__)
 
 
+def _ensure_parent_dir(path: Path) -> None:
+    """Ensure parent directory exists for a file path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
 @hydra.main(
     version_base=None, config_path=str(MAIN_CFG.parent), config_name=MAIN_CFG.stem
 )
@@ -57,10 +62,7 @@ def main(cfg: DictConfig):
         rename_demo_files(raw_input_dir)
 
     # Step 1: Pre-MEDS Data Wrangling
-    # if HAS_PRE_MEDS:
     event_cfg = OmegaConf.load(EVENT_CFG)
-    # event_cfg.pop("subject_id_col")
-    # if cfg.get("tables_to_ignore", None):
     event_cfg_new = event_cfg.copy()
     pre_MEDS_transform(cfg)
     pre_MEDS_dir_files = [item.stem for item in pre_MEDS_dir.iterdir()]
@@ -75,26 +77,20 @@ def main(cfg: DictConfig):
             omegaconf.OmegaConf.save(config=event_cfg_new, f=f)
     else:
         event_cfg_path = EVENT_CFG
-        # EVENT_CFG = EVENT_CFG_TEMP
-    # ETL_CFG_TEMP = ETL_CFG+"_temp"
-    # with open(ETL_CFG_TEMP, "w") as f:
-    #     omegaconf.OmegaConf.save(config=event_cfg, f=f)
 
-    # else:
-    #     pre_MEDS_dir = raw_input_dir
-
-    #     with open(EVENT_CFG, "w") as f:
-    #         omegaconf.OmegaConf.save(config=event_cfg, f=f)
-    # elif event_cfg.get("tables_to_ignore", None):
-    #     event_cfg.pop("tables_to_ignore")
-    #     with open(EVENT_CFG, "w") as f:
-    #         omegaconf.OmegaConf.save(config=event_cfg, f=f)
     # Step 2: MEDS Cohort Creation
+    # Ensure output directories exist before MEDS runs.
+    # CI failures showed lockfile creation can error if parent directories don't exist.
+    MEDS_cohort_dir.mkdir(parents=True, exist_ok=True)
+
+    # Ensure the pre-meds dir exists (should, but defensive)
+    pre_MEDS_dir.mkdir(parents=True, exist_ok=True)
+
     # First we need to set some environment variables
     command_parts = [
         f"DATASET_NAME={dataset_info.dataset_name}",
         f"DATASET_VERSION={dataset_info.raw_dataset_version}:{PKG_VERSION}:OMOP_{dataset_info.omop_version}",
-        f"EVENT_CONVERSION_CONFIG_FP={str(event_cfg_path.resolve())}",
+        f"EVENT_CONVERSION_CONFIG_FP={str(Path(event_cfg_path).resolve())}",
         f"PRE_MEDS_DIR={str(pre_MEDS_dir.resolve())}",
         f"MEDS_COHORT_DIR={str(MEDS_cohort_dir.resolve())}",
     ]
@@ -108,17 +104,21 @@ def main(cfg: DictConfig):
             f"pipeline_config_fp={str(ETL_CFG.resolve())}",
         ]
     )
-    if int(os.getenv("N_WORKERS", 1)) <= 1:
-        logger.info("Running in serial mode as N_WORKERS is not set.")
-        command_parts.append("~parallelize")
 
+    # On CI (ubuntu), running in fully-serial mode can hit a race/ordering issue
+    # in the upstream lockfile creation for shard_events outputs.
+    # Avoid disabling parallelize unless explicitly requested.
+    if os.getenv("OMOP_MEDS_FORCE_SERIAL", "0") == "1" or int(os.getenv("N_WORKERS", 1)) <= 1:
+        # Keep parallelize config present but force 1 worker when N_WORKERS isn't set.
+        os.environ.setdefault("N_WORKERS", "1")
+    
     if stage_runner_fp:
         command_parts.append(f"stage_runner_fp={stage_runner_fp}")
 
     command_parts.append("'hydra.searchpath=[pkg://MEDS_transforms.configs]'")
     run_command(command_parts, cfg)
-    # Copy codes.parquet to MEDS cohort directory
 
+    # Copy codes.parquet to MEDS cohort directory
     finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir)
 
 
@@ -148,7 +148,8 @@ def finish_codes_metadata(MEDS_cohort_dir: Path, pre_MEDS_dir: Path):
             pl.col("code")  # keep original code with suffix
         )
         # Save merged codes
-        merged.write_parquet(MEDS_cohort_dir / "metadata/codes.parquet")
+        _ensure_parent_dir(codes_dest)
+        merged.write_parquet(codes_dest)
     else:
         logger.warning(f"codes.parquet not found in {pre_MEDS_dir}")
 
