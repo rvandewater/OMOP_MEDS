@@ -204,15 +204,14 @@ def main(cfg: DictConfig) -> None:
     # Cache care_site lookup once per run; False means unavailable and skip subsequent attempts.
     care_site_lookup: pl.LazyFrame | bool | None = None
 
-    def maybe_join_visit_occurrence_care_site(
-        table_name: str, table_df: pl.LazyFrame
-    ) -> pl.LazyFrame:
+    def maybe_join_visit_occurrence_care_site(table_df: pl.LazyFrame) -> pl.LazyFrame:
+        """
+        Joins care_site_name from care_site table to visit_occurrence if care_site_id is present and care_site table is available. Caches the care_site lookup for efficiency.
+        """
         nonlocal care_site_lookup
-        if table_name != "visit_occurrence":
-            return table_df
 
         if care_site_lookup is False:
-            return table_df
+            return table_df.with_columns(care_site_name=pl.col("care_site_id"))
 
         if care_site_lookup is None:
             care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
@@ -221,7 +220,7 @@ def main(cfg: DictConfig) -> None:
                     "No care_site table found in the input directory. Skipping join with care_site."
                 )
                 care_site_lookup = False
-                return table_df
+                return table_df.with_columns(care_site_name=pl.col("care_site_id"))
 
             loaded = data_loader.load_table(care_site_in_fp)
             if loaded is None:
@@ -229,7 +228,7 @@ def main(cfg: DictConfig) -> None:
                     "Could not read care_site table from input directory. Skipping join with care_site."
                 )
                 care_site_lookup = False
-                return table_df
+                return table_df.with_columns(care_site_name=pl.col("care_site_id"))
 
             care_site_lookup = loaded.select(["care_site_id", "care_site_name"])
 
@@ -305,9 +304,8 @@ def main(cfg: DictConfig) -> None:
                 start=1,
             ):
                 processed_df = fn(df, concept_df, patient_df)
-                processed_df = maybe_join_visit_occurrence_care_site(
-                    tbl_prefix, processed_df
-                )
+                if tbl_prefix == "visit_occurrence":
+                    processed_df = maybe_join_visit_occurrence_care_site(processed_df)
 
                 processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
                 part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
@@ -350,9 +348,8 @@ def main(cfg: DictConfig) -> None:
                     f"Skipping {tbl_prefix} as it is empty after preprocessing (potentially due to filtering subjects)."
                 )
                 continue
-            processed_df = maybe_join_visit_occurrence_care_site(
-                tbl_prefix, processed_df
-            )
+            if tbl_prefix == "visit_occurrence":
+                processed_df = maybe_join_visit_occurrence_care_site(processed_df)
 
             processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
             if processed_df.limit(1).collect().is_empty():

@@ -350,6 +350,8 @@ def join_concept(
                 to_select.append(col)
                 seen.add(col)
         to_select.append(SUBJECT_ID)
+        if "table_name" in schema_names:
+            to_select.append("table_name")
         if "preferred_concept_name" in schema_names:
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
             df = df.with_columns(
