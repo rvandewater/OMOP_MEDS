@@ -119,6 +119,8 @@ def get_patient_link(
     >>> result = get_patient_link(person_df, death_df, visit_df, schema_loader)
     >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
     """
+    person_schema = person_df.collect_schema()
+
     if join_on_visit:
         # Keep only the persons that are in the visit table
         person_df = person_df.join(
@@ -132,6 +134,15 @@ def get_patient_link(
             f"We will not require a visit per patient."
             f"Found {person_df_ids.count().collect()[0, 0]} persons without visits."
         )
+    if "gender_source_concept_id" in person_schema:
+        gender = pl.col("gender_source_concept_id").map_elements(
+            lambda x: "Male" if x == 8507 else "Female" if x == 8532 else str(x),
+            return_dtype=pl.String,
+        )
+    elif "gender_concept_id" in person_schema:
+        gender = pl.col("gender_concept_id")
+    else:
+        gender = None
     if limit > 0:
         # Limit the number of persons
         logger.info(f"Limiting the number of persons to {limit}")
@@ -142,7 +153,6 @@ def get_patient_link(
         pl.col("day_of_birth").replace(0, 1).fill_null(1),
         time_unit="us",
     )
-    person_schema = person_df.collect_schema()
     if "birth_datetime" in person_schema:
         date_of_birth = (
             pl.when(pl.col("birth_datetime").is_not_null())
@@ -162,10 +172,30 @@ def get_patient_link(
                 schema=death_schema,
             )
         ).lazy()
-    date_of_death = pl.when(pl.col("death_datetime").is_not_null()).then(
-        cast_to_datetime(death_df.collect_schema(), "death_datetime")
-    )
+    # date_of_death = (
+    #     pl.when(pl.col("death_datetime").is_not_null())
+    #     .then(cast_to_datetime(death_df.collect_schema(), "death_datetime"))
+    #     .otherwise(cast_to_datetime(death_df.collect_schema(), "death_date"))
+    # )
+    death_schema = death_df.collect_schema()
+    if "death_datetime" in death_schema:
+        death_col = "death_datetime"
+    elif "death_date" in death_schema:
+        death_col = "death_date"
+    else:
+        death_col = None
 
+    if death_col is not None:
+        # Use the actual death column if present; otherwise yield None
+        date_of_death = (
+            pl.when(pl.col(death_col).is_not_null())
+            .then(cast_to_datetime(death_schema, death_col))
+            .otherwise(pl.lit(None))
+        )
+    else:
+        date_of_death = pl.lit(None)
+
+    person_df = person_df.with_columns(gender=gender)
     return (
         person_df.sort(by=date_of_birth)
         # .with_columns(pl.col(SUBJECT_ID))
@@ -177,6 +207,7 @@ def get_patient_link(
             date_of_birth.alias("date_of_birth"),
             # admission_time.alias("first_admitted_at_time"),
             date_of_death.alias("date_of_death"),
+            pl.col("gender"),
         )
         .with_columns(table_name=pl.lit("person"))
         .collect()
@@ -319,6 +350,8 @@ def join_concept(
                 to_select.append(col)
                 seen.add(col)
         to_select.append(SUBJECT_ID)
+        if "table_name" in schema_names:
+            to_select.append("table_name")
         if "preferred_concept_name" in schema_names:
             to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
             df = df.with_columns(
@@ -1316,3 +1349,234 @@ def _align_shard_to_schema(
         else:
             exprs.append(pl.lit(None).cast(dtype).alias(col))
     return lf.select(exprs)
+
+
+def calculate_nlp_features(
+    text: str | None,
+    features: list[str] | None = None,
+    prefix: str = "",
+) -> dict[str, float | int]:
+    """Calculate NLP features from text.
+
+    Args:
+        text: Input text to analyze. Can be None or empty string.
+        features: List of feature names to calculate. If None, calculates all features.
+            Available features: 'word_count', 'char_count', 'sentence_count',
+            'avg_word_length', 'avg_sentence_length', 'punctuation_count',
+            'digit_count', 'uppercase_count', 'unique_word_count', 'lexical_diversity'
+        prefix: Prefix to add to feature names in output dictionary.
+
+    Returns:
+        Dictionary mapping feature names to their calculated values.
+
+    Examples:
+        >>> calculate_nlp_features("Hello world!", features=["word_count", "char_count"])
+        {'word_count': 2, 'char_count': 12}
+        >>> calculate_nlp_features(None, features=["word_count"])
+        {'word_count': 0}
+    """
+    import re
+
+    # Default to all features if none specified
+    all_available_features = [
+        "word_count",
+        "char_count",
+        "sentence_count",
+        "avg_word_length",
+        "avg_sentence_length",
+        "punctuation_count",
+        "digit_count",
+        "uppercase_count",
+        "unique_word_count",
+        "lexical_diversity",
+    ]
+
+    if features is None:
+        features = all_available_features
+
+    # Initialize result with zeros for missing/empty text
+    if (
+        text is None
+        or text == ""
+        or (hasattr(text, "__len__") and len(str(text).strip()) == 0)
+    ):
+        return {
+            f"{prefix}_feature_{feat}" if prefix else f"feature_{feat}": 0.0
+            if "avg" in feat or "diversity" in feat
+            else 0
+            for feat in features
+        }
+
+    # Convert to string
+    text = str(text)
+
+    # Calculate all features (we'll filter later)
+    words = text.split()
+    word_count = len(words)
+    char_count = len(text)
+
+    sentences = re.split(r"[.!?]+", text)
+    sentence_count = len([s for s in sentences if s.strip()])
+
+    avg_word_length = (
+        sum(len(word.strip(".,!?;:")) for word in words) / word_count
+        if word_count > 0
+        else 0.0
+    )
+
+    avg_sentence_length = word_count / sentence_count if sentence_count > 0 else 0.0
+
+    punctuation_count = len(re.findall(r'[.,!?;:\-()"\']', text))
+    digit_count = len(re.findall(r"\d", text))
+    uppercase_count = len(re.findall(r"[A-Z]", text))
+
+    unique_words = set(word.lower().strip(".,!?;:") for word in words)
+    unique_word_count = len(unique_words)
+    lexical_diversity = unique_word_count / word_count if word_count > 0 else 0.0
+
+    # Map feature names to values
+    feature_map = {
+        "word_count": word_count,
+        "char_count": char_count,
+        "sentence_count": sentence_count,
+        "avg_word_length": round(avg_word_length, 2),
+        "avg_sentence_length": round(avg_sentence_length, 2),
+        "punctuation_count": punctuation_count,
+        "digit_count": digit_count,
+        "uppercase_count": uppercase_count,
+        "unique_word_count": unique_word_count,
+        "lexical_diversity": round(lexical_diversity, 3),
+    }
+
+    # Return only requested features with prefix
+    return {
+        f"{prefix}_feature_{feat}" if prefix else f"feature_{feat}": feature_map[feat]
+        for feat in features
+        if feat in feature_map
+    }
+
+
+def extract_nlp_features(
+    table_name: str,
+    text_column: str,
+    features: list[str] | None = None,
+    prefix: str = "",
+    output_data_cols: list[str] | None = None,
+) -> Callable[[pl.LazyFrame, pl.LazyFrame], pl.LazyFrame]:
+    """Returns a function that extracts NLP features from a text column.
+
+    All args except `table_name` are taken from the table_preprocessors.yaml.
+
+    Args:
+        table_name: Name of the table containing the text column.
+        text_column: Name of the column containing text to analyze.
+        features: List of feature names to calculate. If None, calculates all features.
+            Available features: 'word_count', 'char_count', 'sentence_count',
+            'avg_word_length', 'avg_sentence_length', 'punctuation_count',
+            'digit_count', 'uppercase_count', 'unique_word_count', 'lexical_diversity'
+        prefix: Prefix to add to feature column names. If empty, uses table name.
+        output_data_cols: List of all data columns included in the output.
+
+    Returns:
+        Function that expects the raw data stored in the `table_name` table and the
+        patient data. Both inputs are expected to be `pl.LazyFrame`s.
+
+    Examples:
+        >>> from omop_schema.utils import get_schema_loader
+        >>> func = extract_nlp_features(
+        ...     "note",
+        ...     text_column="note_text",
+        ...     features=["word_count", "char_count", "lexical_diversity"],
+        ...     prefix="note",
+        ...     output_data_cols=["note_date", "note_type_concept_id"]
+        ... )
+        >>> schema_loader = get_schema_loader(5.3)
+        >>> note_df = load_raw_file(Path("tests/demo_resources/note.csv"), schema_loader)
+        >>> person_df = load_raw_file(Path("tests/demo_resources/person.csv"), schema_loader)
+        >>> death_df = load_raw_file(Path("tests/demo_resources/death.csv"), schema_loader)
+        >>> visit_df = load_raw_file(Path("tests/demo_resources/visit_occurrence.csv"), schema_loader)
+        >>> patient_link = get_patient_link(person_df, death_df, visit_df, schema_loader)
+        >>> processed_df = func(note_df, patient_link)
+    """
+    if output_data_cols is None:
+        output_data_cols = []
+
+    if features is None:
+        features = [
+            "word_count",
+            "char_count",
+            "sentence_count",
+            "avg_word_length",
+            "avg_sentence_length",
+            "punctuation_count",
+            "digit_count",
+            "uppercase_count",
+            "unique_word_count",
+            "lexical_diversity",
+        ]
+
+    if not prefix:
+        prefix = table_name
+
+    def fn(df: pl.LazyFrame, person_df: pl.LazyFrame) -> pl.LazyFrame:
+        f"""Takes the {table_name} table and extracts NLP features from {text_column}.
+
+        The output of this process is ultimately converted to events via the `{table_name}` key in the
+        `configs/event_configs.yaml` file.
+
+        Args:
+            df: The raw {table_name} data.
+            person_df: The patient data to keep.
+
+        Returns:
+            The processed {table_name} data with NLP features.
+        """
+        # Ensure subject_id is correct type
+        df = df.with_columns(pl.col(SUBJECT_ID).cast(pl.Int64))
+
+        # Keep only persons that are in the patient table
+        df = df.join(person_df, on=SUBJECT_ID, how="semi")
+
+        # Check if text column exists
+        if text_column not in df.collect_schema().names():
+            logger.warning(
+                f"Text column '{text_column}' not found in {table_name} table"
+            )
+            return df.select(output_data_cols + [SUBJECT_ID])
+
+        # Extract NLP features
+        feature_struct = (
+            pl.col(text_column)
+            .map_elements(
+                lambda text: calculate_nlp_features(
+                    text, features=features, prefix=prefix
+                ),
+                return_dtype=pl.Struct(
+                    [
+                        pl.Field(
+                            f"{prefix}_feature_{feat}",
+                            pl.Float64
+                            if "avg" in feat or "diversity" in feat
+                            else pl.Int64,
+                        )
+                        for feat in features
+                    ]
+                ),
+            )
+            .alias("nlp_features")
+        )
+
+        df = df.with_columns(feature_struct).unnest("nlp_features")
+
+        # Add feature columns to output selection
+        feature_cols = [f"{prefix}_feature_{feat}" for feat in features]
+        to_select = [
+            col
+            for col in output_data_cols + feature_cols
+            if col in df.collect_schema().names()
+        ]
+        to_select.append(SUBJECT_ID)
+
+        return df.select(to_select)
+
+    return fn

@@ -1,0 +1,4 @@
+note_id,person_id,note_date,note_datetime,note_type_concept_id,note_class_concept_id,note_title,note_text,encoding_concept_id,language_concept_id,provider_id,visit_occurrence_id,visit_detail_id,note_source_value
+1,3589912774911670296,2023-01-01,2023-01-01 08:00:00,44814637,706391,Encounter Note,Patient reports headache.,32678,4180186,10009628,-4109348556298545250,,EHR
+2,-775517641933593374,2023-01-02,2023-01-02 09:30:00,44814638,706391,Progress Note,No chest pain today.,32678,4180186,10004235,8580174032701730018,,EHR
+3,3912882389848878631,2023-01-03,2023-01-03 10:15:00,44814637,706391,Follow-up,Follow up in 2 weeks.,32678,4180186,10026406,8054184657215056909,,EHR

@@ -104,14 +104,16 @@ def main(cfg: DictConfig):
             f"pipeline_config_fp={str(ETL_CFG.resolve())}",
         ]
     )
-
     # On CI (ubuntu), running in fully-serial mode can hit a race/ordering issue
     # in the upstream lockfile creation for shard_events outputs.
     # Avoid disabling parallelize unless explicitly requested.
-    if os.getenv("OMOP_MEDS_FORCE_SERIAL", "0") == "1" or int(os.getenv("N_WORKERS", 1)) <= 1:
+    if (
+        os.getenv("OMOP_MEDS_FORCE_SERIAL", "0") == "1"
+        or int(os.getenv("N_WORKERS", 1)) <= 1
+    ):
         # Keep parallelize config present but force 1 worker when N_WORKERS isn't set.
         os.environ.setdefault("N_WORKERS", "1")
-    
+
     if stage_runner_fp:
         command_parts.append(f"stage_runner_fp={stage_runner_fp}")
 

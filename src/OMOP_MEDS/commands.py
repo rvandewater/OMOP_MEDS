@@ -72,9 +72,15 @@ def run_command(
 
     stderr = command_out.stderr.decode()
     stdout = command_out.stdout.decode()
-    logger.info(f"Command output:\n{stdout}")
+
+    logger.info(f"Command stdout:\n{stdout}")
+    if stderr:
+        logger.warning(f"Command stderr:\n{stderr}")
 
     if command_out.returncode != 0:
-        logger.error(f"Command failed with return code {command_out.returncode}.")
-        logger.error(f"Command stderr:\n{stderr}")
-        raise ValueError(f"Command failed with return code {command_out.returncode}.")
+        raise ValueError(
+            "Command failed with return code "
+            f"{command_out.returncode}.\n"
+            f"stdout:\n{stdout}\n"
+            f"stderr:\n{stderr}"
+        )

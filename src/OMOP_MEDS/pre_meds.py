@@ -20,6 +20,7 @@ from .pre_meds_utils import (
     join_concept,
     col_selector,
     set_up_metadata,
+    extract_nlp_features,
 )
 from tqdm import tqdm
 
@@ -43,6 +44,8 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Expecting OMOP version: {omop_version}")
     omop_cfg_version = omop_cfg[omop_version]
     schema_loader = get_schema_loader(omop_version)
+    nlp_config = preprocessors.pop("nlp_features", None)
+
     if cfg.prefer_source:
         logger.warning(
             "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
@@ -74,22 +77,14 @@ def main(cfg: DictConfig) -> None:
             )
     all_fps = []
     for table in omop_cfg_version["tables"]:
-        # Check for .csv and .parquet files
         if table in IGNORE_TABLES:
             logger.info(f"Skipping {table} as it is in the ignore list.")
             continue
-        csv_files = list(OMOP_input_dir.glob(f"{table}.csv"))
-        parquet_files = list(OMOP_input_dir.glob(f"{table}.parquet"))
-        directories = list(OMOP_input_dir.glob(f"{table}"))
-
-        if csv_files:
-            all_fps.extend(csv_files)
-        elif parquet_files:
-            all_fps.extend(parquet_files)
-        elif directories:
-            all_fps.extend(directories)
-        else:
+        table_path = get_table_path(OMOP_input_dir, table)
+        if table_path is None:
             logger.warning(f"No files found for {table}")
+            continue
+        all_fps.append(table_path)
 
     def add_preprocessor(
         table_name,
@@ -103,6 +98,7 @@ def main(cfg: DictConfig) -> None:
                 raise ValueError(
                     f"OMOP version {omop_version} not supported for {table_name}."
                 )
+        # (some configs include nlp_features at the same level as versioned dicts)
         functions[table_name] = join_concept(
             table_name=table_name,
             **preprocessor_cfg,
@@ -110,6 +106,7 @@ def main(cfg: DictConfig) -> None:
         )
 
     pl.Config.set_streaming_chunk_size(50_000)  # default is ~200k–1M; tune downward
+    # Ensure any nlp_features config isn't accidentally forwarded to join_concept
     for table_name, preprocessor_cfg in preprocessors.items():
         if table_name in [
             "subject_id",
@@ -121,17 +118,23 @@ def main(cfg: DictConfig) -> None:
         ]:
             # These are config variables and not tables
             continue
-        out_fp = MEDS_input_dir
-        if (MEDS_input_dir / f"{table_name}.parquet").is_file() or (
-            MEDS_input_dir / (f"{table_name}.parquet")
-        ).is_dir():
-            output_file = (
-                MEDS_input_dir / f"{table_name}.parquet"
-                if (MEDS_input_dir / f"{table_name}.parquet").is_file()
-                else MEDS_input_dir / table_name
-            )
-            if cfg.do_overwrite:
-                # If the output file already exists and do_overwrite is True, remove it before adding the preprocessor
+        # Always register the preprocessor function so it's available later
+        add_preprocessor(table_name, preprocessor_cfg)
+
+        # Determine output file path and whether we should skip or remove it
+        output_file = (
+            MEDS_input_dir / f"{table_name}.parquet"
+            if (MEDS_input_dir / f"{table_name}.parquet").is_file()
+            else MEDS_input_dir / table_name
+        )
+
+        if output_file.exists():
+            if not cfg.do_overwrite:
+                logger.info(
+                    f"{str(output_file.resolve())} already exists and do_overwrite=False, so skipping {table_name}."
+                )
+                continue
+            else:
                 logger.info(
                     f"{str(output_file.resolve())} already exists but do_overwrite=True, so removing and re-processing {table_name}."
                 )
@@ -139,16 +142,26 @@ def main(cfg: DictConfig) -> None:
                     output_file.unlink()
                 elif output_file.is_dir():
                     shutil.rmtree(output_file)
-                add_preprocessor(table_name, preprocessor_cfg)
-            else:
-                # If the output file already exists and do_overwrite is False, skip adding the preprocessor for this table
-                logger.info(
-                    f"{str(output_file.resolve())} already exists and do_overwrite=False, so skipping {table_name}."
-                )
-                continue
-        else:
-            # If the output file does not exist, add the preprocessor for this table
-            add_preprocessor(table_name, preprocessor_cfg)
+
+        # If NLP features are configured, wrap the function
+        if nlp_config and nlp_config.get("enabled", False):
+            base_fn = functions[table_name]
+            nlp_fn = extract_nlp_features(
+                table_name=table_name,
+                text_column=nlp_config["text_column"],
+                features=nlp_config.get("features"),
+                prefix=nlp_config.get("prefix", ""),
+                output_data_cols=nlp_config.get("output_data_cols", []),
+            )
+
+            # Compose the two functions
+            def composed_fn(
+                df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
+            ) -> pl.LazyFrame:
+                df = base_fn(df, concept_df, person_df)
+                return nlp_fn(df, person_df)
+
+            functions[table_name] = composed_fn
 
     if premeds_cfg.get("metadata_cols_to_drop", False):
         metadata_cols_to_drop = premeds_cfg.get(
@@ -191,15 +204,14 @@ def main(cfg: DictConfig) -> None:
     # Cache care_site lookup once per run; False means unavailable and skip subsequent attempts.
     care_site_lookup: pl.LazyFrame | bool | None = None
 
-    def maybe_join_visit_occurrence_care_site(
-        table_name: str, table_df: pl.LazyFrame
-    ) -> pl.LazyFrame:
+    def maybe_join_visit_occurrence_care_site(table_df: pl.LazyFrame) -> pl.LazyFrame:
+        """
+        Joins care_site_name from care_site table to visit_occurrence if care_site_id is present and care_site table is available. Caches the care_site lookup for efficiency.
+        """
         nonlocal care_site_lookup
-        if table_name != "visit_occurrence":
-            return table_df
 
         if care_site_lookup is False:
-            return table_df
+            return table_df.with_columns(care_site_name=pl.col("care_site_id"))
 
         if care_site_lookup is None:
             care_site_in_fp = get_table_path(OMOP_input_dir, "care_site")
@@ -208,7 +220,7 @@ def main(cfg: DictConfig) -> None:
                     "No care_site table found in the input directory. Skipping join with care_site."
                 )
                 care_site_lookup = False
-                return table_df
+                return table_df.with_columns(care_site_name=pl.col("care_site_id"))
 
             loaded = data_loader.load_table(care_site_in_fp)
             if loaded is None:
@@ -216,7 +228,7 @@ def main(cfg: DictConfig) -> None:
                     "Could not read care_site table from input directory. Skipping join with care_site."
                 )
                 care_site_lookup = False
-                return table_df
+                return table_df.with_columns(care_site_name=pl.col("care_site_id"))
 
             care_site_lookup = loaded.select(["care_site_id", "care_site_name"])
 
@@ -292,9 +304,8 @@ def main(cfg: DictConfig) -> None:
                 start=1,
             ):
                 processed_df = fn(df, concept_df, patient_df)
-                processed_df = maybe_join_visit_occurrence_care_site(
-                    tbl_prefix, processed_df
-                )
+                if tbl_prefix == "visit_occurrence":
+                    processed_df = maybe_join_visit_occurrence_care_site(processed_df)
 
                 processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
                 part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
@@ -337,9 +348,8 @@ def main(cfg: DictConfig) -> None:
                     f"Skipping {tbl_prefix} as it is empty after preprocessing (potentially due to filtering subjects)."
                 )
                 continue
-            processed_df = maybe_join_visit_occurrence_care_site(
-                tbl_prefix, processed_df
-            )
+            if tbl_prefix == "visit_occurrence":
+                processed_df = maybe_join_visit_occurrence_care_site(processed_df)
 
             processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
             if processed_df.limit(1).collect().is_empty():

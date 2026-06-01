@@ -112,6 +112,7 @@ OMOP_MEDS \
 - `++limit_subjects`: Limit the number of subjects to process.
 - `++prefer_source`: Set to `True` to prefer source concepts over mapped concepts.
 - `++join_on_visit`: Set to `True` to join person table on having any associated visits.
+- `++process_notes`: Set to `True` to .
 
 Pre-meds batching settings. This is relevant if (some of) your input tables are very large, and you want to process
 them in batches. This can be useful to reduce memory usage, but it also increases the runtime, so use with caution.
