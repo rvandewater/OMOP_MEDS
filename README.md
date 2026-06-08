@@ -154,6 +154,11 @@ We use the demo dataset for MIMIC-IV in the OMOP format, which is a subset of th
 This dataset downloaded from Physionet does not include the standard dictionary linking definitions but should otherwise
 be functional
 
+### Future demo resources
+
+- Synthea OMOP from eudamonia.
+- Background Pancreatic Cancer Synthea To OMOP Database: https://zenodo.org/records/17722472.
+
 ## Particularities
 
 - Care site is added to the visit as text
