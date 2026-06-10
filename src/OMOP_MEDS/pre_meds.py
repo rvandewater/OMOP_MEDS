@@ -1,3 +1,5 @@
+# ruff: noqa: E402
+
 """Performs pre-MEDS data wrangling for OMOP datasets."""
 
 import os
@@ -5,13 +7,32 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-os.environ["POLARS_MAX_THREADS"] = str(
-    max(4, len(os.sched_getaffinity(0)) - 2)
-    if hasattr(os, "sched_getaffinity")  # Linux only
-    else max(4, (os.cpu_count() or 8) - 2)  # macOS / Windows
-)
 
-os.environ["POLARS_STREAMING_CHUNK_SIZE"] = "100000"
+# os.environ["POLARS_MAX_THREADS"] = str(
+#     max(4, len(os.sched_getaffinity(0)) - 2)
+#     if hasattr(os, "sched_getaffinity")  # Linux only
+#     else max(4, (os.cpu_count() or 8) - 2)  # macOS / Windows
+# )
+#
+# os.environ["POLARS_STREAMING_CHUNK_SIZE"] = "100000"
+def setup_polars_runtime(
+    reserve: int = 4, minimum_threads: int = 4, chunk_size: int = 200_000
+):
+    try:
+        threads = max(minimum_threads, len(os.sched_getaffinity(0)) - reserve)
+    except Exception:
+        threads = max(minimum_threads, (os.cpu_count() or minimum_threads) - reserve)
+
+    threads = min(threads, 12)
+
+    os.environ["POLARS_MAX_THREADS"] = str(threads)
+    os.environ["POLARS_STREAMING_CHUNK_SIZE"] = str(chunk_size)
+    return threads, chunk_size
+
+
+# Call BEFORE importing polars
+threads, chunk_size = setup_polars_runtime()
+print(f"POLARS_MAX_THREADS={threads}, POLARS_STREAMING_CHUNK_SIZE={chunk_size}")
 import polars as pl
 import polars.selectors as cs
 
