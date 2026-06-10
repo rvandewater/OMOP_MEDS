@@ -31,7 +31,7 @@ MEDS_cohort_dir: ${root_output_dir}/MEDS_cohort
 join_on_visit: False
 
 # Selective low-memory input batching for very large parquet input.
-pre_meds_chunked_tables: ["measurement", "observation"]
+pre_meds_chunked_tables: ["measurement", "observation", "note"]
 pre_meds_batching_row_threshold: 10000000
 pre_meds_batch_mode: auto
 pre_meds_batch_size_shards: 1
