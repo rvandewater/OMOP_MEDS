@@ -1,8 +1,9 @@
+import logging
 from pathlib import Path
 
 import polars as pl
 
-from OMOP_MEDS.__main__ import logger, _ensure_parent_dir
+logger = logging.getLogger(__name__)
 
 
 def finish_codes_metadata(MEDS_cohort_dir: Path, pre_MEDS_dir: Path):
@@ -35,3 +36,8 @@ def finish_codes_metadata(MEDS_cohort_dir: Path, pre_MEDS_dir: Path):
         merged.write_parquet(codes_dest)
     else:
         logger.warning(f"codes.parquet not found in {pre_MEDS_dir}")
+
+
+def _ensure_parent_dir(path: Path) -> None:
+    """Ensure parent directory exists for a file path."""
+    path.parent.mkdir(parents=True, exist_ok=True)

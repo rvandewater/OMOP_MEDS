@@ -21,11 +21,6 @@ from .pre_meds_utils import rename_demo_files
 logger = logging.getLogger(__name__)
 
 
-def _ensure_parent_dir(path: Path) -> None:
-    """Ensure parent directory exists for a file path."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-
 @hydra.main(
     version_base=None, config_path=str(MAIN_CFG.parent), config_name=MAIN_CFG.stem
 )
