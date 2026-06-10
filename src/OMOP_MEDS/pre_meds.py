@@ -1,9 +1,17 @@
 """Performs pre-MEDS data wrangling for OMOP datasets."""
 
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
 
+os.environ["POLARS_MAX_THREADS"] = str(
+    max(4, len(os.sched_getaffinity(0)) - 2)
+    if hasattr(os, "sched_getaffinity")  # Linux only
+    else max(4, (os.cpu_count() or 8) - 2)  # macOS / Windows
+)
+
+os.environ["POLARS_STREAMING_CHUNK_SIZE"] = "100000"
 import polars as pl
 import polars.selectors as cs
 
