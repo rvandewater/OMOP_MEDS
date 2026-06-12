@@ -224,3 +224,4 @@ note:
     text_value: col(note_title)
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
+    link_id: col(note_id)
