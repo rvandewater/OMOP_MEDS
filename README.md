@@ -94,6 +94,18 @@ We make a few important choices that have impact on your downstream training and
     Watch for potential information leakage. You can change your table configs in pre_MEDS.yaml and event_configs.yaml
 - This package is more resource intensive, please adjust your `n_shards` and watch your memory usage.
 
+## Different package versions
+
+We have different versions of the ETL pipeline, which are designed for different use cases:
+
+```bash
+pip install OMOP_MEDS[dev] # for development and testing
+pip install OMOP_MEDS[tests] # for running tests
+pip install OMOP_MEDS[local_parallelism] # for local parallelization with hydra-joblib-launcher
+pip install OMOP_MEDS[slurm_parallelism] # for parallelization with slurm using hydra-submitit-launcher
+pip install OMOP_MEDS[large_data] # for handling large datasets with polars (rt64), more than 3.2B rows
+```
+
 ## Pre-MEDS settings
 
 The following settings can be used to configure the pre-MEDS steps.
