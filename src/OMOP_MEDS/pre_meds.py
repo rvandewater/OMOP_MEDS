@@ -14,8 +14,7 @@ os.environ["POLARS_MAX_THREADS"] = str(
 os.environ["POLARS_STREAMING_CHUNK_SIZE"] = "100000"
 import polars as pl
 import polars.selectors as cs
-
-from loguru import logger
+import logging
 from MEDS_transforms.utils import get_shard_prefix
 from omegaconf import DictConfig
 from omop_schema.utils import get_schema_loader
@@ -31,6 +30,8 @@ from .pre_meds_utils import (
     extract_nlp_features,
 )
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 # Name of the dataset
 # Column name for admission ID associated with this particular admission
