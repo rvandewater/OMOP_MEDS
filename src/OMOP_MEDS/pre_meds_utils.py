@@ -72,6 +72,51 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
         # raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
+def build_note_event_datetime(
+    schema: Any,
+    use_last_edit_if_later: bool = False,
+    note_date_col: str = "note_date",
+    note_datetime_col: str = "note_datetime",
+    edit_date_col: str = "xtn_note_last_edit_date",
+    edit_datetime_col: str = "xtn_note_last_edit_datetime",
+) -> pl.Expr:
+    note_ts = None
+    if note_datetime_col in schema:
+        note_ts = cast_to_datetime(schema, note_datetime_col, move_to_end_of_day=False)
+
+    if note_date_col in schema:
+        note_date_ts = cast_to_datetime(schema, note_date_col, move_to_end_of_day=True)
+        note_ts = (
+            note_date_ts if note_ts is None else pl.coalesce(note_ts, note_date_ts)
+        )
+
+    if not use_last_edit_if_later:
+        return note_ts.alias("time")
+
+    edit_ts = None
+    if edit_datetime_col in schema:
+        edit_ts = cast_to_datetime(schema, edit_datetime_col, move_to_end_of_day=False)
+
+    if edit_date_col in schema:
+        edit_date_ts = cast_to_datetime(schema, edit_date_col, move_to_end_of_day=True)
+        edit_ts = (
+            edit_date_ts if edit_ts is None else pl.coalesce(edit_ts, edit_date_ts)
+        )
+
+    if edit_ts is None:
+        return note_ts.alias("time")
+
+    if note_ts is None:
+        return edit_ts.alias("time")
+
+    return (
+        pl.when(edit_ts.is_not_null() & (edit_ts > note_ts))
+        .then(edit_ts)
+        .otherwise(note_ts)
+        .alias("time")
+    )
+
+
 def get_patient_link(
     person_df: pl.LazyFrame,
     death_df: pl.LazyFrame,
