@@ -124,6 +124,10 @@ The batching settings are as follows:
 - `batch_size_shards`: Number of shards per batch in "by_shards" mode (default: 1).
 - `batch_input_rows`: Max rows per batch in "by_rows" mode (default: 0, disabled).
 
+Also check out the `main.yaml` config file for more default settings and details on how to configure the pre-MEDS steps,
+which can be found here:
+src/OMOP_MEDS/configs/main.yaml
+
 ## MEDS-transforms settings
 
 If you want to convert a large dataset, you can use parallelization with MEDS-transforms
