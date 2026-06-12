@@ -29,6 +29,7 @@ dev = ["pre-commit<4", "mdformat-admon"]
 tests = ["pytest", "pytest-cov", "hydra-joblib-launcher"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
+large_data = ["polars[rt64]"]
 
 [project.scripts]
 MEDS_extract-OMOP = "OMOP_MEDS.__main__:main"
