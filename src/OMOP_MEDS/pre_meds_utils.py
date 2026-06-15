@@ -72,49 +72,167 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
         # raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
-def build_note_event_datetime(
+def build_preferred_event_datetime(
     schema: Any,
-    use_last_edit_if_later: bool = False,
-    note_date_col: str = "note_date",
-    note_datetime_col: str = "note_datetime",
-    edit_date_col: str = "xtn_note_last_edit_date",
-    edit_datetime_col: str = "xtn_note_last_edit_datetime",
+    primary_datetime_col: Optional[str] = None,
+    primary_date_col: Optional[str] = None,
+    override_datetime_col: Optional[str] = None,
+    override_date_col: Optional[str] = None,
+    use_override_if_later: bool = True,
+    output_col: str = "preferred_time",
 ) -> pl.Expr:
-    note_ts = None
-    if note_datetime_col in schema:
-        note_ts = cast_to_datetime(schema, note_datetime_col, move_to_end_of_day=False)
+    """Construct a Polars expression that resolves a single canonical event timestamp
+    from up to two date/datetime column pairs (a *primary* pair and an optional
+    *override* pair). We hereby try to get the most accurate (non-temporal-leakage) timestamp.
 
-    if note_date_col in schema:
-        note_date_ts = cast_to_datetime(schema, note_date_col, move_to_end_of_day=True)
-        note_ts = (
-            note_date_ts if note_ts is None else pl.coalesce(note_ts, note_date_ts)
+    Resolution order
+    ----------------
+    1. ``primary_datetime_col`` is used when present and non-null.
+    2. ``primary_date_col`` is the fallback; it is promoted to **end-of-day**
+       (23:59:59) so that comparisons with full datetimes remain sensible.
+    3. If ``use_override_if_later=True`` *and* the resolved override timestamp
+       is strictly **greater than** the primary timestamp, the override wins.
+       This is generally seen as a "last edit date".
+    4. If no resolvable column is found in the schema, a null ``output_col``
+       expression is returned.
+
+    All casts go through ``cast_to_datetime`` so string / ``pl.Date`` /
+    ``pl.Datetime`` column types are all handled uniformly.
+
+    Parameters
+    ----------
+    schema:
+        Mapping-like schema (e.g. from ``df.collect_schema()``) used to detect
+        which columns are actually present in the table.
+    primary_datetime_col:
+        Preferred full-timestamp column.  ``None`` means "not configured".
+    primary_date_col:
+        Date-only fallback column.  ``None`` means "not configured".
+    override_datetime_col:
+        Override full-timestamp column (e.g. ``xtn_note_last_edit_datetime``).
+    override_date_col:
+        Override date-only column (e.g. ``xtn_note_last_edit_date``).
+    use_override_if_later:
+        When ``True``, replace the primary timestamp with the override when the
+        override is non-null **and strictly later**.
+    output_col:
+        Alias for the resulting expression.  Defaults to ``"time"`` to match
+        the MEDS event schema convention.
+
+    Returns
+    -------
+    pl.Expr
+        A lazy Polars expression aliased as ``output_col``.
+    """
+    # ── 1. Build primary timestamp ──────────────────────────────────────────
+    primary_ts: Optional[pl.Expr] = None
+
+    if primary_datetime_col and primary_datetime_col in schema:
+        primary_ts = cast_to_datetime(
+            schema, primary_datetime_col, move_to_end_of_day=False
         )
 
-    if not use_last_edit_if_later:
-        return note_ts.alias("time")
+    if primary_date_col and primary_date_col in schema:
+        date_ts = cast_to_datetime(schema, primary_date_col, move_to_end_of_day=True)
+        primary_ts = date_ts if primary_ts is None else pl.coalesce(primary_ts, date_ts)
 
-    edit_ts = None
-    if edit_datetime_col in schema:
-        edit_ts = cast_to_datetime(schema, edit_datetime_col, move_to_end_of_day=False)
+    # ── 2. No override configured or not requested ──────────────────────────
+    if not use_override_if_later:
+        if primary_ts is None:
+            return pl.lit(None).cast(pl.Datetime("us")).alias(output_col)
+        return primary_ts.alias(output_col)
 
-    if edit_date_col in schema:
-        edit_date_ts = cast_to_datetime(schema, edit_date_col, move_to_end_of_day=True)
-        edit_ts = (
-            edit_date_ts if edit_ts is None else pl.coalesce(edit_ts, edit_date_ts)
+    # ── 3. Build override timestamp ─────────────────────────────────────────
+    override_ts: Optional[pl.Expr] = None
+
+    if override_datetime_col and override_datetime_col in schema:
+        override_ts = cast_to_datetime(
+            schema, override_datetime_col, move_to_end_of_day=False
         )
 
-    if edit_ts is None:
-        return note_ts.alias("time")
+    if override_date_col and override_date_col in schema:
+        ov_date_ts = cast_to_datetime(
+            schema, override_date_col, move_to_end_of_day=True
+        )
+        override_ts = (
+            ov_date_ts if override_ts is None else pl.coalesce(override_ts, ov_date_ts)
+        )
 
-    if note_ts is None:
-        return edit_ts.alias("time")
+    # ── 4. Merge: pick override only when non-null AND strictly later ────────
+    if override_ts is None:
+        if primary_ts is None:
+            return pl.lit(None).cast(pl.Datetime("us")).alias(output_col)
+        return primary_ts.alias(output_col)
+
+    if primary_ts is None:
+        return override_ts.alias(output_col)
 
     return (
-        pl.when(edit_ts.is_not_null() & (edit_ts > note_ts))
-        .then(edit_ts)
-        .otherwise(note_ts)
-        .alias("time")
+        pl.when(override_ts.is_not_null() & (override_ts > primary_ts))
+        .then(override_ts)
+        .otherwise(primary_ts)
+        .alias(output_col)
     )
+
+
+# def build_note_event_datetime(
+#     schema: Any,
+#     use_last_edit_if_later: bool = False,
+#     note_date_col: str = "note_date",
+#     note_datetime_col: str = "note_datetime",
+#     edit_date_col: str = "xtn_note_last_edit_date",
+#     edit_datetime_col: str = "xtn_note_last_edit_datetime",
+# ) -> pl.Expr:
+#     """Construct a Polars expression that computes a unified note timestamp ("time") from possible note and edit date/datetime columns.
+#     This function:
+#     Uses note_datetime if available, otherwise note_date (moved to end-of-day).
+#     Optionally considers edit_datetime/edit_date and, if use_last_edit_if_later=True, returns the later of edit and note timestamps.
+#     Casts strings/dates to pl.Datetime using cast_to_datetime, preserving microsecond precision.
+#
+#     If no relevant columns exist, returns an expression producing a null "time" (pl.lit(None).alias("time")).
+#     Args:     schema: Mapping-like schema (from pyarrow_to_polars_schema) used to detect available columns and types.
+#     use_last_edit_if_later (bool): If True, prefer the edit timestamp when it is later than the note timestamp.
+#     note_date_col (str): Column name for note date (date-only).
+#     note_datetime_col (str): Column name for note datetime (full timestamp).
+#     edit_date_col (str): Column name for edit date (date-only).
+#     edit_datetime_col (str): Column name for edit datetime (full timestamp).
+#     Returns:     pl.Expr: A Polars expression aliased as "time" that yields the chosen timestamp or null.
+#     Example:     expr = build_note_event_datetime(schema, use_last_edit_if_later=True)"""
+#     note_ts = None
+#     if note_datetime_col in schema:
+#         note_ts = cast_to_datetime(schema, note_datetime_col, move_to_end_of_day=False)
+#
+#     if note_date_col in schema:
+#         note_date_ts = cast_to_datetime(schema, note_date_col, move_to_end_of_day=True)
+#         note_ts = (
+#             note_date_ts if note_ts is None else pl.coalesce(note_ts, note_date_ts)
+#         )
+#
+#     if not use_last_edit_if_later:
+#         return note_ts.alias("time")
+#
+#     edit_ts = None
+#     if edit_datetime_col in schema:
+#         edit_ts = cast_to_datetime(schema, edit_datetime_col, move_to_end_of_day=False)
+#
+#     if edit_date_col in schema:
+#         edit_date_ts = cast_to_datetime(schema, edit_date_col, move_to_end_of_day=True)
+#         edit_ts = (
+#             edit_date_ts if edit_ts is None else pl.coalesce(edit_ts, edit_date_ts)
+#         )
+#
+#     if edit_ts is None:
+#         return note_ts.alias("time")
+#
+#     if note_ts is None:
+#         return edit_ts.alias("time")
+#
+#     return (
+#         pl.when(edit_ts.is_not_null() & (edit_ts > note_ts))
+#         .then(edit_ts)
+#         .otherwise(note_ts)
+#         .alias("preferred_time")
+#     )
 
 
 def get_patient_link(

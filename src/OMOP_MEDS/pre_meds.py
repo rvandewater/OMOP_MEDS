@@ -15,8 +15,8 @@ os.environ["POLARS_STREAMING_CHUNK_SIZE"] = "100000"
 import polars as pl
 import polars.selectors as cs
 import logging
+from omegaconf import OmegaConf, DictConfig
 from MEDS_transforms.utils import get_shard_prefix
-from omegaconf import DictConfig
 from omop_schema.utils import get_schema_loader
 
 from . import dataset_info, omop_cfg, premeds_cfg
@@ -28,6 +28,7 @@ from .pre_meds_utils import (
     col_selector,
     set_up_metadata,
     extract_nlp_features,
+    build_preferred_event_datetime,
 )
 from tqdm import tqdm
 
@@ -99,10 +100,12 @@ def main(cfg: DictConfig) -> None:
         table_name,
         preprocessor_cfg,
     ):
+        datetime_resolver_cfg = None
         logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
         if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
             if omop_version in preprocessor_cfg:
                 preprocessor_cfg = preprocessor_cfg[omop_version]
+                datetime_resolver_cfg = preprocessor_cfg.pop("datetime_resolver", None)
             else:
                 raise ValueError(
                     f"OMOP version {omop_version} not supported for {table_name}."
@@ -113,6 +116,31 @@ def main(cfg: DictConfig) -> None:
             **preprocessor_cfg,
             prefer_source=cfg.prefer_source,
         )
+        if datetime_resolver_cfg is not None:
+            functions[table_name] = wrap_with_datetime_resolver(
+                functions[table_name], datetime_resolver_cfg
+            )
+
+    def wrap_with_datetime_resolver(
+        base_fn,
+        resolver_cfg: DictConfig,
+    ):
+        """Wraps a join_concept function with build_preferred_event_datetime.
+
+        The resolver expression is applied *after* join_concept so the full
+        table schema (including any concept-joined columns) is available.
+        """
+        resolver_kwargs = OmegaConf.to_container(resolver_cfg, resolve=True)
+
+        def fn(
+            df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
+        ) -> pl.LazyFrame:
+            df = base_fn(df, concept_df, person_df)
+            schema = df.collect_schema()
+            time_expr = build_preferred_event_datetime(schema, **resolver_kwargs)
+            return df.with_columns(time_expr)
+
+        return fn
 
     pl.Config.set_streaming_chunk_size(50_000)  # default is ~200k–1M; tune downward
     # Ensure any nlp_features config isn't accidentally forwarded to join_concept
@@ -152,6 +180,13 @@ def main(cfg: DictConfig) -> None:
                 elif output_file.is_dir():
                     shutil.rmtree(output_file)
 
+        # Compose two functions
+        def composed_fn(
+            df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
+        ) -> pl.LazyFrame:
+            df = base_fn(df, concept_df, person_df)
+            return nlp_fn(df, person_df)
+
         # If NLP features are configured, wrap the function
         if nlp_config and nlp_config.get("enabled", False):
             base_fn = functions[table_name]
@@ -162,14 +197,6 @@ def main(cfg: DictConfig) -> None:
                 prefix=nlp_config.get("prefix", ""),
                 output_data_cols=nlp_config.get("output_data_cols", []),
             )
-
-            # Compose the two functions
-            def composed_fn(
-                df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
-            ) -> pl.LazyFrame:
-                df = base_fn(df, concept_df, person_df)
-                return nlp_fn(df, person_df)
-
             functions[table_name] = composed_fn
 
     if premeds_cfg.get("metadata_cols_to_drop", False):

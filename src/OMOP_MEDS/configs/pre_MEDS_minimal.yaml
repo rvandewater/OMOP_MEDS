@@ -578,6 +578,13 @@ note:
         "concept_code_source_concept_id",
         "concept_name_source_concept_id",
       ]
+    datetime_resolver:
+      primary_datetime_col: note_datetime # preferred; full timestamp
+      primary_date_col: note_date # fallback; promoted to 23:59:59
+      override_datetime_col: xtn_note_last_edit_datetime # optional XTN column
+      override_date_col: xtn_note_last_edit_date # optional XTN column
+      use_override_if_later: false # set true to use last-edit time
+      output_col: time
   5.4:
     reference_cols: ["note_type_concept_id"] # TODO check if correct join column
     output_data_cols:
@@ -609,6 +616,13 @@ note:
         "concept_code_source_concept_id",
         "concept_name_source_concept_id",
       ]
+    datetime_resolver:
+      primary_datetime_col: note_datetime # preferred; full timestamp
+      primary_date_col: note_date # fallback; promoted to 23:59:59
+      override_datetime_col: xtn_note_last_edit_datetime # optional XTN column
+      override_date_col: xtn_note_last_edit_date # optional XTN column
+      use_override_if_later: false # set true to use last-edit time
+      output_col: time
 # Todo: how to handle source ids for condition_era
 condition_era:
   reference_cols: ["condition_concept_id"]
