@@ -5,8 +5,8 @@ from OMOP_MEDS.pre_meds_utils import (
     calculate_nlp_features,
     extract_nlp_features,
     get_patient_link,
-    load_raw_file,
 )
+from OMOP_MEDS.pre_meds_data_loader import load_raw_file
 
 DEMO_DIR = Path(__file__).resolve().parent / "demo_resources"
 
@@ -17,6 +17,7 @@ def test_extract_nlp_features_from_demo_notes():
     death_df = load_raw_file(DEMO_DIR / "death.csv", schema_loader)
     visit_df = load_raw_file(DEMO_DIR / "visit_occurrence.csv", schema_loader)
     note_df = pl.scan_csv(DEMO_DIR / "note.csv")
+    note_height = note_df.select(pl.len()).collect().item()
     patient_link = get_patient_link(
         person_df=person_df,
         death_df=death_df,
@@ -31,15 +32,17 @@ def test_extract_nlp_features_from_demo_notes():
         output_data_cols=["note_id", "note_date", "note_type_concept_id"],
     )
     out = fn(note_df, patient_link).collect().sort("note_id")
-    assert out.height == 3
+    assert out.height == note_height
     assert out["person_id"].to_list() == [
         3589912774911670296,
         -775517641933593374,
         3912882389848878631,
+        2601314283911413076,
+        7155255168997124770,
     ]
-    assert out["note_feature_word_count"].to_list() == [3, 4, 5]
-    assert out["note_feature_char_count"].to_list() == [25, 20, 21]
-    assert out["note_feature_lexical_diversity"].to_list() == [1.0, 1.0, 1.0]
+    assert out["note_feature_word_count"].to_list() == [3, 4, 5, 4, 4]
+    assert out["note_feature_char_count"].to_list() == [25, 20, 21, 34, 31]
+    assert out["note_feature_lexical_diversity"].to_list() == [1.0, 1.0, 1.0, 1.0, 1.0]
     assert "note_text" not in out.columns
 
 

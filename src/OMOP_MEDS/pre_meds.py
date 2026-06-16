@@ -22,7 +22,6 @@ from omop_schema.utils import get_schema_loader
 from . import dataset_info, omop_cfg, premeds_cfg
 from .pre_meds_utils import (
     DATASET_NAME,
-    ShardedTableDataLoader,
     get_table_path,
     join_concept,
     col_selector,
@@ -30,6 +29,7 @@ from .pre_meds_utils import (
     extract_nlp_features,
     build_preferred_event_datetime,
 )
+from .pre_meds_data_loader import ShardedTableDataLoader
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -137,8 +137,12 @@ def main(cfg: DictConfig) -> None:
         ) -> pl.LazyFrame:
             df = base_fn(df, concept_df, person_df)
             schema = df.collect_schema()
+            # collected = df.collect()
             time_expr = build_preferred_event_datetime(schema, **resolver_kwargs)
-            return df.with_columns(time_expr)
+            df = df.with_columns(time_expr)
+            # collected_new = df.collect()
+            logger.info(df.collect_schema())
+            return df
 
         return fn
 
@@ -207,6 +211,10 @@ def main(cfg: DictConfig) -> None:
         selector = ~col_selector(
             columns=metadata_cols_to_drop.get("columns", []),
             patterns=metadata_cols_to_drop.get("patterns", []),
+        )
+        allowed_output_cols = premeds_cfg.get("output_data_cols", [])
+        selector = (~selector) | (
+            cs.by_name(list(allowed_output_cols)) if allowed_output_cols else cs.all()
         )
     else:
         selector = cs.all()

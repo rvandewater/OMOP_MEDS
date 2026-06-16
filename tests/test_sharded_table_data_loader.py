@@ -3,7 +3,7 @@ from pathlib import Path
 import polars as pl
 import pyarrow as pa
 
-from OMOP_MEDS.pre_meds_utils import ShardedTableDataLoader
+from OMOP_MEDS.pre_meds_data_loader import ShardedTableDataLoader
 
 
 class _SchemaLoaderStub:
