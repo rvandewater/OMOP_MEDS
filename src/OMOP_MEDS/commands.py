@@ -26,7 +26,6 @@ def run_command(
         ...     print(cmd)
         ...     return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b"", stderr=b"")
         >>> def fake_shell_fail(cmd, shell, capture_output):
-        ...     print(cmd)
         ...     return subprocess.CompletedProcess(args=cmd, returncode=1, stdout=b"", stderr=b"")
         >>> run_command(["echo", "hello"], runner_fn=fake_shell_succeed)
         echo hello
@@ -34,6 +33,10 @@ def run_command(
         Traceback (most recent call last):
             ...
         ValueError: Command failed with return code 1.
+        stdout:
+        <BLANKLINE>
+        stderr:
+        <BLANKLINE>
         >>> run_command(["hello"], cfg={"do_overwrite": True}, runner_fn=fake_shell_succeed)
         hello ++do_overwrite=True
         >>> run_command(["hello"], cfg={"do_overwrite": False}, runner_fn=fake_shell_succeed)

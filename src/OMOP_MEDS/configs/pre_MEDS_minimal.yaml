@@ -556,6 +556,8 @@ note:
         "note_id",
         "note_date",
         "note_datetime",
+        "xtn_note_last_edit_datetime",
+        "xtn_note_last_edit_date",
         "note_type_concept_id",
         "note_text",
         "note_title",
@@ -569,6 +571,7 @@ note:
         "source_concept_name",
         "encoding_source_value",
         "language_source_value",
+        "preferred_time",
       ]
     concept_cols:
       [
@@ -578,6 +581,11 @@ note:
         "concept_code_source_concept_id",
         "concept_name_source_concept_id",
       ]
+    datetime_resolver:
+      primary_datetime_col: note_datetime # preferred; full timestamp
+      primary_date_col: note_date # fallback; promoted to 23:59:59
+      override_datetime_col: xtn_note_last_edit_datetime # optional XTN column
+      override_date_col: xtn_note_last_edit_date # optional XTN column
   5.4:
     reference_cols: ["note_type_concept_id"] # TODO check if correct join column
     output_data_cols:
@@ -585,6 +593,8 @@ note:
         "note_id",
         "note_date",
         "note_datetime",
+        "xtn_note_last_edit_datetime",
+        "xtn_note_last_edit_date",
         "note_type_concept_id",
         "note_text",
         "note_title",
@@ -600,6 +610,7 @@ note:
         "language_source_value",
         "note_event_id",
         "note_event_field_concept_id",
+        "preferred_time",
       ]
     concept_cols:
       [
@@ -609,6 +620,11 @@ note:
         "concept_code_source_concept_id",
         "concept_name_source_concept_id",
       ]
+    datetime_resolver:
+      primary_datetime_col: note_datetime # preferred; full timestamp
+      primary_date_col: note_date # fallback; promoted to 23:59:59
+      override_datetime_col: xtn_note_last_edit_datetime # optional XTN column
+      override_date_col: xtn_note_last_edit_date # optional XTN column
 # Todo: how to handle source ids for condition_era
 condition_era:
   reference_cols: ["condition_concept_id"]

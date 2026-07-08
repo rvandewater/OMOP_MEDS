@@ -168,7 +168,33 @@ export N_SUBJECTS_PER_SHARD=100000
 
 We use the demo dataset for MIMIC-IV in the OMOP format, which is a subset of the MIMIC-IV dataset.
 This dataset downloaded from Physionet does not include the standard dictionary linking definitions but should otherwise
-be functional
+be functional. We also include a small sample of synthetic (LLM-generated) data in the test/demo_resources directory, which can be used for testing and development purposes.
+
+## Advanced datetime resolution
+
+To handle datetime resolution in a more flexible way, you can configure the `datetime_resolver` settings in your config file.
+This allows you to specify which columns to use for determining the datetime of events, with support for both primary and override columns.
+The primary purpose of this is to prevent information leakage by using the last edit datetime (of notes) instead of the original note datetime, if available.
+The following block can be found in the pre_MEDS.yaml config file, and you can adjust the column names based on your dataset's schema:
+
+```yaml
+datetime_resolver:
+  primary_datetime_col: note_datetime     # preferred; full timestamp
+  primary_date_col: note_date     # fallback; promoted to 23:59:59
+  override_datetime_col: xtn_note_last_edit_datetime     # optional XTN column
+  override_date_col: xtn_note_last_edit_date     # optional XTN column
+```
+
+The following is an example of how the data then looks like:
+
+| note_date  | note_datetime       | xtn_note_last_edit_date | xtn_note_last_edit_datetime |
+| ---------- | ------------------- | ----------------------- | --------------------------- |
+| 2023-01-01 | 2023-01-01 08:00:00 | 2023-01-01              | 2023-01-01 08:05:00         |
+| 2023-01-02 | 2023-01-02 09:30:00 | 2023-01-02              | 2023-01-02 10:00:00         |
+
+In this case it will prefer the `xtn_note_last_edit_datetime` column for the datetime of the event (if it is in fact later in time),
+which can help to prevent information leakage in some cases, but it will fall back to `note_datetime`/`note_date` if the override column is not available.
+See `build_preferred_event_datetime` function in the code for more details on how this works.
 
 ## Particularities
 

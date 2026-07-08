@@ -220,7 +220,8 @@ note:
     code:
       - col(preferred_vocabulary_name)
       - col(preferred_concept_name)
-    time: col(note_datetime)
+    time: col(preferred_time)
     text_value: col(note_title)
     visit_occurrence_id: col(visit_occurrence_id)
     table_name: col(table_name)
+    link_id: col(note_id)
