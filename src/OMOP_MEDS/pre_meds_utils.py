@@ -398,7 +398,8 @@ def join_concept(
         `process_patient_and_admissions` function. Both inputs are expected to be `pl.DataFrame`s.
 
     Examples:
-        >>> from OMOP_MEDS.pre_meds_data_loader import load_raw_file        >>> from omop_schema.utils import get_schema_loader
+        >>> from OMOP_MEDS.pre_meds_data_loader import load_raw_file
+        >>> from omop_schema.utils import get_schema_loader
         >>> from OMOP_MEDS.pre_meds_utils import  join_concept, get_patient_link
         >>> func = join_concept(
         ...     "observation",
@@ -1037,9 +1038,9 @@ def calculate_nlp_features(
 
     Examples:
         >>> calculate_nlp_features("Hello world!", features=["word_count", "char_count"])
-        {'word_count': 2, 'char_count': 12}
+        {'feature_word_count': 2, 'feature_char_count': 12}
         >>> calculate_nlp_features(None, features=["word_count"])
-        {'word_count': 0}
+        {'feature_word_count': 0}
     """
     import re
 
