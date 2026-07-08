@@ -12,7 +12,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.12", "3.13"]
       fail-fast: false
 
     timeout-minutes: 30
@@ -28,7 +28,7 @@ jobs:
 
       - name: Install packages
         run: |
-          pip install -e .[tests]
+          pip install -e '.[tests]'
 
       #----------------------------------------------
       #              run test suite

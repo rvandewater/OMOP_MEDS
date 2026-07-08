@@ -162,3 +162,6 @@ cython_debug/
 .idea/
 .DS_Store
 junit.xml
+data_exploration.ipynb
+hosts.txt
+mount_sinai_command

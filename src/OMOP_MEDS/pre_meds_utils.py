@@ -4,7 +4,6 @@ from typing import Any
 
 import polars as pl
 import polars.selectors as cs
-from MEDS_transforms.utils import write_lazyframe
 from polars import Boolean
 from polars.type_aliases import SelectorType
 from typing import Optional
@@ -876,7 +875,7 @@ def set_up_metadata(
             raise FileNotFoundError("No concept table found in the input directory.")
         concept_df = load_raw_file(concept_path, schema_loader, selector)
         concept_df = concept_df.with_columns(pl.col("concept_id").cast(pl.Int64))
-        write_lazyframe(concept_df, concept_out_fp)
+        concept_df.sink_parquet(concept_out_fp)
 
     if person_out_fp.is_file() and do_overwrite:
         logger.info(
@@ -940,7 +939,7 @@ def set_up_metadata(
         concept_relationship_df = load_raw_file(
             concept_relationship_fp, schema_loader, selector
         )
-        write_lazyframe(concept_relationship_df, concept_relationship_out_fp)
+        concept_relationship_df.sink_parquet(concept_relationship_out_fp)
 
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)
     if codes_out_fp.is_file() and do_overwrite:
