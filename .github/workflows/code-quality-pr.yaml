@@ -16,7 +16,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
 
       - name: Install packages
         run: |
-          pip install .[dev]
+          pip install '.[dev]'
 
       - name: Find modified files
         id: file_changes

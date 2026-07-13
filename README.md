@@ -9,15 +9,16 @@ alt="omop-to-meds logo" height="300">
 [![codecov](https://codecov.io/gh/rvandewater/OMOP_MEDS/graph/badge.svg?token=RW6JXHNT0W)](https://codecov.io/gh/rvandewater/OMOP_MEDS)
 [![tests](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yml)
 [![code-quality](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml)
-![python](https://img.shields.io/badge/-Python_3.11-blue?logo=python&logoColor=white)
+![python](https://img.shields.io/badge/-Python_3.12%20%7C%203.13-blue?logo=python&logoColor=white)
 [![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/rvandewater/OMOP_MEDS#license)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rvandewater/OMOP_MEDS/pulls)
 [![contributors](https://img.shields.io/github/contributors/rvandewater/OMOP_MEDS.svg)](https://github.com/rvandewater/OMOP_MEDS/graphs/contributors)
 [![DOI](https://zenodo.org/badge/940565218.svg)](https://doi.org/10.5281/zenodo.15132443)
-![Static Badge](https://img.shields.io/badge/MEDS-0.3.3-blue)
+[![MEDS v0.4](https://img.shields.io/badge/MEDS-0.4-blue)](https://medical-event-data-standard.github.io/)
+[![codecov](https://codecov.io/gh/rvandewater/OMOP_MEDS/graph/badge.svg?token=M6P34OROH1)](https://codecov.io/gh/rvandewater/OMOP_MEDS)
 
 An ETL pipeline for transforming Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM)
-datasets (into the MEDS format using the MEDS-Transforms library.
+datasets into MEDS using MEDS-Extract.
 We gratefully acknowledge the developers of the first OMOP MEDS ETL, from which we took inspiration,
 which can be found here: https://github.com/Medical-Event-Data-Standard/meds_etl.
 
@@ -33,6 +34,8 @@ https://github.com/rvandewater/omop_schema.
 If your OMOP schema is non-standard (but still approximately OMOP), you should be able to use the `omop-schema` package to define your own schema and use it in this ETL.
 
 ## Setup
+
+Requires Python `>=3.12,<3.14` (`MEDS-extract 0.6.2` does not support 3.11).
 
 First install the package:
 
@@ -106,6 +109,12 @@ pip install OMOP_MEDS[slurm_parallelism] # for parallelization with slurm using 
 pip install OMOP_MEDS[large_data] # for handling large datasets with polars (rt64), more than 3.2B rows
 ```
 
+Run routine tests (without the downloaded e2e test makes it a lot faster, simply remove the `-k` flag to run all tests):
+
+```bash
+pytest -q -k 'not test_e2e'
+```
+
 ## Pre-MEDS settings
 
 The following settings can be used to configure the pre-MEDS steps.
@@ -130,17 +139,17 @@ Pre-meds batching settings. This is relevant if (some of) your input tables are 
 them in batches. This can be useful to reduce memory usage, but it also increases the runtime, so use with caution.
 The batching settings are as follows:
 
-- `++chunked_tables`: List of tables to be eligible to process in batches (default: None).
-- `batching_row_threshold`: Row count threshold for batching (default: 1,000,000).
-- `batch_mode`: Batching mode ("auto", "per_shard", "by_shards", "by_rows"; default: "auto").
-- `batch_size_shards`: Number of shards per batch in "by_shards" mode (default: 1).
-- `batch_input_rows`: Max rows per batch in "by_rows" mode (default: 0, disabled).
+- `++pre_meds_chunked_tables`: Tables eligible for batched pre-MEDS processing.
+- `++pre_meds_batching_row_threshold`: Row count threshold for batching.
+- `++pre_meds_batch_mode`: `auto`, `per_shard`, `by_shards`, or `by_rows`.
+- `++pre_meds_batch_size_shards`: Shards per batch in `by_shards` mode.
+- `++pre_meds_batch_input_rows`: Max rows per batch in `by_rows` mode.
 
 Also check out the `main.yaml` config file for more default settings and details on how to configure the pre-MEDS steps,
 which can be found here:
 src/OMOP_MEDS/configs/main.yaml
 
-## MEDS-transforms settings
+## MEDS-Extract settings
 
 If you want to convert a large dataset, you can use parallelization with MEDS-transforms
 (the MEDS-transformation step that takes the longest).
@@ -163,6 +172,15 @@ subjects you have in your dataset:
 ```bash
 export N_SUBJECTS_PER_SHARD=100000
 ```
+
+For large datasets, the pipeline keeps high `shard_events` limits by default:
+
+```yaml
+row_chunksize: 20000000000
+infer_schema_length: 999999999
+```
+
+Optional local parallelism is still available via `OMOP_MEDS[local_parallelism]` and `N_WORKERS`.
 
 ## The MIMIC-IV OMOP Dataset
 

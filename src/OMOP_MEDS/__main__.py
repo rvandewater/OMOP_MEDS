@@ -10,7 +10,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf, omegaconf
 
 from OMOP_MEDS.utils import finish_codes_metadata
-from . import ETL_CFG, EVENT_CFG, MAIN_CFG, RUNNER_CFG
+from . import ETL_CFG, EVENT_CFG, MAIN_CFG
 from . import __version__ as PKG_VERSION
 from . import dataset_info
 from .commands import run_command
@@ -81,39 +81,36 @@ def main(cfg: DictConfig):
     # Ensure the pre-meds dir exists (should, but defensive)
     pre_MEDS_dir.mkdir(parents=True, exist_ok=True)
 
-    # First we need to set some environment variables
-    command_parts = [
-        f"DATASET_NAME={dataset_info.dataset_name}",
-        f"DATASET_VERSION={dataset_info.raw_dataset_version}:{PKG_VERSION}:OMOP_{dataset_info.omop_version}",
-        f"EVENT_CONVERSION_CONFIG_FP={str(Path(event_cfg_path).resolve())}",
-        f"PRE_MEDS_DIR={str(pre_MEDS_dir.resolve())}",
-        f"MEDS_COHORT_DIR={str(MEDS_cohort_dir.resolve())}",
-    ]
+    env = {
+        "DATASET_NAME": dataset_info.dataset_name,
+        "DATASET_VERSION": f"{dataset_info.raw_dataset_version}:{PKG_VERSION}:OMOP_{dataset_info.omop_version}",
+        "EVENT_CONVERSION_CONFIG_FP": str(Path(event_cfg_path).resolve()),
+        "PRE_MEDS_DIR": str(pre_MEDS_dir.resolve()),
+        "MEDS_COHORT_DIR": str(MEDS_cohort_dir.resolve()),
+    }
 
-    # Then we construct the rest of the command
-    command_parts.extend(
-        [
-            "MEDS_transform-runner",
-            f"--config-path={str(RUNNER_CFG.parent.resolve())}",
-            f"--config-name={RUNNER_CFG.stem}",
-            f"pipeline_config_fp={str(ETL_CFG.resolve())}",
-        ]
-    )
-    # On CI (ubuntu), running in fully-serial mode can hit a race/ordering issue
-    # in the upstream lockfile creation for shard_events outputs.
-    # Avoid disabling parallelize unless explicitly requested.
-    if (
-        os.getenv("OMOP_MEDS_FORCE_SERIAL", "0") == "1"
-        or int(os.getenv("N_WORKERS", 1)) <= 1
-    ):
-        # Keep parallelize config present but force 1 worker when N_WORKERS isn't set.
-        os.environ.setdefault("N_WORKERS", "1")
+    command_parts = ["MEDS_transform-pipeline", str(ETL_CFG.resolve())]
 
     if stage_runner_fp:
-        command_parts.append(f"stage_runner_fp={stage_runner_fp}")
+        command_parts.append(f"--stage_runner_fp={stage_runner_fp}")
 
-    command_parts.append("'hydra.searchpath=[pkg://MEDS_transforms.configs]'")
-    run_command(command_parts, cfg)
+    overrides = [f"output_dir={MEDS_cohort_dir.resolve()!s}"]
+    if cfg.get("do_overwrite") is not None:
+        overrides.append(f"do_overwrite={cfg.do_overwrite}")
+    if cfg.get("seed") is not None:
+        overrides.append(f"seed={cfg.seed}")
+    if cfg.get("do_profile", False):
+        command_parts.append("--do_profile")
+    if int(os.getenv("N_WORKERS", 1)) > 1:
+        overrides.extend(
+            [
+                f"++parallelize.n_workers={os.getenv('N_WORKERS')}",
+                "++parallelize.launcher=joblib",
+            ]
+        )
+    command_parts.extend(["--overrides", *overrides])
+
+    run_command(command_parts, env=env)
 
     # Copy codes.parquet to MEDS cohort directory
     finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir)
