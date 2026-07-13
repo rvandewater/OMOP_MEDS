@@ -571,27 +571,16 @@ def check_column_mismatches(folder_path: str):
     return mismatched_columns
 
 
-def extract_metadata(
+def extract_codes_metadata(
     concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyFrame
 ) -> pl.LazyFrame:
-    # concept_id_map: Dict[int, str] = {}  # [key] concept_id -> [value] concept_code
-    # concept_name_map: Dict[int, str] = {}  # [key] concept_id -> [value] concept_name
-    # code_metadata: Dict[str, Any] = {}  # [key] concept_code -> [value] metadata
-
-    # Read in the OMOP `CONCEPT` table from disk
-    # (see https://ohdsi.github.io/TheBookOfOhdsi/StandardizedVocabularies.html#concepts)
-    # and use it to generate metadata file as well as populate maps
-    # from (concept ID -> concept code) and (concept ID -> concept name)
-    # for concept_file in tqdm(itertools.chain(*get_table_files(path_to_src_omop_dir, "concept")),
-    #                          total=len(get_table_files(path_to_src_omop_dir, "concept")[0]) +
-    #                          len(get_table_files(path_to_src_omop_dir, "concept")[1]),
-    #                          desc="Generating metadata from OMOP `concept` table"):
-    #     # Note: Concept table is often split into gzipped shards by default
-    #     if verbose:
-    #         print(concept_file)
-    #     with load_file(path_to_decompressed_dir, concept_file) as f:
-    # Read the contents of the `concept` table shard
-    # `load_file` will unzip the file into `path_to_decompressed_dir` if needed
+    """ "
+    Extracts metadata from the OMOP `concept` and `concept_relationship` tables.
+    This function generates a metadata table that includes concept IDs, vocabulary IDs,
+    descriptions, and parent codes for each concept. It also handles custom concepts with
+    concept IDs greater than 2000000000, ensuring they are included in the metadata with
+    appropriate parent codes when available.
+    """
     logger.info(
         "Generating codes metadata from OMOP `concept` table and `concept_relationship` table"
     )
@@ -951,8 +940,8 @@ def set_up_metadata(
     if codes_out_fp.is_file():
         logger.info(f"Reusing existing code metadata at {str(codes_out_fp.resolve())}")
     else:
-        metadata = extract_metadata(concept_df, concept_relationship_df)
-        metadata.sink_parquet(codes_out_fp)
+        code_metadata = extract_codes_metadata(concept_df, concept_relationship_df)
+        code_metadata.sink_parquet(codes_out_fp)
         logger.info(f"Wrote code metadata to {str(codes_out_fp.resolve())}")
     return concept_df, patient_df
 
