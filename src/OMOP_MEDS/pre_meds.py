@@ -16,7 +16,6 @@ import polars as pl
 import polars.selectors as cs
 import logging
 from omegaconf import OmegaConf, DictConfig
-from MEDS_transforms.utils import get_shard_prefix
 from omop_schema.utils import get_schema_loader
 
 from . import dataset_info, omop_cfg, premeds_cfg
@@ -41,6 +40,11 @@ logger = logging.getLogger(__name__)
 DATA_FILE_EXTENSIONS = premeds_cfg.raw_data_extensions
 # List of tables to be ignored during processing
 IGNORE_TABLES = []
+
+
+def get_shard_prefix(root: Path, path: Path) -> str:
+    """Return the OMOP table prefix for a file or table directory."""
+    return path.name if path.is_dir() else path.stem.split(".")[0]
 
 
 def main(cfg: DictConfig) -> None:

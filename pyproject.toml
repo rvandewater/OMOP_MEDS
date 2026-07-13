@@ -11,14 +11,14 @@ authors = [
 ]
 description = "An ETL to convert OMOP data to the MEDS format."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.14"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "meds-transforms==0.2.4", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.10", "omop_schema", "meds~=0.3.3",
+  "MEDS-extract~=0.6.2", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.26", "omop_schema", "meds~=0.4.1",
     "tqdm"
 ]
 
