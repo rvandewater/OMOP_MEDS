@@ -1,8 +1,12 @@
 """Utilities for extracting MEDS-extract row metadata sidecars."""
 
+import logging
 from pathlib import Path
 
 import polars as pl
+from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 MEDS_EXTRACT_LINK_ID = "meds_extract_link_id"
 ROW_IDX = "meds_extract_row_idx"
@@ -62,6 +66,9 @@ def build_meds_extract_linked_data(
         else meds_cohort_dir / "metadata" / "meds_extract_data"
     )
 
+    logger.info("Building MEDS-extract linked metadata from %s", data_dir)
+    logger.info("Writing MEDS-extract linked metadata to %s", output_dir)
+
     if not data_dir.exists():
         raise FileNotFoundError(f"MEDS data directory not found: {data_dir}")
     if output_dir.exists() and any(output_dir.rglob("*.parquet")) and not overwrite:
@@ -69,12 +76,18 @@ def build_meds_extract_linked_data(
             f"Linked data already exists at {output_dir}; pass overwrite=True to replace it"
         )
     if overwrite and output_dir.exists():
-        for fp in output_dir.rglob("*.parquet"):
+        old_files = list(output_dir.rglob("*.parquet"))
+        logger.info(
+            "Removing %d existing MEDS-extract metadata shard(s)", len(old_files)
+        )
+        for fp in old_files:
             fp.unlink()
 
     data_files = sorted(data_dir.rglob("*.parquet"))
+    logger.info("Found %d MEDS data shard(s)", len(data_files))
+
     written: list[Path] = []
-    for in_fp in data_files:
+    for in_fp in tqdm(data_files, desc="Building MEDS-extract metadata", unit="shard"):
         rel_fp = in_fp.relative_to(data_dir)
         out_fp = output_dir / rel_fp
         out_fp.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +113,7 @@ def build_meds_extract_linked_data(
                     else pl.lit(None).alias(col)
                 )
 
+        logger.debug("Writing metadata sidecar %s", out_fp)
         lf.select(exprs).sink_parquet(out_fp)
         written.append(out_fp)
 
@@ -118,9 +132,16 @@ def build_meds_extract_linked_data(
             tmp_fp = in_fp.with_suffix(f"{in_fp.suffix}.tmp")
             if tmp_fp.exists():
                 tmp_fp.unlink()
+            logger.debug("Rewriting data shard %s", in_fp)
             lf.select(*keep_cols, id_expr).sink_parquet(tmp_fp)
             tmp_fp.replace(in_fp)
 
     if not written:
         raise ValueError(f"No parquet shards found under {data_dir}")
+
+    logger.info("Wrote %d MEDS-extract metadata shard(s)", len(written))
+    if update_data:
+        logger.info(
+            "Updated %d MEDS data shard(s) with %s", len(written), MEDS_EXTRACT_LINK_ID
+        )
     return written
