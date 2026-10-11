@@ -166,4 +166,4 @@ note:
     text_value: $note_title
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
-    link_id: $note_id
+    modality_link_id: $note_id

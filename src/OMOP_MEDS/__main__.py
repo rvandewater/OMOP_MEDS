@@ -17,6 +17,7 @@ from .commands import run_command
 from .download import download_data
 from .pre_meds import main as pre_MEDS_transform
 from .pre_meds_utils import rename_demo_files
+from .linked_data import build_meds_extract_linked_data
 
 logger = logging.getLogger(__name__)
 
@@ -81,15 +82,21 @@ def main(cfg: DictConfig):
     # Ensure the pre-meds dir exists (should, but defensive)
     pre_MEDS_dir.mkdir(parents=True, exist_ok=True)
 
+    python_bin_dir = Path(sys.executable).parent
     env = {
         "DATASET_NAME": dataset_info.dataset_name,
         "DATASET_VERSION": f"{dataset_info.raw_dataset_version}:{PKG_VERSION}:OMOP_{dataset_info.omop_version}",
         "EVENT_CONVERSION_CONFIG_FP": str(Path(event_cfg_path).resolve()),
         "PRE_MEDS_DIR": str(pre_MEDS_dir.resolve()),
         "MEDS_COHORT_DIR": str(MEDS_cohort_dir.resolve()),
+        "PATH": f"{python_bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
     }
 
-    command_parts = ["MEDS_transform-pipeline", str(ETL_CFG.resolve())]
+    pipeline_exe = python_bin_dir / "MEDS_transform-pipeline"
+    command_parts = [
+        str(pipeline_exe) if pipeline_exe.exists() else "MEDS_transform-pipeline",
+        str(ETL_CFG.resolve()),
+    ]
 
     if stage_runner_fp:
         command_parts.append(f"--stage_runner_fp={stage_runner_fp}")
@@ -114,6 +121,9 @@ def main(cfg: DictConfig):
 
     # Copy codes.parquet to MEDS cohort directory
     finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir)
+    build_meds_extract_linked_data(
+        MEDS_cohort_dir, overwrite=cfg.do_overwrite, update_data=True
+    )
 
 
 if __name__ == "__main__":
