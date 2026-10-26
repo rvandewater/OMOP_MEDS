@@ -14,8 +14,8 @@ from OMOP_MEDS import MAIN_CFG
 
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 
-# test_e2e downloads from PhysioNet; keep it well inside the 30-minute CI job timeout.
-E2E_TIMEOUT_S = 20 * 60
+# test_e2e downloads from PhysioNet; above the 25-minute download budget, inside the 35-minute CI job timeout.
+E2E_TIMEOUT_S = 28 * 60
 
 
 def _stage_local_demo_omop(raw_input_dir: Path) -> Path:

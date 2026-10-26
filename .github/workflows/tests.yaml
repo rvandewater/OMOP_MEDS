@@ -15,7 +15,8 @@ jobs:
         python-version: ["3.12", "3.13"]
       fail-fast: false
 
-    timeout-minutes: 30
+    # Room for test_e2e's PhysioNet download (25-minute budget, 28-minute test timeout).
+    timeout-minutes: 35
 
     steps:
       - name: Checkout

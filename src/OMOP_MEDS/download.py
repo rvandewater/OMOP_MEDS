@@ -20,13 +20,14 @@ logger = logging.getLogger(__name__)
 # so slow-but-progressing downloads still finish while a stalled PhysioNet connection fails instead of
 # hanging forever.
 REQUEST_TIMEOUT = (30, 60)
-# Whole-file attempts for archive downloads; urllib3 retries cannot recover a connection that drops
-# mid-body (e.g. ChunkedEncodingError), so the archive download is restarted instead.
+# Consecutive archive-download attempts that may fail without receiving new bytes. urllib3 retries cannot
+# recover a connection that drops mid-body (e.g. ChunkedEncodingError), so the download is resumed instead;
+# attempts that do make progress do not count against this limit.
 ARCHIVE_DOWNLOAD_ATTEMPTS = 3
 # Wall-clock budget in seconds for one archive download, shared by all attempts. Read timeouts alone never
 # fire on a connection that trickles a few bytes per minute, which is how PhysioNet degrades for CI runners;
 # this turns that into a prompt, explicit failure instead of a job killed by its timeout with no logs.
-ARCHIVE_DOWNLOAD_BUDGET_S = 15 * 60
+ARCHIVE_DOWNLOAD_BUDGET_S = 25 * 60
 # Log download progress every this many bytes, so slow transfers are visible in logs.
 PROGRESS_LOG_BYTES = 2 * 1024 * 1024
 
@@ -69,7 +70,7 @@ class MockSession:  # pragma: no cover
         self.headers = {}
         self.auth = None
 
-    def get(self, url: str, stream: bool = False, timeout=None):
+    def get(self, url: str, stream: bool = False, timeout=None, headers=None):
         if self.expect_url is not None and url != self.expect_url:
             raise ValueError(f"Expected URL {self.expect_url}, got {url}")
         if isinstance(self.return_status, dict):
@@ -296,64 +297,113 @@ def _fetch_to_file(
     attempts: int,
     budget_s: float = ARCHIVE_DOWNLOAD_BUDGET_S,
 ):
-    """Stream `url` to `dest`, restarting the download on dropped or stalled connections.
+    """Stream `url` to `dest`, resuming after dropped or stalled connections.
 
     The body is written to `dest` with a `.part` suffix and only renamed into place once complete, so an
-    interrupted download never leaves a truncated file at `dest`. All attempts share `budget_s` seconds of
-    wall-clock time; running out raises `DownloadBudgetExceeded` without further retries.
+    interrupted download never leaves a truncated file at `dest`. After a failure part-way through, the next
+    attempt asks for the remaining bytes with an HTTP `Range` request guarded by `If-Range` (the response's
+    ETag or Last-Modified), so a file that changed on the server restarts from zero rather than splicing two
+    versions; bytes are only appended to a `206` response that starts exactly where the `.part` file ends.
+    PhysioNet serves CI runners at ~10-20 kB/s per connection and stalls mid-transfer, so restarting from
+    zero each time would rarely finish.
+
+    `attempts` bounds consecutive attempts that get no further than before; all attempts share `budget_s`
+    seconds of wall-clock time, and running out raises `DownloadBudgetExceeded` without further retries.
     """
     part_fp = dest.with_name(dest.name + ".part")
     deadline = time.monotonic() + budget_s
-    for attempt in range(1, attempts + 1):
-        try:
-            logger.info(f"Requesting {url} (attempt {attempt}/{attempts})")
-            t_request = time.monotonic()
-            response = session.get(url, stream=True, timeout=REQUEST_TIMEOUT)
-            response.raise_for_status()
-            total = int(response.headers.get("Content-Length", 0) or 0)
-            logger.info(
-                f"Response from {url} after {time.monotonic() - t_request:.1f}s: "
-                f"HTTP {response.status_code}, {total / 1e6:.1f} MB"
+    total, validator = 0, None
+    best, stalled, attempt = 0, 0, 0
+    try:
+        while True:
+            attempt += 1
+            have = part_fp.stat().st_size if part_fp.exists() else 0
+            headers = (
+                {"Range": f"bytes={have}-", "If-Range": validator}
+                if have and validator
+                else {}
             )
-            total_note = f"/{total / 1e6:.1f}" if total else ""
-            t0 = time.monotonic()
-            n_bytes, next_log = 0, PROGRESS_LOG_BYTES
-            with open(part_fp, "wb") as file:
-                for chunk in response.iter_content(chunk_size=64 * 1024):
-                    file.write(chunk)
-                    n_bytes += len(chunk)
-                    now = time.monotonic()
-                    if n_bytes >= next_log:
-                        logger.info(
-                            f"Downloading {url}: {n_bytes / 1e6:.1f}{total_note} MB "
-                            f"({n_bytes / 1e3 / max(now - t0, 1e-6):.0f} kB/s)"
+            try:
+                resume_note = f", resuming at {have / 1e6:.1f} MB" if headers else ""
+                logger.info(f"Requesting {url} (attempt {attempt}{resume_note})")
+                t_request = time.monotonic()
+                response = session.get(
+                    url, stream=True, timeout=REQUEST_TIMEOUT, headers=headers
+                )
+                response.raise_for_status()
+                resumed = (
+                    bool(headers)
+                    and response.status_code == 206
+                    and response.headers.get("Content-Range", "").startswith(
+                        f"bytes {have}-"
+                    )
+                )
+                if response.status_code == 206 and not resumed:
+                    # A partial body we cannot place: drop what we have and fetch it whole next attempt.
+                    part_fp.unlink(missing_ok=True)
+                    raise requests.exceptions.ConnectionError(
+                        f"{url} answered with an unexpected Content-Range "
+                        f"{response.headers.get('Content-Range')!r} (wanted bytes {have}-)"
+                    )
+                if not resumed:
+                    if have:
+                        logger.warning(f"{url} did not resume; restarting from zero")
+                    have = 0
+                    total = int(response.headers.get("Content-Length", 0) or 0)
+                    validator = response.headers.get("ETag") or response.headers.get(
+                        "Last-Modified"
+                    )
+                total_note = f"/{total / 1e6:.1f}" if total else ""
+                logger.info(
+                    f"Response from {url} after {time.monotonic() - t_request:.1f}s: "
+                    f"HTTP {response.status_code}, {total / 1e6:.1f} MB"
+                )
+                t0, n_bytes = time.monotonic(), have
+                next_log = (have // PROGRESS_LOG_BYTES + 1) * PROGRESS_LOG_BYTES
+                with open(part_fp, "ab" if resumed else "wb") as file:
+                    for chunk in response.iter_content(chunk_size=64 * 1024):
+                        file.write(chunk)
+                        n_bytes += len(chunk)
+                        now = time.monotonic()
+                        rate = (
+                            f"{(n_bytes - have) / 1e3 / max(now - t0, 1e-6):.0f} kB/s"
                         )
-                        next_log += PROGRESS_LOG_BYTES
-                    if now > deadline:
-                        raise DownloadBudgetExceeded(
-                            f"Downloading {url} exceeded its {budget_s:.0f}s budget on attempt "
-                            f"{attempt}/{attempts} after {n_bytes / 1e6:.1f}{total_note} MB "
-                            f"({n_bytes / 1e3 / max(now - t0, 1e-6):.0f} kB/s)"
-                        )
-            part_fp.replace(dest)
-            logger.info(
-                f"Downloaded {url}: {n_bytes / 1e6:.1f} MB in {time.monotonic() - t0:.0f}s"
-            )
-            return
-        except requests.exceptions.HTTPError as e:
-            raise ValueError(f"Failed to download {url}") from e
-        except requests.exceptions.RequestException as e:
-            wait = 2**attempt
-            if attempt == attempts or time.monotonic() + wait > deadline:
-                raise ValueError(
-                    f"Failed to download {url} after {attempt} attempts"
-                ) from e
-            logger.warning(
-                f"Download of {url} failed on attempt {attempt}/{attempts} ({e}); retrying in {wait}s"
-            )
-            time.sleep(wait)
-        finally:
-            part_fp.unlink(missing_ok=True)
+                        if n_bytes >= next_log:
+                            logger.info(
+                                f"Downloading {url}: {n_bytes / 1e6:.1f}{total_note} MB ({rate})"
+                            )
+                            next_log += PROGRESS_LOG_BYTES
+                        if now > deadline:
+                            raise DownloadBudgetExceeded(
+                                f"Downloading {url} exceeded its {budget_s:.0f}s budget on attempt "
+                                f"{attempt} after {n_bytes / 1e6:.1f}{total_note} MB ({rate})"
+                            )
+                if total and n_bytes != total:
+                    raise requests.exceptions.ConnectionError(
+                        f"{url} ended after {n_bytes} of {total} bytes"
+                    )
+                part_fp.replace(dest)
+                logger.info(f"Downloaded {url}: {n_bytes / 1e6:.1f} MB")
+                return
+            except requests.exceptions.HTTPError as e:
+                raise ValueError(f"Failed to download {url}") from e
+            except requests.exceptions.RequestException as e:
+                reached = part_fp.stat().st_size if part_fp.exists() else 0
+                stalled = 0 if reached > best else stalled + 1
+                best = max(best, reached)
+                wait = 2 ** max(stalled, 1)
+                if stalled >= attempts or time.monotonic() + wait > deadline:
+                    raise ValueError(
+                        f"Failed to download {url} after {attempt} attempts "
+                        f"({reached / 1e6:.1f}{f'/{total / 1e6:.1f}' if total else ''} MB received)"
+                    ) from e
+                logger.warning(
+                    f"Download of {url} failed on attempt {attempt} at {reached / 1e6:.1f} MB ({e}); "
+                    f"retrying in {wait}s"
+                )
+                time.sleep(wait)
+    finally:
+        part_fp.unlink(missing_ok=True)
 
 
 def download_zip(
