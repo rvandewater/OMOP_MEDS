@@ -108,11 +108,20 @@ pip install OMOP_MEDS[slurm_parallelism] # for parallelization with slurm using 
 pip install OMOP_MEDS[large_data] # for handling large datasets with polars (rt64), more than 3.2B rows
 ```
 
-Run routine tests (without the downloaded e2e test makes it a lot faster, simply remove the `-k` flag to run all tests):
+Run routine tests (skipping the two end-to-end tests that download data; drop `-m` to run everything):
 
 ```bash
-pytest -q -k 'not test_e2e'
+pytest -q -m 'not physionet and not synthea'
 ```
+
+The two end-to-end tests run the full ETL over downloaded data:
+
+- `pytest -m synthea` uses OHDSI's [Synthea27Nj](https://github.com/OHDSI/EunomiaDatasets) sample: 28 synthetic
+    subjects in OMOP CDM 5.4 (Apache-2.0), pinned and SHA-256 verified, cached in `~/.cache/OMOP_MEDS/test-data`
+    (override with `SYNTHEA_OMOP_CACHE_DIR`). CI runs it in its own job on every pull request.
+- `pytest -m physionet` downloads the MIMIC-IV OMOP demo (OMOP CDM 5.3) from PhysioNet. CI runs it on pushes to
+    `main`, nightly and on demand, but not on pull requests, because PhysioNet is slow and unreliable from CI
+    runners.
 
 ## Pre-MEDS settings
 

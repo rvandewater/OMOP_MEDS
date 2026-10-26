@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main, "release/*", "dev"]
+  # The PhysioNet end-to-end test (pytest marker `physionet`) is too slow and flaky from CI runners to gate
+  # pull requests, so it runs on pushes to main, nightly and on demand; pull requests rely on the Synthea job.
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
 
 jobs:
   run_tests_ubuntu:
@@ -35,9 +40,11 @@ jobs:
       #----------------------------------------------
       - name: Run tests
         run: |
-          pytest src/ tests/ -v --doctest-modules --cov=src --junitxml=junit.xml -s
+          pytest src/ tests/ -v --doctest-modules --cov=src --junitxml=junit.xml -s -m "$PYTEST_MARKERS"
         env:
           HYDRA_FULL_ERROR: 1
+          # Synthea has its own job below; PhysioNet is skipped on pull requests (see `on:` above).
+          PYTEST_MARKERS: ${{ github.event_name == 'pull_request' && 'not physionet and not synthea' || 'not synthea' }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -48,3 +55,42 @@ jobs:
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  synthea_e2e:
+    # End-to-end run over OHDSI's Synthea27Nj OMOP 5.4 sample (tests/e2e_synthea_test.py): synthetic data
+    # served by GitHub, so it is fast and reliable enough to gate every pull request.
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+      fail-fast: false
+
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install packages
+        run: |
+          pip install -e '.[tests]'
+
+      - name: Cache Synthea27Nj archive
+        uses: actions/cache@v4
+        with:
+          path: .synthea-cache
+          # The archive is pinned by SHA-256 in the test, so its content never changes under this key; keep the
+          # suffix in sync with SYNTHEA_ZIP_SHA256 (a mismatch only costs a ~1 s re-download).
+          key: synthea27nj-5.4-cdd3971be325
+
+      - name: Run Synthea end-to-end test
+        run: |
+          pytest tests/e2e_synthea_test.py -v -s -m synthea
+        env:
+          SYNTHEA_OMOP_CACHE_DIR: ${{ github.workspace }}/.synthea-cache
