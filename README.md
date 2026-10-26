@@ -58,6 +58,12 @@ To try with the MIMIC-IV OMOP demo dataset (this downloads a version to your loc
 OMOP_MEDS raw_input_dir=path/to/your/input root_output_dir=/path/to/your/output do_download=True ++do_demo=True
 ```
 
+The demo is fetched as PhysioNet's project zip (~11 MB instead of ~70 MB of uncompressed CSVs) and only its
+`1_omop_data_csv` folder is extracted. The archive is cached in `~/.cache/OMOP_MEDS` (override with
+`download_cache_dir=...` or the `OMOP_MEDS_CACHE_DIR` environment variable) and reused for
+`download_cache_max_age_days` (default 7) days; set `download_cache_dir=null` to always download. Only the public
+demo is cached: credentialed datasets are never copied into the cache.
+
 Example config for an OMOP dataset:
 
 ```yaml
@@ -128,6 +134,8 @@ OMOP_MEDS \
 - `root_output_dir`: Set the root output directory.
 - `raw_input_dir`: Path to the raw input directory.
 - `do_download`: Set to `False` to skip downloading the dataset.
+- `download_cache_dir`: Where the demo download is cached (`null` disables caching; demo only).
+- `download_cache_max_age_days`: How many days a cached demo download is reused (default 7).
 - `++do_overwrite`: Set to `True` to overwrite existing files.
 - `++limit_subjects`: Limit the number of subjects to process.
 - `++prefer_source`: Set to `True` to prefer source concepts over mapped concepts.

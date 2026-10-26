@@ -6,5 +6,9 @@ omop_version: ${oc.decode:${oc.env:OMOP_VERSION, "5.3"}}
 urls:
   dataset:
     - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/
+  # The demo is fetched as PhysioNet's project zip (~11 MB) rather than crawling the ~70 MB of
+  # uncompressed CSVs file by file; only the CSV folder is extracted.
   demo:
-    - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/
+    - url: https://physionet.org/content/mimic-iv-demo-omop/get-zip/${raw_dataset_version}/
+      format: zip
+      archive_subdir: 1_omop_data_csv
