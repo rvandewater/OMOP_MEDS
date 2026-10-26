@@ -1,16 +1,21 @@
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
 
 import polars as pl
+import pytest
 from omegaconf import OmegaConf
 
 from OMOP_MEDS.__main__ import main as run_omop_meds
 from OMOP_MEDS import MAIN_CFG
 
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
+
+# test_e2e downloads from PhysioNet; keep it well inside the 30-minute CI job timeout.
+E2E_TIMEOUT_S = 20 * 60
 
 
 def _stage_local_demo_omop(raw_input_dir: Path) -> Path:
@@ -97,16 +102,30 @@ def test_e2e():
         do_demo = True
         do_download = True
 
-        command_parts = [
-            "python -m OMOP_MEDS.__main__",
+        # sys.executable (not `python` on PATH, without a shell) so the run uses this environment's package
+        # and the timeout below kills the ETL process itself rather than an intermediate shell.
+        command = [
+            sys.executable,
+            "-m",
+            "OMOP_MEDS.__main__",
             f"root_output_dir={str(root.resolve())}",
             f"do_download={do_download}",
             f"do_overwrite={do_overwrite}",
             f"do_demo={do_demo}",
         ]
 
-        full_cmd = " ".join(command_parts)
-        command_out = subprocess.run(full_cmd, shell=True, capture_output=True)
+        # Bounded below the CI job timeout, so a stalled PhysioNet download fails this test with the ETL's
+        # logs attached instead of the job being cancelled with no output.
+        try:
+            command_out = subprocess.run(
+                command, capture_output=True, timeout=E2E_TIMEOUT_S
+            )
+        except subprocess.TimeoutExpired as e:
+            pytest.fail(
+                f"Command timed out after {E2E_TIMEOUT_S}s.\n"
+                f"Command stdout:\n{(e.stdout or b'').decode()}\n"
+                f"Command stderr:\n{(e.stderr or b'').decode()}"
+            )
 
         stderr = command_out.stderr.decode()
         stdout = command_out.stdout.decode()

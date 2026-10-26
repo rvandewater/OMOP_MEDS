@@ -33,14 +33,16 @@ jobs:
       # test_e2e downloads the public MIMIC-IV OMOP demo from PhysioNet, which is slow and sometimes drops
       # connections. Keep the downloaded archive across runs: the key rotates weekly, and the package
       # itself re-downloads once the cached archive is older than download_cache_max_age_days (7).
+      # Restore and save are separate steps so a successful download is saved even when a later test fails.
       - name: Week for demo cache key
         id: cache-week
         run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache MIMIC-IV OMOP demo download
-        uses: actions/cache@v4
+      - name: Restore MIMIC-IV OMOP demo download
+        id: demo-cache
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/OMOP_MEDS
+          path: .omop-cache
           key: omop-demo-${{ steps.cache-week.outputs.week }}
           restore-keys: |
             omop-demo-
@@ -53,6 +55,16 @@ jobs:
           pytest src/ tests/ -v --doctest-modules --cov=src --junitxml=junit.xml -s
         env:
           HYDRA_FULL_ERROR: 1
+          OMOP_MEDS_CACHE_DIR: ${{ github.workspace }}/.omop-cache
+
+      - name: Save MIMIC-IV OMOP demo download
+        if: ${{ always() && steps.demo-cache.outputs.cache-hit != 'true' && hashFiles('.omop-cache/*.zip') != '' }}
+        # Both matrix jobs share the key; whichever saves second only gets an "already exists" warning.
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .omop-cache
+          key: omop-demo-${{ steps.cache-week.outputs.week }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

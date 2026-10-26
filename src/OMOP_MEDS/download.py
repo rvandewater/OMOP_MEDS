@@ -19,10 +19,16 @@ logger = logging.getLogger(__name__)
 # (connect, read) timeouts in seconds. The read timeout bounds each socket read, not the whole transfer,
 # so slow-but-progressing downloads still finish while a stalled PhysioNet connection fails instead of
 # hanging forever.
-REQUEST_TIMEOUT = (30, 300)
+REQUEST_TIMEOUT = (30, 60)
 # Whole-file attempts for archive downloads; urllib3 retries cannot recover a connection that drops
 # mid-body (e.g. ChunkedEncodingError), so the archive download is restarted instead.
 ARCHIVE_DOWNLOAD_ATTEMPTS = 3
+# Wall-clock budget in seconds for one archive download, shared by all attempts. Read timeouts alone never
+# fire on a connection that trickles a few bytes per minute, which is how PhysioNet degrades for CI runners;
+# this turns that into a prompt, explicit failure instead of a job killed by its timeout with no logs.
+ARCHIVE_DOWNLOAD_BUDGET_S = 15 * 60
+# Log download progress every this many bytes, so slow transfers are visible in logs.
+PROGRESS_LOG_BYTES = 2 * 1024 * 1024
 
 
 class MockResponse:  # pragma: no cover
@@ -31,6 +37,7 @@ class MockResponse:  # pragma: no cover
     def __init__(self, status_code: int, contents: str | bytes = ""):
         self.status_code = status_code
         self.contents = contents if isinstance(contents, bytes) else contents.encode()
+        self.headers = {}
 
     def iter_content(self, chunk_size):
         return [
@@ -278,30 +285,69 @@ def extract_zip(
     return n_extracted
 
 
-def _fetch_to_file(url: str, dest: Path, session: requests.Session, attempts: int):
+class DownloadBudgetExceeded(ValueError):
+    """Raised when an archive download runs past its wall-clock budget."""
+
+
+def _fetch_to_file(
+    url: str,
+    dest: Path,
+    session: requests.Session,
+    attempts: int,
+    budget_s: float = ARCHIVE_DOWNLOAD_BUDGET_S,
+):
     """Stream `url` to `dest`, restarting the download on dropped or stalled connections.
 
     The body is written to `dest` with a `.part` suffix and only renamed into place once complete, so an
-    interrupted download never leaves a truncated file at `dest`.
+    interrupted download never leaves a truncated file at `dest`. All attempts share `budget_s` seconds of
+    wall-clock time; running out raises `DownloadBudgetExceeded` without further retries.
     """
     part_fp = dest.with_name(dest.name + ".part")
+    deadline = time.monotonic() + budget_s
     for attempt in range(1, attempts + 1):
         try:
+            logger.info(f"Requesting {url} (attempt {attempt}/{attempts})")
+            t_request = time.monotonic()
             response = session.get(url, stream=True, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
+            total = int(response.headers.get("Content-Length", 0) or 0)
+            logger.info(
+                f"Response from {url} after {time.monotonic() - t_request:.1f}s: "
+                f"HTTP {response.status_code}, {total / 1e6:.1f} MB"
+            )
+            total_note = f"/{total / 1e6:.1f}" if total else ""
+            t0 = time.monotonic()
+            n_bytes, next_log = 0, PROGRESS_LOG_BYTES
             with open(part_fp, "wb") as file:
-                for chunk in response.iter_content(chunk_size=1 << 20):
+                for chunk in response.iter_content(chunk_size=64 * 1024):
                     file.write(chunk)
+                    n_bytes += len(chunk)
+                    now = time.monotonic()
+                    if n_bytes >= next_log:
+                        logger.info(
+                            f"Downloading {url}: {n_bytes / 1e6:.1f}{total_note} MB "
+                            f"({n_bytes / 1e3 / max(now - t0, 1e-6):.0f} kB/s)"
+                        )
+                        next_log += PROGRESS_LOG_BYTES
+                    if now > deadline:
+                        raise DownloadBudgetExceeded(
+                            f"Downloading {url} exceeded its {budget_s:.0f}s budget on attempt "
+                            f"{attempt}/{attempts} after {n_bytes / 1e6:.1f}{total_note} MB "
+                            f"({n_bytes / 1e3 / max(now - t0, 1e-6):.0f} kB/s)"
+                        )
             part_fp.replace(dest)
+            logger.info(
+                f"Downloaded {url}: {n_bytes / 1e6:.1f} MB in {time.monotonic() - t0:.0f}s"
+            )
             return
         except requests.exceptions.HTTPError as e:
             raise ValueError(f"Failed to download {url}") from e
         except requests.exceptions.RequestException as e:
-            if attempt == attempts:
-                raise ValueError(
-                    f"Failed to download {url} after {attempts} attempts"
-                ) from e
             wait = 2**attempt
+            if attempt == attempts or time.monotonic() + wait > deadline:
+                raise ValueError(
+                    f"Failed to download {url} after {attempt} attempts"
+                ) from e
             logger.warning(
                 f"Download of {url} failed on attempt {attempt}/{attempts} ({e}); retrying in {wait}s"
             )
@@ -424,12 +470,21 @@ def download_zip(
 
 
 def make_session() -> requests.Session:
-    """Create a requests session that retries failed connections and transient server errors."""
+    """Create a requests session that retries failed connections and transient server errors.
+
+    Read timeouts are not retried here (`read=0`): a stalled server would otherwise cost a full read timeout
+    per retry, multiplied by `download_zip`'s whole-file restarts. `Retry-After` headers are ignored in favour
+    of the bounded backoff, since urllib3 would otherwise sleep for however long a rate-limiting server asks.
+    """
     retry = Retry(
         total=3,
+        connect=3,
+        read=0,
+        status=3,
         backoff_factor=2,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=("GET",),
+        respect_retry_after_header=False,
     )
     session = requests.Session()
     adapter = HTTPAdapter(max_retries=retry)

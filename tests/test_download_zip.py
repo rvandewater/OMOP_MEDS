@@ -6,7 +6,13 @@ import pytest
 import requests
 
 from OMOP_MEDS import download
-from OMOP_MEDS.download import REQUEST_TIMEOUT, download_zip
+from OMOP_MEDS.download import (
+    REQUEST_TIMEOUT,
+    DownloadBudgetExceeded,
+    _fetch_to_file,
+    download_zip,
+    make_session,
+)
 
 URL = "https://example.com/get-zip/0.9/"
 
@@ -27,6 +33,8 @@ class _Response:
     def __init__(self, body: bytes, fail_after: int | None = None):
         self.body = body
         self.fail_after = fail_after
+        self.headers = {"Content-Length": str(len(body))}
+        self.status_code = 200
 
     def raise_for_status(self):
         pass
@@ -149,3 +157,51 @@ def test_missing_archive_subdir_fails_loudly(tmp_path: Path):
             _FlakySession(n_failures=0),
             archive_subdir="no_such_dir",
         )
+
+
+class _TrickleSession:
+    """Serves the body a few bytes at a time while a fake clock advances, like a throttled PhysioNet."""
+
+    def __init__(self, clock: list[float], seconds_per_chunk: float):
+        self.clock = clock
+        self.seconds_per_chunk = seconds_per_chunk
+        self.calls = 0
+
+    def get(self, url, stream=False, timeout=None):
+        self.calls += 1
+        session = self
+
+        class _Trickle(_Response):
+            def iter_content(self, chunk_size):
+                for i in range(0, len(self.body), 16):
+                    session.clock[0] += session.seconds_per_chunk
+                    yield self.body[i : i + 16]
+
+        return _Trickle(_zip_bytes())
+
+
+def test_trickling_download_fails_within_budget_without_retrying(
+    tmp_path: Path, monkeypatch
+):
+    # Read timeouts never fire while bytes keep arriving, so only the wall-clock budget can stop this.
+    clock = [0.0]
+    monkeypatch.setattr(download.time, "monotonic", lambda: clock[0])
+    session = _TrickleSession(clock, seconds_per_chunk=5.0)
+    dest = tmp_path / "demo.zip"
+
+    with pytest.raises(
+        DownloadBudgetExceeded, match="exceeded its 60s budget on attempt 1/3"
+    ):
+        _fetch_to_file(URL, dest, session, attempts=3, budget_s=60)
+
+    assert session.calls == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_session_does_not_retry_read_timeouts():
+    # download_zip restarts whole downloads itself; adapter-level read retries would multiply stalls.
+    retry = make_session().get_adapter("https://physionet.org").max_retries
+    assert retry.read == 0
+    assert retry.connect == 3
+    assert 503 in retry.status_forcelist
+    assert not retry.respect_retry_after_header
