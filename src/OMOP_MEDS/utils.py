@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+import shutil
 
 import polars as pl
 
@@ -41,3 +42,32 @@ def finish_codes_metadata(MEDS_cohort_dir: Path, pre_MEDS_dir: Path):
 def _ensure_parent_dir(path: Path) -> None:
     """Ensure parent directory exists for a file path."""
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def remove_intermediate_files(
+    MEDS_cohort_dir: Path,
+    pre_MEDS_dir: Path,
+    remove_pre_MEDS: bool = False,
+    remove_MEDS_cohort: bool = True,
+):
+    """Remove intermediate files from the MEDS cohort directory."""
+    intermediate_folders = []
+    if remove_pre_MEDS and pre_MEDS_dir.exists():
+        logger.info(f"Removing entire pre-MEDS directory: {pre_MEDS_dir}")
+        shutil.rmtree(pre_MEDS_dir)
+    if remove_MEDS_cohort:
+        intermediate_folders = [
+            MEDS_cohort_dir / "convert_to_MEDS_events/",
+            MEDS_cohort_dir / "convert_to_subject_sharded/",
+            MEDS_cohort_dir / "split_and_shard_subjects/",
+            MEDS_cohort_dir / "shard_events/",
+            MEDS_cohort_dir / "merge_to_MEDS_cohort/",
+            MEDS_cohort_dir / "finalize_MEDS_metadata/",
+            MEDS_cohort_dir / "extract_code_metadata/",
+        ]
+    for file_path in intermediate_folders:
+        if file_path.is_dir():
+            logger.info(f"Removing intermediate directory: {file_path}")
+            shutil.rmtree(file_path)
+        else:
+            logger.warning(f"Intermediate directory not found: {file_path}")
