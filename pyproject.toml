@@ -26,10 +26,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pre-commit<4", "mdformat-admon"]
-tests = ["pytest", "pytest-cov", "hydra-joblib-launcher"]
+tests = ["pytest", "pytest-cov", "hydra-joblib-launcher", "sumeds>=0.3.2"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 large_data = ["polars[rt64]"]
+athena = ["sumeds>=0.3.2"]
 
 [project.scripts]
 MEDS_extract-OMOP = "OMOP_MEDS.__main__:main"

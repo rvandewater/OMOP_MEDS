@@ -412,6 +412,7 @@ def join_concept(
                 df = df.with_columns(
                     pl.col(reference_cols).alias("preferred_concept_name"),
                     pl.col("vocabulary_id").alias("preferred_vocabulary_name"),
+                    pl.col(reference_cols[0]).alias("preferred_concept_id"),
                 )
             else:
                 clean_item = ""
@@ -454,7 +455,13 @@ def join_concept(
         if "table_name" in schema_names:
             to_select.append("table_name")
         if "preferred_concept_name" in schema_names:
-            to_select.extend(["preferred_concept_name", "preferred_vocabulary_name"])
+            to_select.extend(
+                [
+                    "preferred_concept_name",
+                    "preferred_vocabulary_name",
+                    "preferred_concept_id",
+                ]
+            )
             df = df.with_columns(
                 pl.col("preferred_vocabulary_name").replace(None, f"OMOP_{table_name}")
             )
@@ -574,54 +581,67 @@ def check_column_mismatches(folder_path: str):
 def extract_codes_metadata(
     concept_df: pl.LazyFrame, concept_relationship_df: pl.LazyFrame
 ) -> pl.LazyFrame:
-    """ "
+    """
     Extracts metadata from the OMOP `concept` and `concept_relationship` tables.
-    This function generates a metadata table that includes concept IDs, vocabulary IDs,
-    descriptions, and parent codes for each concept. It also handles custom concepts with
-    concept IDs greater than 2000000000, ensuring they are included in the metadata with
-    appropriate parent codes when available.
+    This function generates a metadata table with one row per concept: its concept ID, vocabulary ID,
+    concept code, `concept_name` as description, and as parent codes the `vocabulary_id//concept_code`
+    of every concept it "Maps to" that is in the `concept` table. Custom concepts (concept IDs above
+    2000000000) are included like any other concept. `finish_codes_metadata` joins this on the concept
+    behind each MEDS code.
+
+    Examples:
+        >>> concept_df = pl.LazyFrame({
+        ...     "concept_id": [1, 2, 3],
+        ...     "vocabulary_id": ["SRC", "STD", "STD"],
+        ...     "concept_code": ["a", "x", "y"],
+        ...     "concept_name": ["Source a", "Standard x", "Standard y"],
+        ... })
+        >>> concept_relationship_df = pl.LazyFrame({
+        ...     "concept_id_1": [1, 1, 1, 2],
+        ...     "concept_id_2": [2, 3, 999, 2],
+        ...     "relationship_id": ["Maps to", "Maps to", "Maps to", "Maps to"],
+        ... })
+        >>> extract_codes_metadata(concept_df, concept_relationship_df).collect().sort("concept_id").rows()
+        [('SRC//1', 'SRC', 1, 'a', 'Source a', ['STD//x', 'STD//y']), ('STD//2', 'STD', 2, 'x', 'Standard x', ['STD//x']), ('STD//3', 'STD', 3, 'y', 'Standard y', None)]
     """
     logger.info(
         "Generating codes metadata from OMOP `concept` table and `concept_relationship` table"
     )
-    concept = concept_df
-    concept_id = pl.col("concept_id").cast(pl.Int64)
-    # code = pl.col("vocabulary_id") + "//" + pl.col("concept_code")
-    logger.info(concept.collect_schema())
-    # Convert the table into a dictionary
-    result = concept.select(
-        concept_id=concept_id,
-        vocabulary_id=pl.col("vocabulary_id"),
+    concept = concept_df.select(
+        pl.col("concept_id").cast(pl.Int64),
+        "vocabulary_id",
+        "concept_code",
         description=pl.col("concept_name"),
     )
-    concept_relationship_df = concept_relationship_df.with_columns(
-        pl.col("concept_id_1").cast(pl.Int64), pl.col("concept_id_2").cast(pl.Int64)
+    # Take the parents of the concepts: one list per concept, over all of its "Maps to" targets
+    parent_codes = (
+        concept_relationship_df.filter(pl.col("relationship_id") == "Maps to")
+        .select(
+            pl.col("concept_id_1").cast(pl.Int64).alias("concept_id"),
+            pl.col("concept_id_2").cast(pl.Int64).alias("parent_concept_id"),
+        )
+        .join(
+            concept.select(
+                parent_concept_id="concept_id",
+                parent_code=pl.concat_str(
+                    "vocabulary_id", "concept_code", separator="//"
+                ),
+            ),
+            on="parent_concept_id",
+            how="inner",
+        )
+        .group_by("concept_id")
+        .agg(parent_codes=pl.col("parent_code").drop_nulls().unique().sort())
     )
-
-    # Take the parents of the concepts
-    parent_codes = concept_relationship_df.filter(
-        pl.col("relationship_id") == "Maps to"
-    )
-    parent_codes = parent_codes.join(
-        concept_df, left_on="concept_id_2", right_on="concept_id", how="left"
-    )
-    parent_codes = parent_codes.with_columns(
-        parent_codes=pl.col("vocabulary_id") + "//" + pl.col("concept_code")
-    )
-    parent_codes = parent_codes.with_columns(
-        parent_codes=pl.col("parent_codes").cast(pl.List(pl.String))
-    )
-    result = result.join(
-        parent_codes, left_on="concept_id", right_on="concept_id_1", how="left"
-    )
-    # code_metadata = result
-    code_metadata = result.with_columns(
+    code_metadata = concept.join(parent_codes, on="concept_id", how="left").select(
         code=pl.col("vocabulary_id").cast(pl.Utf8)
         + "//"
-        + pl.col("concept_id").cast(pl.Utf8)
-    )
-    code_metadata = code_metadata.select(
-        "code", "vocabulary_id", "concept_id", "description", "parent_codes"
+        + pl.col("concept_id").cast(pl.Utf8),
+        vocabulary_id="vocabulary_id",
+        concept_id="concept_id",
+        concept_code="concept_code",
+        description="description",
+        parent_codes="parent_codes",
     )
 
     # code_metadata = code_metadata.with_columns(pl.col("name").alias("description"))
@@ -701,7 +721,10 @@ def determine_concept_id(
 
     Returns:
         pl.LazyFrame: A new DataFrame with the determined concept ID and vocabulary ID
-        added as `preferred_concept_name` and `preferred_vocabulary_name` columns.
+        added as `preferred_concept_name` and `preferred_vocabulary_name` columns, and the OMOP
+        `concept_id` that `preferred_concept_name` stands for as `preferred_concept_id` (the first
+        original column when neither concept is in the concept table), so the code metadata can be
+        joined on the concept rather than on the code string.
 
     Example:
         >>> df = pl.LazyFrame({"mapped_concept_col": [1, None], "source_concept_col": [None, 2]})
@@ -804,9 +827,25 @@ def determine_concept_id(
                 )
             )
         )
+    # Mirrors the branch order above. The reference columns are joined mapped first and source last
+    # (see `join_concept`); the fallback code names the first one, so it links to that concept.
+    mapped = (mapped_concept_col, original_concept_id_cols[0])
+    source = (source_concept_col, original_concept_id_cols[-1])
+    (first_code, first_id), (second_code, second_id) = (
+        (source, mapped) if prefer_source else (mapped, source)
+    )
+    concept = (
+        pl.when(pl.col(first_code).is_not_null())
+        .then(pl.col(first_id))
+        .when(pl.col(second_code).is_not_null())
+        .then(pl.col(second_id))
+        .otherwise(pl.col(original_concept_id_cols[0]))
+        .cast(pl.Int64)
+    )
     df = df.with_columns(
         concept_id.alias("preferred_concept_name"),
         vocab_id.alias("preferred_vocabulary_name"),
+        concept.alias("preferred_concept_id"),
     )
     return df
 

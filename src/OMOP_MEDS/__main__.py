@@ -9,7 +9,7 @@ from importlib.metadata import version
 import hydra
 from omegaconf import DictConfig, OmegaConf, omegaconf
 
-from OMOP_MEDS.utils import finish_codes_metadata
+from OMOP_MEDS.utils import enrich_codes_metadata_with_athena, finish_codes_metadata
 from . import ETL_CFG, EVENT_CFG, MAIN_CFG
 from . import __version__ as PKG_VERSION
 from . import dataset_info
@@ -121,8 +121,14 @@ def main(cfg: DictConfig):
 
     run_command(command_parts, env=env)
 
-    # Copy codes.parquet to MEDS cohort directory
-    finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir)
+    # Write codes.parquet: every code with its OMOP concept's description and parent codes
+    codes_fp = finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir, event_cfg_path)
+    athena_csv_dir = cfg.get("athena_csv_dir", None)
+    if athena_csv_dir and codes_fp is not None:
+        logger.info("Filling code metadata gaps from the Athena vocabulary download.")
+        enrich_codes_metadata_with_athena(
+            codes_fp, pre_MEDS_dir, Path(athena_csv_dir).expanduser()
+        )
 
 
 if __name__ == "__main__":
