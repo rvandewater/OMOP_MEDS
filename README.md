@@ -195,6 +195,25 @@ We use the demo dataset for MIMIC-IV in the OMOP format, which is a subset of th
 This dataset downloaded from Physionet does not include the standard dictionary linking definitions but should otherwise
 be functional. We also include a small sample of synthetic (LLM-generated) data in the test/demo_resources directory, which can be used for testing and development purposes.
 
+## Code metadata (`codes.parquet`)
+
+`metadata/codes.parquet` lists every code in the data, once per OMOP table it comes from (`table_name`,
+`occurrence_count`), and links it to the OMOP concept it was built from (`concept_id`). Codes from tables
+with a mapped and a source concept (measurement, condition and procedure occurrences, device exposure end,
+and observation and visit occurrence in OMOP 5.3) end in the concept's `concept_code`, e.g. `LOINC//718-7`;
+the other tables end in its `concept_id`. From the source database's own vocabulary tables, each code gets:
+
+- `description`: the `concept_name` in the `concept` table;
+- `parent_codes`: the `vocabulary_id//concept_code` of every concept it "Maps to" in `concept_relationship`.
+    A standard concept maps to itself, so a code ending in its `concept_id` gets its own vocabulary code
+    (e.g. `LOINC//718-7`), while a code that already is that vocabulary code does not list itself;
+- `vocabulary_id` and `concept_code` of the concept.
+
+The file validates against `meds.CodeMetadataSchema`.
+
+Concepts missing from the source's `concept` table (many OMOP extracts, including the MIMIC-IV demo, ship only a
+subset) keep their `concept_id` but get no description.
+
 ## Advanced datetime resolution
 
 To handle datetime resolution in a more flexible way, you can configure the `datetime_resolver` settings in your config file.

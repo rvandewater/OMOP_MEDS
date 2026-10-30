@@ -6,7 +6,9 @@ from tempfile import TemporaryDirectory
 import os
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
+from meds import CodeMetadataSchema
 from omegaconf import OmegaConf
 
 from OMOP_MEDS.__main__ import main as run_omop_meds
@@ -85,6 +87,15 @@ def test_local_e2e_demo_resources():
         assert codes_metadata.exists(), (
             f"Codes metadata not found in {metadata_path}; found {all_files}"
         )
+        codes_table = pq.read_table(codes_metadata)
+        CodeMetadataSchema.validate(codes_table)
+        codes = pl.from_arrow(codes_table)
+        data_codes = pl.scan_parquet(data_path / "**/*.parquet").select("code").unique()
+        assert set(data_codes.collect()["code"]) == set(codes["code"])
+        # Observation codes are vocabulary_id//concept_code (mapped and source concept); the demo concept
+        # table holds the MIMIC-IV local concepts, which must be described.
+        observation = codes.filter(pl.col("table_name") == "observation")
+        assert observation["description"].is_not_null().sum() > 0
 
         subject_splits = metadata_path / "subject_splits.parquet"
         assert subject_splits.exists(), (

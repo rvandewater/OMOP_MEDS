@@ -121,8 +121,8 @@ def main(cfg: DictConfig):
 
     run_command(command_parts, env=env)
 
-    # Copy codes.parquet to MEDS cohort directory
-    finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir)
+    # Write codes.parquet: every code with its OMOP concept's description and parent codes
+    finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir, event_cfg_path)
 
 
 if __name__ == "__main__":
