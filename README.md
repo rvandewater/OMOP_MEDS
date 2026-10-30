@@ -225,10 +225,20 @@ OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR athena_c
 ```
 
 This only fills what is missing; values from the source tables are never changed. Descriptions come from
-[suMEDS](https://github.com/rvandewater/summarize_meds) (valid concepts only), parent codes from the "Maps to"
+[suMEDS](https://github.com/rvandewater/suMEDS) (valid concepts only), parent codes from the "Maps to"
 relationships of the source, else of Athena. You bring your own Athena download: the ETL never ships
 vocabulary content, and CPT4 names are only in an Athena export completed with a UMLS license (Athena's CPT4
 utility and your UMLS API key).
+
+Other MEDS ETLs ship a suMEDS rules file, so that `suMEDS-enrich` can add vocabulary hierarchy without Athena, from
+suMEDS's versioned ontology data (sumeds-ontologies, pinned release: ICD-10-CM, ICD-10-PCS, ICD-9-CM, ICD-9
+procedures, LOINC). This ETL does not, and the fallback above does not use that data either:
+
+- every gap the fallback fills is a concept known only by its `concept_id`, while that data is keyed on vocabulary
+    codes; where the source `concept` table gives a concept's vocabulary code, it also gives its name;
+- rules match code strings, and an OMOP MEDS code ends in a `concept_code` or a `concept_id` depending on its table
+    (see above), so a pattern such as `ICD10PCS//<7 characters>` can also match a concept id. The concept behind each
+    code is already resolved into `vocabulary_id` and `concept_code`.
 
 ## Advanced datetime resolution
 
