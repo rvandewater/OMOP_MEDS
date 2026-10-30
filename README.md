@@ -112,6 +112,7 @@ pip install OMOP_MEDS[tests] # for running tests
 pip install OMOP_MEDS[local_parallelism] # for local parallelization with hydra-joblib-launcher
 pip install OMOP_MEDS[slurm_parallelism] # for parallelization with slurm using hydra-submitit-launcher
 pip install OMOP_MEDS[large_data] # for handling large datasets with polars (rt64), more than 3.2B rows
+pip install OMOP_MEDS[athena] # for the optional Athena fallback of the code metadata (suMEDS)
 ```
 
 Run routine tests (without the downloaded e2e test makes it a lot faster, simply remove the `-k` flag to run all tests):
@@ -141,6 +142,8 @@ OMOP_MEDS \
 - `++prefer_source`: Set to `True` to prefer source concepts over mapped concepts.
 - `++join_on_visit`: Set to `True` to join person table on having any associated visits.
 - `++process_notes`: Set to `True` to .
+- `athena_csv_dir`: Optional local OHDSI Athena download used as a fallback for the code metadata (see
+    [Code metadata](#code-metadata-codesparquet)).
 
 Pre-meds batching settings. This is relevant if (some of) your input tables are very large, and you want to process
 them in batches. This can be useful to reduce memory usage, but it also increases the runtime, so use with caution.
@@ -212,7 +215,20 @@ the other tables end in its `concept_id`. From the source database's own vocabul
 The file validates against `meds.CodeMetadataSchema`.
 
 Concepts missing from the source's `concept` table (many OMOP extracts, including the MIMIC-IV demo, ship only a
-subset) keep their `concept_id` but get no description.
+subset) keep their `concept_id` but get no description. To fill those gaps, point the ETL at a local
+[OHDSI Athena](https://athena.ohdsi.org) vocabulary download (the directory with `CONCEPT.csv` and
+`CONCEPT_RELATIONSHIP.csv`):
+
+```bash
+pip install OMOP_MEDS[athena]
+OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR athena_csv_dir=/path/to/athena
+```
+
+This only fills what is missing; values from the source tables are never changed. Descriptions come from
+[suMEDS](https://github.com/rvandewater/summarize_meds) (valid concepts only), parent codes from the "Maps to"
+relationships of the source, else of Athena. You bring your own Athena download: the ETL never ships
+vocabulary content, and CPT4 names are only in an Athena export completed with a UMLS license (Athena's CPT4
+utility and your UMLS API key).
 
 ## Advanced datetime resolution
 

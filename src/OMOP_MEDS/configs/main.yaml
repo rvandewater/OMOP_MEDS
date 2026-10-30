@@ -39,6 +39,10 @@ pre_meds_batch_input_rows: 10000000
 
 stage_runner_fp: null
 
+# Optional fallback for concepts missing from the source database's concept tables: a local OHDSI Athena
+# vocabulary download (the directory with CONCEPT.csv and CONCEPT_RELATIONSHIP.csv). Needs OMOP_MEDS[athena].
+athena_csv_dir: null
+
 do_download: False
 do_overwrite: False
 do_demo: False

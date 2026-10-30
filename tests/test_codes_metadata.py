@@ -12,7 +12,7 @@ from meds import CodeMetadataSchema
 
 from OMOP_MEDS import EVENT_CFG
 from OMOP_MEDS.pre_meds_utils import extract_codes_metadata, join_concept
-from OMOP_MEDS.utils import finish_codes_metadata
+from OMOP_MEDS.utils import enrich_codes_metadata_with_athena, finish_codes_metadata
 
 # Concept 10's concept_code is "20", and concept 20 exists in the same vocabulary: a code keyed by
 # concept_code ("VOC//20" from measurement) and one keyed by concept_id ("VOC//20//start" from drug_era)
@@ -198,3 +198,72 @@ def test_join_concept_records_the_concept_behind_the_code(
     assert out["preferred_concept_id"].item() == concept_id
     if vocabulary is not None:
         assert out["preferred_vocabulary_name"].item() == vocabulary
+
+
+def _write_athena(athena_dir: Path) -> None:
+    """A synthetic Athena download: tab-separated, unquoted, like OHDSI ships it."""
+    athena_dir.mkdir()
+    pl.DataFrame(
+        {
+            "concept_id": [10, 30, 31, 50, 60],
+            "concept_name": [
+                "Athena name for ten",
+                "Athena standard thirty",
+                "Athena standard thirty-one",
+                "Athena standard fifty",
+                "Athena lab sixty",
+            ],
+            "domain_id": ["Measurement"] * 5,
+            "vocabulary_id": ["VOC", "STD", "STD", "STD", "STD"],
+            "concept_class_id": ["Lab Test"] * 5,
+            "standard_concept": [None, "S", "S", "S", "S"],
+            "concept_code": ["20", "S30", "S31", "S50", "S60"],
+            "valid_start_date": ["19700101"] * 5,
+            "valid_end_date": ["20991231"] * 5,
+            "invalid_reason": [None] * 5,
+        }
+    ).write_csv(athena_dir / "CONCEPT.csv", separator="\t", quote_style="never")
+    pl.DataFrame(
+        {
+            "concept_id_1": [60, 10],
+            "concept_id_2": [60, 31],
+            "relationship_id": ["Maps to", "Maps to"],
+            "valid_start_date": ["19700101"] * 2,
+            "valid_end_date": ["20991231"] * 2,
+            "invalid_reason": [None, None],
+        }
+    ).write_csv(
+        athena_dir / "CONCEPT_RELATIONSHIP.csv", separator="\t", quote_style="never"
+    )
+
+
+def test_athena_fallback_only_fills_gaps(tmp_path):
+    pytest.importorskip("sumeds")
+    pre_MEDS_dir, MEDS_cohort_dir = _write_dataset(tmp_path)
+    codes_fp = finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir, EVENT_CFG)
+    before = _rows(pl.read_parquet(codes_fp))
+    athena_dir = tmp_path / "athena"
+    _write_athena(athena_dir)
+
+    enrich_codes_metadata_with_athena(codes_fp, pre_MEDS_dir, athena_dir)
+
+    table = pq.read_table(codes_fp)
+    CodeMetadataSchema.validate(table)
+    after = _rows(pl.from_arrow(table))
+    assert after.keys() == before.keys()
+    for key, row in before.items():
+        for column in ("description", "parent_codes", "vocabulary_id", "concept_code"):
+            if row[column] is not None:
+                assert after[key][column] == row[column], (key, column)
+    # The source "Maps to" target missing from the source concept table is resolved through Athena.
+    assert after["LOCAL//L1", "measurement"]["parent_codes"] == ["STD//S50"]
+    # "VOC//20//start" stands for concept 20, which Athena lacks. Matched as a VOCABULARY//CODE string it
+    # would hit concept 10 (concept_code "20") and get its Athena "Maps to" parent.
+    assert after["VOC//20//start", "drug_era"]["parent_codes"] is None
+    # A concept missing from the source tables is described and mapped through Athena.
+    fallback = after["OMOP_measurement//measurement_concept_id:60,61", "measurement"]
+    assert fallback["description"] == "Athena lab sixty"
+    assert fallback["parent_codes"] == ["STD//S60"]
+    assert (fallback["vocabulary_id"], fallback["concept_code"]) == ("STD", "S60")
+    # Literal codes stay as they are.
+    assert after["MEDS_BIRTH", "person_death"]["description"] is None

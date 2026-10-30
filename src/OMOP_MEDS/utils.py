@@ -240,3 +240,146 @@ def write_codes_metadata(codes: pl.DataFrame, codes_fp: Path) -> None:
 def _ensure_parent_dir(path: Path) -> None:
     """Ensure parent directory exists for a file path."""
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def enrich_codes_metadata_with_athena(
+    codes_fp: Path, pre_MEDS_dir: Path, athena_csv_dir: Path
+) -> None:
+    """Fills gaps in a finished `codes.parquet` from a local OHDSI Athena vocabulary download.
+
+    A fallback for concepts the source database's `concept` / `concept_relationship` subset lacks; nothing
+    the ETL already wrote is changed. Only codes linked to a concept are considered:
+
+    * a null description gets the Athena `concept_name` of the code's concept, through suMEDS
+      (`sumeds.enrich_metadata`, valid concepts only). suMEDS matches `VOCABULARY//CODE`, while OMOP codes
+      often carry a `concept_id`, so it is given each concept's Athena `vocabulary_id//concept_code`
+      rather than the code itself;
+    * null parent codes get the `vocabulary_id//concept_code` of the concepts it "Maps to": the source
+      relationships, else Athena's, with target codes from the source `concept` table, else Athena's;
+    * a null `vocabulary_id` / `concept_code` is taken from Athena.
+
+    Needs the optional `sumeds` dependency (`pip install OMOP_MEDS[athena]`).
+    """
+    try:
+        from sumeds import EnrichmentConfig, enrich_metadata
+    except ImportError as e:  # pragma: no cover - depends on the optional extra
+        raise ImportError(
+            "athena_csv_dir needs suMEDS: pip install 'OMOP_MEDS[athena]'"
+        ) from e
+
+    athena_csv_dir = Path(athena_csv_dir)
+    codes = pl.from_arrow(pq.read_table(codes_fp))
+    todo = codes.filter(
+        pl.col("concept_id").is_not_null()
+        & (pl.col("description").is_null() | pl.col("parent_codes").is_null())
+    )
+    ids = todo["concept_id"].unique().implode()
+
+    maps_to = (
+        pl.scan_parquet(pre_MEDS_dir / "concept_relationship.parquet")
+        .filter(pl.col("relationship_id") == "Maps to")
+        .select(
+            pl.col("concept_id_1").cast(pl.Int64).alias("concept_id"),
+            pl.col("concept_id_2").cast(pl.Int64).alias("target_id"),
+        )
+        .filter(pl.col("concept_id").is_in(ids))
+        .collect()
+    )
+    without_source_maps = todo.filter(
+        ~pl.col("concept_id").is_in(maps_to["concept_id"].implode())
+    )
+    athena_maps_to = (
+        _scan_athena_csv(
+            athena_csv_dir / "CONCEPT_RELATIONSHIP.csv",
+            ["concept_id_1", "concept_id_2"],
+        )
+        .filter(
+            (pl.col("relationship_id") == "Maps to")
+            & pl.col("invalid_reason").is_null()
+            & pl.col("concept_id_1").is_in(
+                without_source_maps["concept_id"].unique().implode()
+            )
+        )
+        .select(
+            pl.col("concept_id_1").alias("concept_id"),
+            pl.col("concept_id_2").alias("target_id"),
+        )
+        .collect(engine="streaming")
+    )
+    maps_to = pl.concat([maps_to, athena_maps_to])
+
+    key_ids = pl.concat([todo["concept_id"], maps_to["target_id"]]).unique().implode()
+    source_keys = (
+        pl.scan_parquet(pre_MEDS_dir / "concept.parquet")
+        .select(pl.col("concept_id").cast(pl.Int64), "vocabulary_id", "concept_code")
+        .filter(pl.col("concept_id").is_in(key_ids))
+        .collect()
+    )
+    athena_keys = (
+        _scan_athena_csv(athena_csv_dir / "CONCEPT.csv", ["concept_id"])
+        .select("concept_id", "vocabulary_id", "concept_code")
+        .filter(
+            pl.col("concept_id").is_in(key_ids)
+            & ~pl.col("concept_id").is_in(source_keys["concept_id"].implode())
+        )
+        .collect(engine="streaming")
+    )
+    keys = pl.concat([source_keys, athena_keys]).with_columns(
+        key=pl.concat_str("vocabulary_id", "concept_code", separator="//")
+    )
+
+    described = (
+        enrich_metadata(
+            keys.select(code=pl.col("key")).drop_nulls().unique().lazy(),
+            EnrichmentConfig(csv_dir=athena_csv_dir, parent_codes=False),
+        )
+        .select(key=pl.col("code"), _description=pl.col("description"))
+        .collect()
+    )
+    concept_keys = keys.join(described, on="key", how="left").select(
+        "concept_id",
+        "_description",
+        _vocabulary_id=pl.col("vocabulary_id"),
+        _concept_code=pl.col("concept_code"),
+    )
+    parents = (
+        maps_to.join(keys.select(target_id="concept_id", key="key"), on="target_id")
+        .group_by("concept_id")
+        .agg(_parent_codes=pl.col("key").drop_nulls().unique())
+    )
+    filled = (
+        codes.join(concept_keys, on="concept_id", how="left")
+        .join(parents, on="concept_id", how="left")
+        .with_columns(
+            pl.coalesce(column, f"_{column}").alias(column)
+            for column in (
+                "description",
+                "vocabulary_id",
+                "concept_code",
+                "parent_codes",
+            )
+        )
+        .with_columns(_drop_self_parent(pl.col("parent_codes")))
+        .select(codes.columns)
+    )
+    write_codes_metadata(filled, codes_fp)
+    logger.info(
+        "Athena fallback filled "
+        f"{filled['description'].is_not_null().sum() - codes['description'].is_not_null().sum()} "
+        "descriptions and "
+        f"{filled['parent_codes'].is_not_null().sum() - codes['parent_codes'].is_not_null().sum()} "
+        f"parent code lists of {codes.height} codes."
+    )
+
+
+def _scan_athena_csv(fp: Path, id_columns: list[str]) -> pl.LazyFrame:
+    """Scans an Athena vocabulary file (tab-separated, unquoted) with its concept id columns as Int64."""
+    if not fp.is_file():
+        raise FileNotFoundError(f"Athena vocabulary file not found: {fp}")
+    return pl.scan_csv(
+        fp,
+        separator="\t",
+        quote_char=None,
+        null_values=[""],
+        infer_schema=False,
+    ).with_columns(pl.col(id_columns).cast(pl.Int64))

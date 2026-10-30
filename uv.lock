@@ -561,6 +561,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+athena = [
+    { name = "sumeds" },
+]
 dev = [
     { name = "mdformat-admon" },
     { name = "pre-commit" },
@@ -578,6 +581,7 @@ tests = [
     { name = "hydra-joblib-launcher" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "sumeds" },
 ]
 
 [package.metadata]
@@ -598,9 +602,11 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'tests'" },
     { name = "pytest-cov", marker = "extra == 'tests'" },
     { name = "requests" },
+    { name = "sumeds", marker = "extra == 'athena'", specifier = ">=0.3.2" },
+    { name = "sumeds", marker = "extra == 'tests'", specifier = ">=0.3.2" },
     { name = "tqdm" },
 ]
-provides-extras = ["dev", "tests", "local-parallelism", "slurm-parallelism", "large-data"]
+provides-extras = ["dev", "tests", "local-parallelism", "slurm-parallelism", "large-data", "athena"]
 
 [[package]]
 name = "omop-schema"
@@ -966,6 +972,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/47/86/497018fb3b74e71bef45df82762b176e6b3d159f29941c20d2f141ec4096/submitit-1.5.4.tar.gz", hash = "sha256:7100848bd1cdda79c7196e54ee830793ae75fd7adde0c5bef738d72360a07508", size = 81538, upload-time = "2025-12-17T19:20:03.396Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ea/bb/711e1c2ebd18a21202c972dd5d5c8e09a921f2d3560e3a53d6350c808ab7/submitit-1.5.4-py3-none-any.whl", hash = "sha256:c26f3a7c8d4150eaf70b1da71e2023e9e9936c93e8342ed7db910f29158561c5", size = 76043, upload-time = "2025-12-17T19:20:01.941Z" },
+]
+
+[[package]]
+name = "sumeds"
+version = "0.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "meds" },
+    { name = "polars" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/9b/2fb3441c24149468b477e857fb2567b7eb98d9d3f92b941bd9bf85e51115/sumeds-0.3.2.tar.gz", hash = "sha256:2ebcced4c8713c73baea2b33da8bb8ef1f7f7d022b1b1c1d3167e4ad4f1b9944", size = 20878, upload-time = "2026-10-21T18:46:58.688Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0d/60/1ea1086fe9d35af7e870ea80b390942655b1584dc666332c7c9e3389c6c4/sumeds-0.3.2-py3-none-any.whl", hash = "sha256:8eef47b3d5569791b0d30997afda9185627bd68631dac5f8d67da869a208dd26", size = 24892, upload-time = "2026-10-21T18:46:57.585Z" },
 ]
 
 [[package]]
