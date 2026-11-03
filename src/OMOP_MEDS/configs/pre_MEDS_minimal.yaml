@@ -71,7 +71,7 @@ observation:
         "concept_name_source_concept_id",
       ]
   5.4:
-    reference_cols: ["observation_source_concept_id"]
+    reference_cols: ["observation_concept_id", "observation_source_concept_id"]
     output_data_cols: [
         #        "observation_id",
         #        "observation_concept_id",
@@ -194,7 +194,7 @@ visit_occurrence:
         "concept_name_source_concept_id",
       ]
   5.4:
-    reference_cols: ["visit_source_concept_id"]
+    reference_cols: ["visit_concept_id", "visit_source_concept_id"]
     output_data_cols:
       [
         "visit_occurrence_id",
