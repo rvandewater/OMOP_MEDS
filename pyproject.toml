@@ -11,7 +11,7 @@ authors = [
 ]
 description = "An ETL to convert OMOP data to the MEDS format."
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.11.4,<3.14"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

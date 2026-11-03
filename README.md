@@ -9,7 +9,7 @@ alt="omop-to-meds logo" height="300">
 [![codecov](https://codecov.io/gh/rvandewater/OMOP_MEDS/graph/badge.svg?token=RW6JXHNT0W)](https://codecov.io/gh/rvandewater/OMOP_MEDS)
 [![tests](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yml)
 [![code-quality](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml)
-![python](https://img.shields.io/badge/-Python_3.12%20%7C%203.13-blue?logo=python&logoColor=white)
+![python](https://img.shields.io/badge/-Python_3.11%20%7C%203.12%20%7C%203.13-blue?logo=python&logoColor=white)
 [![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/rvandewater/OMOP_MEDS#license)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rvandewater/OMOP_MEDS/pulls)
 [![contributors](https://img.shields.io/github/contributors/rvandewater/OMOP_MEDS.svg)](https://github.com/rvandewater/OMOP_MEDS/graphs/contributors)
@@ -48,7 +48,10 @@ If your OMOP schema is non-standard (but still approximately OMOP), you should b
 
 ## Setup
 
-Requires Python `>=3.12,<3.14`. The MEDS conversion runs on MEDS-Extract 0.8 and MEDS-Transforms 0.7.
+Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.8 supports: its Hydra command line fails on Python 3.14
+([MEDS_extract#248](https://github.com/mmcdermott/MEDS_extract/issues/248)), and its archive extraction on 3.11.0–3.11.3
+([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.8
+and MEDS-Transforms 0.7.
 
 First install the package:
 
