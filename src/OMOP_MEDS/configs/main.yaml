@@ -42,6 +42,10 @@ stage_runner_fp: null
 do_download: False
 do_overwrite: False
 do_demo: False
+# Cache for the public demo download (do_demo=True only); a cached archive is reused for
+# download_cache_max_age_days days. Set download_cache_dir=null to always download.
+download_cache_dir: ${oc.env:OMOP_MEDS_CACHE_DIR,"~/.cache/OMOP_MEDS"}
+download_cache_max_age_days: 7
 
 log_dir: ${root_output_dir}/.logs
 

@@ -44,7 +44,16 @@ def main(cfg: DictConfig):
     if cfg.do_download:  # pragma: no cover
         if cfg.get("do_demo", False):
             logger.info("Downloading demo data.")
-            download_data(raw_input_dir, dataset_info, do_demo=True)
+            # Only the public demo is cached; credentialed datasets may contain PHI and are never copied
+            # into a shared cache directory.
+            cache_dir = cfg.get("download_cache_dir", None)
+            download_data(
+                raw_input_dir,
+                dataset_info,
+                do_demo=True,
+                cache_dir=Path(cache_dir).expanduser() if cache_dir else None,
+                cache_max_age_days=cfg.get("download_cache_max_age_days", 7),
+            )
             rename_demo_files(raw_input_dir)
         else:
             logger.info("Downloading data.")
