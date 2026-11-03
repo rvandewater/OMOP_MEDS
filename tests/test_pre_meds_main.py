@@ -339,17 +339,14 @@ def test_tables_on_the_module_ignore_list_are_not_read(
     assert (tmp_path / "pre_MEDS" / "visit_occurrence.parquet").exists()
 
 
-def test_table_without_a_block_for_this_omop_version_fails_loudly(
+def test_unsupported_omop_version_fails_before_writing_anything(
     raw: Path, tmp_path: Path, monkeypatch
 ):
-    cfg_without_5_3 = premeds_cfg.copy()
-    cfg_without_5_3.observation = {5.4: premeds_cfg.observation[5.4]}
-    monkeypatch.setattr("OMOP_MEDS.pre_meds.premeds_cfg", cfg_without_5_3)
+    monkeypatch.setenv("OMOP_VERSION", "6.0")
 
-    with pytest.raises(
-        ValueError, match="OMOP version 5.3 not supported for observation"
-    ):
+    with pytest.raises(ValueError, match="Unsupported OMOP CDM version '6.0'"):
         pre_meds_main(_cfg(raw, tmp_path))
+    assert not (tmp_path / "pre_MEDS").exists()
 
 
 def test_table_directory_without_data_files_is_skipped(

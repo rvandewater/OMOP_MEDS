@@ -39,6 +39,7 @@ import polars as pl
 import pytest
 from omegaconf import OmegaConf
 
+from OMOP_MEDS.omop_versions import SUPPORTED_OMOP_VERSIONS, load_pre_meds_tables
 from OMOP_MEDS.pre_meds_utils import build_preferred_event_datetime
 
 
@@ -661,17 +662,10 @@ class TestWrapWithDatetimeResolver:
         times = _resolve(df, **kwargs)
         assert times[0].day == 3  # override enabled and later
 
-    def test_config_with_note_column_names(self):
-        """Mirrors exactly the YAML block defined in pre_MEDS.yaml for note."""
-        yaml_str = """
-        primary_datetime_col: note_datetime
-        primary_date_col: note_date
-        override_datetime_col: xtn_note_last_edit_datetime
-        override_date_col: xtn_note_last_edit_date
-        use_override_if_later: true
-        output_col: time
-        """
-        cfg = OmegaConf.create(yaml_str)
+    @pytest.mark.parametrize("version", SUPPORTED_OMOP_VERSIONS)
+    def test_config_with_note_column_names(self, version):
+        """The note block of every OMOP version's pre-MEDS config prefers a later last edit."""
+        cfg = load_pre_meds_tables(version).note.datetime_resolver
         df = pl.DataFrame(
             {
                 "note_datetime": ["2024-05-01 09:00:00"],

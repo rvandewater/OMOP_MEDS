@@ -108,7 +108,9 @@ def _extract_tables(zip_fp: Path, raw_input_dir: Path) -> list[str]:
     return sorted(tables)
 
 
-def test_e2e_synthea_omop_5_4(tmp_path: Path):
+# CDM 5.5 only adds optional fields to CDM 5.4, so a 5.4 export read as 5.5 must give the same events.
+@pytest.mark.parametrize("omop_version", ["5.4", "5.5"])
+def test_e2e_synthea(tmp_path: Path, omop_version: str):
     raw_input_dir = tmp_path / "raw_input"
     tables = _extract_tables(_synthea_zip(), raw_input_dir)
     assert {
@@ -134,7 +136,7 @@ def test_e2e_synthea_omop_5_4(tmp_path: Path):
         "HYDRA_FULL_ERROR": "1",
         "DATASET_NAME": "SYNTHEA27NJ",
         "RAW_DATASET_VERSION": "5.4",
-        "OMOP_VERSION": "5.4",
+        "OMOP_VERSION": omop_version,
     }
     try:
         result = subprocess.run(
@@ -155,7 +157,9 @@ def test_e2e_synthea_omop_5_4(tmp_path: Path):
         assert (metadata / fname).is_file(), f"{fname} missing from {metadata}"
     dataset = json.loads((metadata / "dataset.json").read_text())
     assert dataset["dataset_name"] == "SYNTHEA27NJ"
-    assert dataset["dataset_version"].endswith(":OMOP_5.4"), dataset["dataset_version"]
+    assert dataset["dataset_version"].endswith(f":OMOP_{omop_version}"), dataset[
+        "dataset_version"
+    ]
 
     data_files = sorted((root / "MEDS_cohort" / "data").rglob("*.parquet"))
     assert data_files, f"No MEDS data shards under {root / 'MEDS_cohort' / 'data'}"
