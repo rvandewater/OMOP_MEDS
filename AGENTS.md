@@ -29,8 +29,9 @@ Pi reads this file as project context. Keep it in the repository root and run `/
 - `src/OMOP_MEDS/utils.py` - final MEDS metadata helpers.
 - `src/OMOP_MEDS/dataset.yaml` - default dataset metadata and download URLs, overridden by environment variables.
 - `src/OMOP_MEDS/configs/main.yaml` - top-level Hydra defaults and runtime options.
-- `src/OMOP_MEDS/configs/pre_MEDS_minimal.yaml` - active pre-MEDS table preprocessing configuration loaded by the package.
-- `src/OMOP_MEDS/configs/pre_MEDS.yaml` - fuller/reference pre-MEDS table configuration; do not assume it is the active runtime config.
+- `src/OMOP_MEDS/configs/pre_MEDS/omop_<version>.yaml` - pre-MEDS table preprocessing for one OMOP CDM version (5.3, 5.4, 5.5), chosen by `OMOP_VERSION`.
+- `src/OMOP_MEDS/configs/pre_MEDS/common.yaml` - pre-MEDS settings shared by every OMOP version.
+- `src/OMOP_MEDS/omop_versions.py` - supported OMOP versions, loading their pre-MEDS configs, table schemas (including OMOP 5.5).
 - `src/OMOP_MEDS/configs/event_configs.yaml` - mapping from pre-MEDS tables/columns to MEDS events.
 - `src/OMOP_MEDS/configs/OMOP.yaml` - supported OMOP table lists by OMOP version.
 - `src/OMOP_MEDS/configs/ETL.yaml` and `runner.yaml` - MEDS-Transforms runner configuration.
@@ -119,7 +120,7 @@ The pipeline has four conceptual phases:
 
 Preserve these invariants:
 
-- OMOP versions 5.3 and 5.4 are supported. When adding table behavior, check both version-specific schemas and configs.
+- OMOP versions 5.3, 5.4 and 5.5 are supported. When adding table behavior, check every version's schema and pre-MEDS config.
 - `person_id` is the subject identifier; `visit_occurrence_id` is the visit/admission identifier where relevant.
 - Raw table inputs may be single files or directories of shards, and may be Parquet, CSV, or gzipped CSV.
 - Pre-MEDS table output is Parquet and is later interpreted by `event_configs.yaml`.
@@ -150,12 +151,11 @@ This package is intended to handle large clinical tables. Avoid patterns that wo
 - Use Hydra/OmegaConf interpolation patterns already present in the repo for environment-variable overrides.
 - When adding a new runtime flag, update `main.yaml`, document it in `README.md` if user-facing, and add or adjust tests.
 - When adding or changing a pre-MEDS table:
-    1. Update `pre_MEDS_minimal.yaml` for runtime behavior.
-    2. Update `pre_MEDS.yaml` only if the reference/full config should match.
-    3. Ensure `OMOP.yaml` includes the table for the right OMOP versions.
-    4. Add or update entries in `event_configs.yaml` if the table should produce MEDS events.
-    5. Add tests using `tests/demo_resources` or synthetic temporary Parquet/CSV data.
-- Be careful with version-keyed config blocks such as `5.3:` and `5.4:`. A change for one version should not accidentally alter the other.
+    1. Update `configs/pre_MEDS/omop_<version>.yaml` for every OMOP version whose CDM has the table.
+    2. Ensure `OMOP.yaml` includes the table for the right OMOP versions.
+    3. Add or update entries in `event_configs.yaml` if the table should produce MEDS events.
+    4. Add tests using `tests/demo_resources` or synthetic temporary Parquet/CSV data.
+- Each OMOP version has its own pre-MEDS config file. Make a change in every version where the CDM table is the same; `tests/test_omop_versions.py` fails when tables the CDM left unchanged are configured differently, or a configured column is not a CDM field.
 - Do not hard-code local dataset names, usernames, passwords, or private URLs. Use environment variables and config overrides.
 
 ## Testing guidance
@@ -168,6 +168,7 @@ Choose tests based on the risk of the change.
 - Sharded or large-table loading: run `tests/test_sharded_table_data_loader.py`.
 - NLP note feature extraction: run `tests/test_nlp_feature_extraction.py` and avoid exposing raw note contents in logs.
 - End-to-end or config changes: run `tests/e2e_demo_test.py::test_local_e2e_demo_resources`.
+- OMOP version configs and schemas: run `tests/test_omop_versions.py`.
 - Public examples/docstrings: run the CI-style doctest command over `src/` and `tests/`.
 
 When adding tests:
@@ -226,14 +227,14 @@ Before reporting completion, verify and summarize:
 - What commands were run and their results.
 - What commands were not run and why.
 - Any risks, assumptions, or follow-up work.
-- Whether behavior changed for OMOP 5.3, OMOP 5.4, or both.
+- Which OMOP versions (5.3, 5.4, 5.5) changed behavior.
 - Whether docs/config/tests were updated when needed.
 
 ## Common change recipes
 
 ### Add support for a new OMOP source column
 
-1. Confirm the column exists in OMOP 5.3, 5.4, or a known local extension.
+1. Confirm the column exists in OMOP 5.3, 5.4 or 5.5 (`tests/omop_cdm_spec/`), or list it as a known extension in `NON_CDM_COLUMNS` in `tests/test_omop_versions.py`.
 2. Add the column to the relevant `output_data_cols` only when it is needed downstream.
 3. Ensure the column survives metadata-column dropping if required.
 4. Add event config usage only if it should become a MEDS event field.

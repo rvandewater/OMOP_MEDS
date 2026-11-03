@@ -1,6 +1,5 @@
 """Performs pre-MEDS data wrangling for OMOP datasets."""
 
-import copy
 import os
 import shutil
 from datetime import datetime
@@ -18,9 +17,14 @@ import polars.selectors as cs
 import pyarrow.parquet as pq
 import logging
 from omegaconf import OmegaConf, DictConfig
-from omop_schema.utils import get_schema_loader
 
 from . import dataset_info, omop_cfg, premeds_cfg
+from .omop_versions import (
+    get_schema_loader,
+    load_pre_meds_tables,
+    normalize_omop_version,
+    pre_meds_config_path,
+)
 from .pre_meds_utils import (
     DATASET_NAME,
     get_table_path,
@@ -83,18 +87,17 @@ def migrate_legacy_batched_outputs(pre_MEDS_dir: Path) -> list[str]:
 def main(cfg: DictConfig) -> None:
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
-    logger.info(f"Loading table preprocessors from {premeds_cfg}...")
-    # A private copy: the setup below pops `nlp_features` and each table's `datetime_resolver`, and popping them
-    # from the shared package config would make a second run in this process build notes without
-    # `preferred_time`, the last-edit timestamp that prevents temporal leakage.
-    preprocessors = copy.deepcopy(premeds_cfg)
-    functions = {}
-    omop_version = float(dataset_info.omop_version)
-    supported_omop_versions = [5.3, 5.4]
+    omop_version = normalize_omop_version(dataset_info.omop_version)
     logger.info(f"Expecting OMOP version: {omop_version}")
+    # Loaded afresh on every run: the setup below pops each table's `datetime_resolver`, and a config shared
+    # across runs would then make a second run in this process build notes without `preferred_time`, the
+    # last-edit timestamp that prevents temporal leakage.
+    preprocessors = load_pre_meds_tables(omop_version)
+    logger.info(f"Loaded table preprocessors from {pre_meds_config_path(omop_version)}")
+    functions = {}
     omop_cfg_version = omop_cfg[omop_version]
     schema_loader = get_schema_loader(omop_version)
-    nlp_config = preprocessors.pop("nlp_features", None)
+    nlp_config = premeds_cfg.get("nlp_features", None)
 
     if cfg.prefer_source:
         logger.warning(
@@ -141,17 +144,8 @@ def main(cfg: DictConfig) -> None:
         table_name,
         preprocessor_cfg,
     ):
-        datetime_resolver_cfg = None
         logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
-        if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
-            if omop_version in preprocessor_cfg:
-                preprocessor_cfg = preprocessor_cfg[omop_version]
-                datetime_resolver_cfg = preprocessor_cfg.pop("datetime_resolver", None)
-            else:
-                raise ValueError(
-                    f"OMOP version {omop_version} not supported for {table_name}."
-                )
-        # (some configs include nlp_features at the same level as versioned dicts)
+        datetime_resolver_cfg = preprocessor_cfg.pop("datetime_resolver", None)
         functions[table_name] = join_concept(
             table_name=table_name,
             **preprocessor_cfg,
@@ -188,18 +182,7 @@ def main(cfg: DictConfig) -> None:
         return fn
 
     pl.Config.set_streaming_chunk_size(50_000)  # default is ~200k–1M; tune downward
-    # Ensure any nlp_features config isn't accidentally forwarded to join_concept
     for table_name, preprocessor_cfg in preprocessors.items():
-        if table_name in [
-            "subject_id",
-            "admission_id",
-            "raw_data_extensions",
-            "expected_not_processed_tables",
-            "tables_to_ignore",
-            "metadata_cols_to_drop",
-        ]:
-            # These are config variables and not tables
-            continue
         # Always register the preprocessor function so it's available later
         add_preprocessor(table_name, preprocessor_cfg)
 

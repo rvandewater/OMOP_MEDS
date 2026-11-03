@@ -21,8 +21,9 @@ datasets into MEDS using MEDS-Extract.
 We gratefully acknowledge the developers of the first OMOP MEDS ETL, from which we took inspiration,
 which can be found here: https://github.com/Medical-Event-Data-Standard/meds_etl.
 
-We currently support OMOP 5.3 and 5.4 datasets. Earlier versions might work but are not tested and are perhaps (?)
-not used in practice anymore. Please open pull requests if you want to add support for earlier versions.
+We support OMOP CDM 5.3, 5.4 and 5.5 datasets (see [OMOP CDM versions](#omop-cdm-versions)). Earlier versions
+might work but are not tested and are perhaps (?) not used in practice anymore. Please open pull requests if you
+want to add support for earlier versions.
 
 - More information about OMOP can be found here: https://ohdsi.github.io/CommonDataModel/
 - More information about MEDS can be found here: https://medical-event-data-standard.github.io/
@@ -46,7 +47,7 @@ Then:
 
 ```bash
 export DATASET_NAME="Your_OMOP_Dataset_Name" # e.g. MIMIC_IV_OMOP
-export OMOP_VERSION="5.3" # or 5.4
+export OMOP_VERSION="5.3" # 5.3, 5.4 or 5.5
 export RAW_INPUT_DIR="path/to/your/input"
 export ROOT_OUTPUT_DIR="/path/to/your/output"
 OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR
@@ -99,7 +100,8 @@ We make a few important choices that have impact on your downstream training and
     be more clean, especially if you are working with a limited tokenizer on a large dataset.
     You can still use the source concepts by setting `++prefer_source=True`.
 - We use more tables than in the original `meds_etl_omop` package, which can lead to more complete patient histories.
-    Watch for potential information leakage. You can change your table configs in pre_MEDS.yaml and event_configs.yaml
+    Watch for potential information leakage. You can change your table configs in
+    `configs/pre_MEDS/omop_<version>.yaml` and `event_configs.yaml`.
 - This package is more resource intensive, please adjust your `n_shards` and watch your memory usage.
 
 ## Different package versions
@@ -165,6 +167,41 @@ Also check out the `main.yaml` config file for more default settings and details
 which can be found here:
 src/OMOP_MEDS/configs/main.yaml
 
+## OMOP CDM versions
+
+`OMOP_VERSION` (5.3, 5.4 or 5.5; a patch release such as `5.4.2` counts as its minor version) picks the table
+list in `configs/OMOP.yaml`, the table schemas used to cast the input, and the pre-MEDS table config
+`src/OMOP_MEDS/configs/pre_MEDS/omop_<version>.yaml`. Each version's file is complete on its own: it lists every
+table the ETL converts and the columns kept from it, under that version's CDM field names. Settings that do not
+depend on the version (subject and admission ID columns, input file types, metadata columns to drop, NLP
+features) are in `configs/pre_MEDS/common.yaml`.
+
+A configured column missing from the input is skipped without a warning, so a misspelled column silently drops
+data. `tests/test_omop_versions.py` therefore checks every configured column against the official CDM field
+lists, and requires tables the CDM left unchanged between versions to be configured identically, so a fix made
+in one version's file is made in the others.
+
+OMOP CDM 5.5 ([changes from 5.4](https://ohdsi.github.io/CommonDataModel/cdm55Changes.html)) only adds optional
+fields and vocabulary-metadata tables, so a 5.4 export also converts as 5.5, to the same events. The pre-MEDS
+output keeps the new `observation.value_as_date`, `observation.value_as_source_concept_id`,
+`observation.unit_source_concept_id` and `specimen.visit_occurrence_id` / `visit_detail_id`. The event config is
+shared by all versions, so no MEDS event field reads them yet. The new `pack_content`, `concept_metadata` and
+`concept_relationship_metadata` tables are not converted. `omop-schema` has no 5.5 schema yet, so this package
+defines it as CDM 5.4 plus these additions (`OMOP_MEDS.omop_versions.OMOPSchemaV55`).
+
+### Upgrading from a single pre-MEDS config
+
+`configs/pre_MEDS_minimal.yaml`, with its `5.3:` / `5.4:` blocks, and the unused `configs/pre_MEDS.yaml` were
+replaced by one file per version. If you changed `pre_MEDS_minimal.yaml`, copy each table block into
+`omop_<version>.yaml` without the version level, and the top-level settings into `common.yaml`. In Python,
+`OMOP_MEDS.PRE_MEDS_CFG` became `OMOP_MEDS.omop_versions.pre_meds_config_path(version)`, and
+`OMOP_MEDS.premeds_cfg` now holds only the shared settings.
+
+The OMOP 5.4 `visit_occurrence` and `visit_detail` blocks asked for `admitted_source_value` and
+`admitted_source_concept_id` instead of the CDM 5.4 `admitted_from_source_value` and `admitted_from_concept_id`,
+so pre-MEDS output from OMOP 5.4 data lacked them. They are now kept; no event reads them, so the MEDS events are
+unchanged.
+
 ## MEDS-Extract settings
 
 If you want to convert a large dataset, you can use parallelization with MEDS-transforms
@@ -225,7 +262,8 @@ be functional. We also include a small sample of synthetic (LLM-generated) data 
 To handle datetime resolution in a more flexible way, you can configure the `datetime_resolver` settings in your config file.
 This allows you to specify which columns to use for determining the datetime of events, with support for both primary and override columns.
 The primary purpose of this is to prevent information leakage by using the last edit datetime (of notes) instead of the original note datetime, if available.
-The following block can be found in the pre_MEDS.yaml config file, and you can adjust the column names based on your dataset's schema:
+The following block is the `note` table's in each `configs/pre_MEDS/omop_<version>.yaml`, and you can adjust the
+column names based on your dataset's schema:
 
 ```yaml
 datetime_resolver:
