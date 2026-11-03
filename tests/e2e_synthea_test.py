@@ -33,13 +33,17 @@ E2E_TIMEOUT_S = 10 * 60
 
 N_SUBJECTS = 28
 N_DEATHS = 3
+# Visits by type, from `visit_concept_id` (9201 Inpatient, 9202 Outpatient, 9203 Emergency Room). Their
+# `visit_source_concept_id` is 0, so a source-only concept lookup would code every visit as
+# `OMOP_visit_occurrence//UNK`.
+N_VISITS_BY_TYPE = {"IP": 13, "OP": 1_722, "ER": 56}
 # Static demographics carry no timestamp; every other event must have one.
 STATIC_CODE_PREFIXES = {"GENDER", "RACE", "ETHNICITY"}
 EXPECTED_CODE_PREFIXES = {
     "LOINC",
     "SNOMED",
     "RxNorm",
-    "OMOP_visit_occurrence",
+    "Visit",
     "OMOP_observation_period",
     "MEDS_BIRTH",
     "MEDS_DEATH",
@@ -158,6 +162,17 @@ def test_e2e_synthea_omop_5_4(tmp_path: Path):
     )
 
     assert events["subject_id"].n_unique() == N_SUBJECTS
+    visit_codes = dict(
+        events.filter(pl.col("table_name") == "visit_occurrence")
+        .group_by("code")
+        .len()
+        .iter_rows()
+    )
+    assert visit_codes == {
+        f"Visit//{visit_type}//{boundary}": n
+        for visit_type, n in N_VISITS_BY_TYPE.items()
+        for boundary in ("start", "end")
+    }
     prefixes = set(events["code_prefix"].unique().to_list())
     assert EXPECTED_CODE_PREFIXES <= prefixes, (
         f"missing: {EXPECTED_CODE_PREFIXES - prefixes}"
