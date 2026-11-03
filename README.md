@@ -207,6 +207,9 @@ ported, and the output events are unchanged on the demo and Synthea test dataset
 - `subject_id_col: person_id` becomes `_defaults: {subject_id: $person_id}`.
 - In `ETL.yaml`, `event_conversion_config_fp` becomes `MESSY_config_fp`, `shard_events` becomes
     `convert_to_parquet`, and `extract_code_metadata` must come before `merge_to_MEDS_cohort`.
+- Pre-MEDS tables written in several batches (large `measurement` / `observation` / `note` tables) are now a
+    `pre_MEDS/<table>/` directory of parts instead of `pre_MEDS/<table>.parquet/`, the layout MEDS-Extract 0.7+
+    reads. Older pre-MEDS output in the old layout is renamed automatically when the ETL resumes.
 - A null component in an f-string code now drops the event instead of rendering as `UNK`. Coalesce every
     component to keep the old behaviour, e.g. `code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"`.
     Dropped rows are counted only in the stage logs under `MEDS_cohort/convert_to_MEDS_events/.logs`.
