@@ -142,7 +142,7 @@ def load_raw_file(
                 shard_lfs: list[pl.LazyFrame] = []
 
                 for shard_fp in chunk:
-                    shard = pl.scan_parquet(shard_fp, rechunk=False).select(selector)
+                    shard = pl.scan_parquet(shard_fp).select(selector)
                     shard = _align_shard_to_schema(shard, target_schema)
                     shard_lfs.append(shard)
 
@@ -369,7 +369,7 @@ class ShardedTableDataLoader:
         )
         shard_lfs: list[pl.LazyFrame] = []
         for shard_fp in parquet_paths:
-            shard = pl.scan_parquet(shard_fp, rechunk=False)
+            shard = pl.scan_parquet(shard_fp)
             shard = _align_shard_to_schema(shard, schema)
             shard = shard.select(self.selector)
             shard_lfs.append(shard)

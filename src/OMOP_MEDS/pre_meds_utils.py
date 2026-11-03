@@ -5,7 +5,7 @@ from typing import Any
 import polars as pl
 import polars.selectors as cs
 from polars import Boolean
-from polars.type_aliases import SelectorType
+from polars._typing import SelectorType
 from typing import Optional
 from loguru import logger
 from omop_schema.convert import convert_to_schema_polars
@@ -608,8 +608,11 @@ def extract_codes_metadata(
     parent_codes = parent_codes.with_columns(
         parent_codes=pl.col("vocabulary_id") + "//" + pl.col("concept_code")
     )
+    # Wrap each parent code in a one-element list, keeping nulls null. Polars 2 no longer casts String to List.
     parent_codes = parent_codes.with_columns(
-        parent_codes=pl.col("parent_codes").cast(pl.List(pl.String))
+        parent_codes=pl.when(pl.col("parent_codes").is_not_null()).then(
+            pl.concat_list(pl.col("parent_codes"))
+        )
     )
     result = result.join(
         parent_codes, left_on="concept_id", right_on="concept_id_1", how="left"
