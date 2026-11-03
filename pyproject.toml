@@ -31,6 +31,12 @@ local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 large_data = ["polars[rt64]"]
 
+[tool.pytest.ini_options]
+markers = [
+  "physionet: downloads the MIMIC-IV OMOP demo from PhysioNet; not run on pull requests",
+  "synthea: end-to-end run over OHDSI's Synthea27Nj OMOP 5.4 sample; its own CI job",
+]
+
 [project.scripts]
 MEDS_extract-OMOP = "OMOP_MEDS.__main__:main"
 OMOP_MEDS = "OMOP_MEDS.__main__:main"

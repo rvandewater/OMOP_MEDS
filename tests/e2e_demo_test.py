@@ -92,7 +92,9 @@ def test_local_e2e_demo_resources():
         )
 
 
-# @pytest.mark.skip(reason="Skip for duration")
+# Downloads from PhysioNet, which is slow and flaky from CI runners: runs on pushes to main, on a schedule
+# and on demand, while pull requests rely on tests/e2e_synthea_test.py.
+@pytest.mark.physionet
 def test_e2e():
     with TemporaryDirectory() as temp_dir:
         os.environ["HYDRA_FULL_ERROR"] = "1"

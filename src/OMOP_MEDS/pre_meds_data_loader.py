@@ -11,6 +11,54 @@ from polars import selectors as cs
 from polars._typing import SelectorType
 from pyarrow import parquet as pq
 
+# OMOP CSVs dumped from SQL databases often render DATE columns as midnight timestamps
+# ("2005-05-07 00:00:00"), which the CSV reader rejects when parsing straight to `pl.Date`.
+_MIDNIGHT_TIME_SUFFIX = r"[ T]00:00:00(\.0+)?$"
+
+
+def _scan_csv_with_schema(
+    source: Path, schema: dict, selector: SelectorType, **scan_kwargs
+) -> pl.LazyFrame:
+    """Scan OMOP CSV data with `schema`, tolerating midnight timestamps in `Date` columns.
+
+    `Date` columns are read as text, a trailing midnight time is stripped, and the rest is parsed strictly,
+    so a date carrying any other time of day (or an unparsable value) still fails loudly instead of
+    becoming null. All other columns use `schema` directly, as before.
+
+    Examples:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     fp = Path(d) / "condition_era.csv"
+        ...     _ = fp.write_text(
+        ...         "condition_era_id,condition_era_start_date\\n"
+        ...         "1,2005-05-07\\n2,2005-05-08 00:00:00\\n3,2005-05-09T00:00:00.000\\n4,\\n"
+        ...     )
+        ...     schema = {"condition_era_id": pl.Int64, "condition_era_start_date": pl.Date}
+        ...     _scan_csv_with_schema(fp, schema, cs.all(), has_header=True).collect()
+        shape: (4, 2)
+        ┌──────────────────┬──────────────────────────┐
+        │ condition_era_id ┆ condition_era_start_date │
+        │ ---              ┆ ---                      │
+        │ i64              ┆ date                     │
+        ╞══════════════════╪══════════════════════════╡
+        │ 1                ┆ 2005-05-07               │
+        │ 2                ┆ 2005-05-08               │
+        │ 3                ┆ 2005-05-09               │
+        │ 4                ┆ null                     │
+        └──────────────────┴──────────────────────────┘
+    """
+    date_cols = [col for col, dtype in schema.items() if dtype == pl.Date]
+    overrides = {**schema, **{col: pl.String for col in date_cols}}
+    file = pl.scan_csv(
+        source, infer_schema=False, schema_overrides=overrides, **scan_kwargs
+    ).select(selector)
+    present = set(file.collect_schema().names())
+    return file.with_columns(
+        pl.col(col).str.replace(_MIDNIGHT_TIME_SUFFIX, "").str.to_date(strict=True)
+        for col in date_cols
+        if col in present
+    )
+
 
 def load_raw_file(
     fp: Path, schema_loader: OMOPSchemaBase, selector: SelectorType = cs.all()
@@ -42,16 +90,13 @@ def load_raw_file(
     # pa.schema([(col, dtype) for coll, dtype in schema.items()])
     # Convert dict to pa.Schema
     if fp.suffixes == [".csv", ".gz"]:
-        file = pl.scan_csv(
-            fp, compression="gzip", infer_schema=False, schema_overrides=schema
-        ).select(selector)
+        # Polars detects gzip from the file itself; scan_csv has no `compression` argument.
+        file = _scan_csv_with_schema(fp, schema, selector, has_header=True)
         logging.info(f"Loaded gzipped CSV file from {fp}")
     elif fp.suffix == ".csv":
         # Using schema_overrides to set the schema as the ordering could be different
         # and there could be extra columns
-        file = pl.scan_csv(
-            fp, infer_schema=False, has_header=True, schema_overrides=schema
-        ).select(selector)
+        file = _scan_csv_with_schema(fp, schema, selector, has_header=True)
         logging.info(f"Loaded CSV file from {fp}")
     elif fp.suffix == ".parquet":
         file = pl.scan_parquet(fp).select(selector)
@@ -63,9 +108,7 @@ def load_raw_file(
         parquet_files = [file for file in files if file.suffix == ".parquet"]
         # mismatching_schema_check = True
         if csv_files:
-            file = pl.scan_csv(
-                fp, infer_schema=False, has_header=True, schema_overrides=schema
-            ).select(selector)
+            file = _scan_csv_with_schema(fp, schema, selector, has_header=True)
             logging.info(f"Loaded CSV files as directory from {fp}")
         elif parquet_files:
             # Memory-safe schema harmonization across shards
