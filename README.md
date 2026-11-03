@@ -34,7 +34,7 @@ If your OMOP schema is non-standard (but still approximately OMOP), you should b
 
 ## Setup
 
-Requires Python `>=3.12,<3.14` (`MEDS-extract 0.6.2` does not support 3.11).
+Requires Python `>=3.12,<3.14`. The MEDS conversion runs on MEDS-Extract 0.8 and MEDS-Transforms 0.7.
 
 First install the package:
 
@@ -189,14 +189,30 @@ subjects you have in your dataset:
 export N_SUBJECTS_PER_SHARD=100000
 ```
 
-For large datasets, the pipeline keeps high `shard_events` limits by default:
-
-```yaml
-row_chunksize: 20000000000
-infer_schema_length: 999999999
-```
+The first MEDS-Extract stage, `convert_to_parquet`, rewrites each pre-MEDS parquet table once, keeping only the
+columns the event config reads. It replaced `shard_events`, whose `row_chunksize` / `infer_schema_length` settings
+no longer exist; per-stage memory is bounded by `N_SUBJECTS_PER_SHARD` instead.
 
 Optional local parallelism is still available via `OMOP_MEDS[local_parallelism]` and `N_WORKERS`.
+
+`OMOP_MEDS` runs `MEDS_transform-pipeline` (and, through it, each stage) from the Python environment it is
+installed in, even when another environment's MEDS-Transforms comes first on `PATH`.
+
+### Upgrading from MEDS-Extract 0.6
+
+MEDS-Extract 0.7 changed the pipeline and event (MESSY) config formats. The configs shipped here are already
+ported, and the output events are unchanged on the demo and Synthea test datasets. If you maintain a modified
+`event_configs.yaml` or `ETL.yaml`, port it the same way:
+
+- `subject_id_col: person_id` becomes `_defaults: {subject_id: $person_id}`.
+- In `ETL.yaml`, `event_conversion_config_fp` becomes `MESSY_config_fp`, `shard_events` becomes
+    `convert_to_parquet`, and `extract_code_metadata` must come before `merge_to_MEDS_cohort`.
+- Pre-MEDS tables written in several batches (large `measurement` / `observation` / `note` tables) are now a
+    `pre_MEDS/<table>/` directory of parts instead of `pre_MEDS/<table>.parquet/`, the layout MEDS-Extract 0.7+
+    reads. Older pre-MEDS output in the old layout is renamed automatically when the ETL resumes.
+- A null component in an f-string code now drops the event instead of rendering as `UNK`. Coalesce every
+    component to keep the old behaviour, e.g. `code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"`.
+    Dropped rows are counted only in the stage logs under `MEDS_cohort/convert_to_MEDS_events/.logs`.
 
 ## The MIMIC-IV OMOP Dataset
 

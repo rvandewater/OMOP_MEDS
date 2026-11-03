@@ -172,7 +172,7 @@ wheels = [
 
 [[package]]
 name = "dftly"
-version = "0.1.5"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "lark" },
@@ -180,9 +180,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e7/5e/917bb6701404e5e1ed269e7d2847c9bc7babdb63636d5b67b3a56529a28f/dftly-0.1.5.tar.gz", hash = "sha256:283565dbab46e5bca0db71deaf8cd081efdafbe001bbfe2876156436b14f4183", size = 61529, upload-time = "2026-04-14T01:24:08.882Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/a7/61fee796452838ca43b0f44fea9ae7bb4a8c3e9bca758abff1075cca6bfd/dftly-0.7.0.tar.gz", hash = "sha256:c9e2c2d7d014cf5a97ffb4650177065ee1e04751973a36bbeb4671c59e61dde4", size = 122761, upload-time = "2026-08-05T17:50:56.792Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/37/df/8af572009467a49981af636311e87f1a4c31acd8a7e67b947682d69a73ff/dftly-0.1.5-py3-none-any.whl", hash = "sha256:4e6c8dec4bdd543494cc3f4b06f51ca2e29302204f90a95a3a70617c4b0aecd6", size = 35248, upload-time = "2026-04-14T01:24:07.263Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/df/1b6c41755441b7982060e3e66458c56cc8bde64e8570860c6b8df8f45c9e/dftly-0.7.0-py3-none-any.whl", hash = "sha256:8821d345635535d2023f6aac4434e99cfc544c7ada116ae4674559d77cf5b0b5", size = 64775, upload-time = "2026-08-05T17:50:55.394Z" },
 ]
 
 [[package]]
@@ -426,7 +426,7 @@ wheels = [
 
 [[package]]
 name = "meds-extract"
-version = "0.6.2"
+version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dftly" },
@@ -434,13 +434,15 @@ dependencies = [
     { name = "meds" },
     { name = "meds-transforms" },
     { name = "numpy" },
+    { name = "omegaconf" },
     { name = "polars" },
     { name = "pyarrow" },
     { name = "universal-pathlib" },
+    { name = "yaml-to-disk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/4f/839faabff9e2f48b07726fd870fb7c6a8e54f3a5d6340813643dcac9af2e/meds_extract-0.6.2.tar.gz", hash = "sha256:49d7459d5f3fdb783a72001fdd87ac47f62a94000f0b303b638ff459a3809ca6", size = 214223, upload-time = "2026-07-07T01:42:37.091Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/48/4c/e6711d90fdf7e598da495ff6c48880fea9a74d4811dbafaa3a130c9d49c6/meds_extract-0.8.0.tar.gz", hash = "sha256:aa945b4940e9e6e83e06a4c07d4bb7e07d7749125e1e950babbf50d9b3e2a072", size = 462542, upload-time = "2026-11-02T15:35:17.518Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/e7/c23965ec1935f1fd9d1a2f2c712c1f65d7cd39d9812acb5e208968570cb7/meds_extract-0.6.2-py3-none-any.whl", hash = "sha256:a374bc7eb06d400eaa44e3933ce75beb7197ff9a932b6426faf7132e3a40836b", size = 51554, upload-time = "2026-07-07T01:42:35.861Z" },
+    { url = "https://files.pythonhosted.org/packages/20/90/0adc92dc00d6d1aa785fd7ddc9974bb20897fbfbab4a8fc5866d6bcb1ad0/meds_extract-0.8.0-py3-none-any.whl", hash = "sha256:c8dbc26fd4a7e11d56d7998f2658a369c5c7f19380afef912c4cead5f2af3b2d", size = 229365, upload-time = "2026-11-02T15:35:15.412Z" },
 ]
 
 [[package]]
@@ -464,7 +466,7 @@ wheels = [
 
 [[package]]
 name = "meds-transforms"
-version = "0.6.7"
+version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -478,9 +480,9 @@ dependencies = [
     { name = "pytest" },
     { name = "yaml-to-disk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b4/19/407efdafc8adbb8385495579934d88fdf8c5c8373fc2e76026fe0b54e26d/meds_transforms-0.6.7.tar.gz", hash = "sha256:8c957a5743d7e53b2262d3898356feb7c2ebcb3236b5b10156ef5c44c2774149", size = 589647, upload-time = "2026-04-18T14:45:25.291Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/7c/6bff4281d64bf31f123a2577895e0d49852e597d36f300ac547dcec35d56/meds_transforms-0.7.1.tar.gz", hash = "sha256:d45e3beb283b001d649c4a6022afc8156765194e7024ec1c2d1a9302796796f2", size = 645236, upload-time = "2026-11-03T17:39:19.378Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/19/55d217de368c7fb643f89f7ef312092740c24c189f75ec28d7c68b0b1dbd/meds_transforms-0.6.7-py3-none-any.whl", hash = "sha256:ce4b458f9e26e31a3e1fe7000769bb7be5b3bf58c3ba0da071d639a6a4a013c0", size = 219935, upload-time = "2026-04-18T14:45:23.714Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/63/6d7a33e2eb7d299219dad54849381d6cab35ddf7000509c488be0f2d01ef/meds_transforms-0.7.1-py3-none-any.whl", hash = "sha256:21b2b424b23b20b27b232451f0d4c4c98f47eb7387a6da0b94ccbe7984228cde", size = 232478, upload-time = "2026-11-03T17:39:17.726Z" },
 ]
 
 [[package]]
@@ -590,7 +592,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "mdformat-admon", marker = "extra == 'dev'" },
     { name = "meds", specifier = "~=0.4.1" },
-    { name = "meds-extract", specifier = "~=0.6.2" },
+    { name = "meds-extract", specifier = "~=0.8.0" },
     { name = "omop-schema" },
     { name = "polars", specifier = ">=1.26" },
     { name = "polars", extras = ["rt64"], marker = "extra == 'large-data'" },

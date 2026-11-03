@@ -33,6 +33,8 @@ E2E_TIMEOUT_S = 10 * 60
 
 N_SUBJECTS = 28
 N_DEATHS = 3
+# Identical under MEDS-Extract 0.6.2 and 0.8.0.
+N_EVENTS = 27_056
 # Visits by type, from `visit_concept_id` (9201 Inpatient, 9202 Outpatient, 9203 Emergency Room). Their
 # `visit_source_concept_id` is 0, so a source-only concept lookup would code every visit as
 # `OMOP_visit_occurrence//UNK`.
@@ -161,6 +163,7 @@ def test_e2e_synthea_omop_5_4(tmp_path: Path):
         pl.col("code").str.split("//").list.first().alias("code_prefix")
     )
 
+    assert events.height == N_EVENTS
     assert events["subject_id"].n_unique() == N_SUBJECTS
     visit_codes = dict(
         events.filter(pl.col("table_name") == "visit_occurrence")

@@ -13,8 +13,9 @@ from OMOP_MEDS.utils import finish_codes_metadata
 from . import ETL_CFG, EVENT_CFG, MAIN_CFG
 from . import __version__ as PKG_VERSION
 from . import dataset_info
-from .commands import run_command
+from .commands import MEDS_PIPELINE_CMD, path_with_scripts_dir_first, run_command
 from .download import download_data
+from .event_config import prune_event_config
 from .pre_meds import main as pre_MEDS_transform
 from .pre_meds_utils import rename_demo_files
 
@@ -67,15 +68,13 @@ def main(cfg: DictConfig):
 
     # Step 1: Pre-MEDS Data Wrangling
     event_cfg = OmegaConf.load(EVENT_CFG)
-    event_cfg_new = event_cfg.copy()
     pre_MEDS_transform(cfg)
-    pre_MEDS_dir_files = [item.stem for item in pre_MEDS_dir.iterdir()]
-    for item in event_cfg.keys():
-        if item not in pre_MEDS_dir_files and item != "subject_id_col":
-            logger.warning(f"Removing table {item} from event config.")
-            event_cfg_new.pop(item)
+    pre_MEDS_tables = {item.stem for item in pre_MEDS_dir.iterdir()}
+    event_cfg_new, removed_tables = prune_event_config(event_cfg, pre_MEDS_tables)
+    for table in removed_tables:
+        logger.warning(f"Removing table {table} from event config.")
 
-    if len(event_cfg_new.keys()) != len(event_cfg.keys()):
+    if removed_tables:
         event_cfg_path = pre_MEDS_dir / "event_configs.yaml"
         with open(event_cfg_path, "w") as f:
             omegaconf.OmegaConf.save(config=event_cfg_new, f=f)
@@ -96,9 +95,12 @@ def main(cfg: DictConfig):
         "EVENT_CONVERSION_CONFIG_FP": str(Path(event_cfg_path).resolve()),
         "PRE_MEDS_DIR": str(pre_MEDS_dir.resolve()),
         "MEDS_COHORT_DIR": str(MEDS_cohort_dir.resolve()),
+        # The pipeline and its per-stage subprocesses must come from this environment's MEDS-Transforms,
+        # matching the MEDS-Extract version the shipped configs target.
+        "PATH": path_with_scripts_dir_first(MEDS_PIPELINE_CMD),
     }
 
-    command_parts = ["MEDS_transform-pipeline", str(ETL_CFG.resolve())]
+    command_parts = [MEDS_PIPELINE_CMD, str(ETL_CFG.resolve())]
 
     if stage_runner_fp:
         command_parts.append(f"--stage_runner_fp={stage_runner_fp}")

@@ -1,5 +1,6 @@
 """Performs pre-MEDS data wrangling for OMOP datasets."""
 
+import copy
 import os
 import shutil
 from datetime import datetime
@@ -14,6 +15,7 @@ os.environ["POLARS_MAX_THREADS"] = str(
 os.environ["POLARS_STREAMING_CHUNK_SIZE"] = "100000"
 import polars as pl
 import polars.selectors as cs
+import pyarrow.parquet as pq
 import logging
 from omegaconf import OmegaConf, DictConfig
 from omop_schema.utils import get_schema_loader
@@ -47,11 +49,45 @@ def get_shard_prefix(root: Path, path: Path) -> str:
     return path.name if path.is_dir() else path.stem.split(".")[0]
 
 
+def migrate_legacy_batched_outputs(pre_MEDS_dir: Path) -> list[str]:
+    """Rename batched pre-MEDS tables from the old `<table>.parquet/` layout to `<table>/`.
+
+    A table written in several batches is a directory of parts. Older versions named it `<table>.parquet/`,
+    which MEDS-Extract >= 0.7 does not read: it expects a sub-sharded `<table>/*.parquet` directory or a bare
+    `<table>.parquet` file. Renaming keeps a completed (`.done`) pre-MEDS output from an older version usable.
+
+    Returns:
+        The names of the renamed tables.
+
+    Examples:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     legacy = Path(d) / "measurement.parquet"
+        ...     legacy.mkdir()
+        ...     _ = (legacy / "part_00001.parquet").write_bytes(b"")
+        ...     _ = (Path(d) / "person.parquet").write_bytes(b"")
+        ...     renamed = migrate_legacy_batched_outputs(Path(d))
+        ...     renamed, sorted(p.name for p in Path(d).iterdir()), (Path(d) / "measurement").is_dir()
+        (['measurement'], ['measurement', 'person.parquet'], True)
+    """
+    renamed = []
+    for legacy_dir in sorted(pre_MEDS_dir.glob("*.parquet")):
+        target = legacy_dir.with_suffix("")
+        if legacy_dir.is_dir() and not target.exists():
+            legacy_dir.replace(target)
+            logger.info(f"Renamed legacy batched output {legacy_dir} to {target}")
+            renamed.append(target.name)
+    return renamed
+
+
 def main(cfg: DictConfig) -> None:
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
     logger.info(f"Loading table preprocessors from {premeds_cfg}...")
-    preprocessors = premeds_cfg  # OmegaConf.load(premeds_cfg)
+    # A private copy: the setup below pops `nlp_features` and each table's `datetime_resolver`, and popping them
+    # from the shared package config would make a second run in this process build notes without
+    # `preferred_time`, the last-edit timestamp that prevents temporal leakage.
+    preprocessors = copy.deepcopy(premeds_cfg)
     functions = {}
     omop_version = float(dataset_info.omop_version)
     supported_omop_versions = [5.3, 5.4]
@@ -68,6 +104,7 @@ def main(cfg: DictConfig) -> None:
     OMOP_input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
+    migrate_legacy_batched_outputs(MEDS_input_dir)
     limit = cfg.get("limit_subjects", 0)
     if limit > 0:
         logger.info(f"Limiting to {limit} subjects for debugging purposes.")
@@ -290,6 +327,9 @@ def main(cfg: DictConfig) -> None:
     for in_fp in all_fps:
         tbl_prefix = get_shard_prefix(OMOP_input_dir, in_fp)
         out_fp = MEDS_input_dir / f"{tbl_prefix}.parquet"
+        # A table written in several batches becomes a directory of parts named after the table: the
+        # sub-sharded `<table>/*.parquet` layout MEDS-Extract reads (it does not read `<table>.parquet/`).
+        out_dir = MEDS_input_dir / tbl_prefix
 
         if tbl_prefix in unused_tables:
             logger.warning(
@@ -312,7 +352,7 @@ def main(cfg: DictConfig) -> None:
                 )
             continue
 
-        if out_fp.exists():
+        if out_fp.exists() or out_dir.exists():
             logger.info(f"Done with {tbl_prefix}. Continuing")
             continue
 
@@ -358,7 +398,9 @@ def main(cfg: DictConfig) -> None:
                 processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
                 part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
                 processed_df.sink_parquet(part_fp, row_group_size=128_000)
-                if part_fp.exists() and part_fp.stat().st_size > 0:
+                # A zero-row parquet file still has a footer, so check rows, not bytes: an all-empty table is
+                # then skipped like in the non-batched path below instead of being written as empty parts.
+                if part_fp.exists() and pq.ParquetFile(part_fp).metadata.num_rows > 0:
                     written_parts.append(part_fp)
                 elif part_fp.exists():
                     part_fp.unlink()
@@ -377,9 +419,9 @@ def main(cfg: DictConfig) -> None:
                     f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
                 )
             else:
-                temp_out_dir.replace(out_fp)
+                temp_out_dir.replace(out_dir)
                 logger.info(
-                    f"Processed and wrote {len(written_parts)} parts to {str(out_fp.resolve())} in {datetime.now() - st}"
+                    f"Processed and wrote {len(written_parts)} parts to {str(out_dir.resolve())} in {datetime.now() - st}"
                 )
         else:
             # Singular execution for smaller tables that Polars can handle
