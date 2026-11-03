@@ -139,8 +139,8 @@ def test_event_config_has_no_legacy_syntax():
 def test_null_code_components_render_as_unk(table, event, code, dtype):
     """Every interpolated component must fall back to "UNK", as it did before MEDS-Extract 0.7.
 
-    Since 0.7 a null component nulls the whole code and MEDS-Extract drops the row (e.g. every Synthea27Nj
-    visit, whose concept names are null), so a new code added without `?? 'UNK'` fails here.
+    Since 0.7 a null component nulls the whole code and MEDS-Extract drops the row (e.g. the demo's 1,282
+    observations without a resolvable concept), so a new code added without `?? 'UNK'` fails here.
     """
     cols = sorted(set(re.findall(r"\$(\w+)", code)))
     present = 7 if dtype == pl.Int64 else "X"

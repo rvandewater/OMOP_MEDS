@@ -2,9 +2,9 @@
 #
 # Every interpolated code component is coalesced with `?? 'UNK'`. MEDS-Extract < 0.7 rendered a null component
 # as "UNK" (e.g. `OMOP_visit_occurrence//UNK//start` for a visit with no mapped concept); from 0.7 a null
-# component nulls the whole code and the row is dropped. Without the fallback, unmapped observations and, in
-# datasets whose visit concepts lack names, every visit event would be dropped, reported only in the
-# per-stage logs under MEDS_cohort/convert_to_MEDS_events/.logs.
+# component nulls the whole code and the row is dropped. Without the fallback, observations and visits whose
+# concept cannot be resolved would be dropped, reported only in the per-stage logs under
+# MEDS_cohort/convert_to_MEDS_events/.logs.
 _defaults:
   subject_id: $person_id
 

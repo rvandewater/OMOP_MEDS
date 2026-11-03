@@ -35,9 +35,8 @@ N_SUBJECTS = 28
 N_DEATHS = 3
 # Identical under MEDS-Extract 0.6.2 and 0.8.0.
 N_EVENTS = 27_056
-# One start and one end event per visit_occurrence row. Synthea27Nj's visit concepts have no names, so these
-# codes are `OMOP_visit_occurrence//UNK//{start,end}`: MEDS-Extract >= 0.7 drops all of them unless the event
-# config coalesces null code components.
+# One start and one end event per visit_occurrence row. MEDS-Extract >= 0.7 drops a visit whose code has a null
+# component (no resolvable visit concept) unless the event config coalesces it to `UNK`.
 N_VISITS = 1_791
 # Static demographics carry no timestamp; every other event must have one.
 STATIC_CODE_PREFIXES = {"GENDER", "RACE", "ETHNICITY"}
