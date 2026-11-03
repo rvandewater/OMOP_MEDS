@@ -593,7 +593,7 @@ requires-dist = [
     { name = "mdformat-admon", marker = "extra == 'dev'" },
     { name = "meds", specifier = "~=0.4.1" },
     { name = "meds-extract", specifier = "~=0.8.0" },
-    { name = "omop-schema", git = "https://github.com/rvandewater/omop_schema?rev=0110f997f39bf1ea3973def4aa91e6daccc07de0" },
+    { name = "omop-schema", specifier = ">=0.1.0" },
     { name = "polars", specifier = ">=1.26" },
     { name = "polars", extras = ["rt64"], marker = "extra == 'large-data'" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "<4" },
@@ -606,11 +606,15 @@ provides-extras = ["dev", "tests", "local-parallelism", "slurm-parallelism", "la
 
 [[package]]
 name = "omop-schema"
-version = "0.0.5.dev3+g0110f997f"
-source = { git = "https://github.com/rvandewater/omop_schema?rev=0110f997f39bf1ea3973def4aa91e6daccc07de0#0110f997f39bf1ea3973def4aa91e6daccc07de0" }
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyarrow" },
     { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/be/714581b614ec815736bf705b2c0bb028827da38e1cc27cc19cb96585a896/omop_schema-0.1.0.tar.gz", hash = "sha256:e9e9335310681bd94ed0fcfb046ec91852a65ce785910c0d3f556d3d051de033", size = 43291, upload-time = "2026-11-03T22:43:46.826Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f3/2b/d35881aaa6237d2d6b027991b43beffd2a90d101d05eb254723ee1a64fce/omop_schema-0.1.0-py3-none-any.whl", hash = "sha256:f04b6d6b4aa1d58c3f41cdccd4289576ddd721c0cc3745b65cc9d6e8c6cc5e60", size = 24943, upload-time = "2026-11-03T22:43:45.201Z" },
 ]
 
 [[package]]
