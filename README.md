@@ -29,8 +29,21 @@ want to add support for earlier versions.
 - More information about MEDS can be found here: https://medical-event-data-standard.github.io/
 
 For reading in OMOP in the right schema, we use the `omop-schema` package (developed for this ETL but can be used
-elswehere), which can be found here:
+elsewhere), which can be found here:
 https://github.com/rvandewater/omop_schema.
+It holds the table schemas of OMOP CDM 5.3, 5.4 and 5.5, checked against the official CDM specification, and
+reads the input tables (`omop_schema.scan.scan_table`):
+
+- CSV, gzipped CSV and Parquet files, and directories of their shards, are supported.
+- Column names are lowercased before the schema is applied, so uppercase headers (as SQL Server exports write them)
+    get their types.
+- Columns outside the schema, such as the `xtn_note_last_edit_*` columns notes need for leakage-safe times, are
+    kept, also when a table is a directory of Parquet shards.
+- DATE columns written with a midnight time (`2005-05-07 00:00:00`) are read as dates.
+- Values must fit their OMOP type in CSV files and single Parquet files. Directories of Parquet shards are cast
+    permissively (a value that does not fit becomes null), and every schema column is added to them, because
+    large exports drift in type from shard to shard.
+
 If your OMOP schema is non-standard (but still approximately OMOP), you should be able to use the `omop-schema` package to define your own schema and use it in this ETL.
 
 ## Setup
@@ -169,25 +182,24 @@ src/OMOP_MEDS/configs/main.yaml
 
 ## OMOP CDM versions
 
-`OMOP_VERSION` (5.3, 5.4 or 5.5; a patch release such as `5.4.2` counts as its minor version) picks the table
-list in `configs/OMOP.yaml`, the table schemas used to cast the input, and the pre-MEDS table config
+`OMOP_VERSION` (5.3, 5.4 or 5.5; a patch release such as `5.4.2` counts as its minor version) picks the CDM
+tables and their schemas from `omop-schema`, and the pre-MEDS table config
 `src/OMOP_MEDS/configs/pre_MEDS/omop_<version>.yaml`. Each version's file is complete on its own: it lists every
 table the ETL converts and the columns kept from it, under that version's CDM field names. Settings that do not
 depend on the version (subject and admission ID columns, input file types, metadata columns to drop, NLP
 features) are in `configs/pre_MEDS/common.yaml`.
 
 A configured column missing from the input is skipped without a warning, so a misspelled column silently drops
-data. `tests/test_omop_versions.py` therefore checks every configured column against the official CDM field
-lists, and requires tables the CDM left unchanged between versions to be configured identically, so a fix made
-in one version's file is made in the others.
+data. `tests/test_omop_versions.py` therefore checks every configured column against the `omop-schema` schemas,
+which that package tests against the official CDM field lists. It also requires tables the CDM left unchanged
+between versions to be configured identically, so a fix made in one version's file is made in the others.
 
 OMOP CDM 5.5 ([changes from 5.4](https://ohdsi.github.io/CommonDataModel/cdm55Changes.html)) only adds optional
 fields and vocabulary-metadata tables, so a 5.4 export also converts as 5.5, to the same events. The pre-MEDS
 output keeps the new `observation.value_as_date`, `observation.value_as_source_concept_id`,
 `observation.unit_source_concept_id` and `specimen.visit_occurrence_id` / `visit_detail_id`. The event config is
 shared by all versions, so no MEDS event field reads them yet. The new `pack_content`, `concept_metadata` and
-`concept_relationship_metadata` tables are not converted. `omop-schema` has no 5.5 schema yet, so this package
-defines it as CDM 5.4 plus these additions (`OMOP_MEDS.omop_versions.OMOPSchemaV55`).
+`concept_relationship_metadata` tables are not converted.
 
 ### Upgrading from a single pre-MEDS config
 
@@ -196,6 +208,9 @@ replaced by one file per version. If you changed `pre_MEDS_minimal.yaml`, copy e
 `omop_<version>.yaml` without the version level, and the top-level settings into `common.yaml`. In Python,
 `OMOP_MEDS.PRE_MEDS_CFG` became `OMOP_MEDS.omop_versions.pre_meds_config_path(version)`, and
 `OMOP_MEDS.premeds_cfg` now holds only the shared settings.
+
+The table lists in `configs/OMOP.yaml` (`OMOP_MEDS.OMOP_CFG`, `OMOP_MEDS.omop_cfg`) were replaced by the schemas'
+`get_table_names()`, and `OMOP_MEDS.omop_versions.OMOPSchemaV55` by `omop_schema.schema.v5_5.OMOPSchemaV55`.
 
 The OMOP 5.4 `visit_occurrence` and `visit_detail` blocks asked for `admitted_source_value` and
 `admitted_source_concept_id` instead of the CDM 5.4 `admitted_from_source_value` and `admitted_from_concept_id`,

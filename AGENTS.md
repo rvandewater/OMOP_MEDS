@@ -31,9 +31,8 @@ Pi reads this file as project context. Keep it in the repository root and run `/
 - `src/OMOP_MEDS/configs/main.yaml` - top-level Hydra defaults and runtime options.
 - `src/OMOP_MEDS/configs/pre_MEDS/omop_<version>.yaml` - pre-MEDS table preprocessing for one OMOP CDM version (5.3, 5.4, 5.5), chosen by `OMOP_VERSION`.
 - `src/OMOP_MEDS/configs/pre_MEDS/common.yaml` - pre-MEDS settings shared by every OMOP version.
-- `src/OMOP_MEDS/omop_versions.py` - supported OMOP versions, loading their pre-MEDS configs, table schemas (including OMOP 5.5).
+- `src/OMOP_MEDS/omop_versions.py` - supported OMOP versions and loading their pre-MEDS configs. Table schemas, CDM table lists and reading input tables come from the `omop_schema` package.
 - `src/OMOP_MEDS/configs/event_configs.yaml` - mapping from pre-MEDS tables/columns to MEDS events.
-- `src/OMOP_MEDS/configs/OMOP.yaml` - supported OMOP table lists by OMOP version.
 - `src/OMOP_MEDS/configs/ETL.yaml` and `runner.yaml` - MEDS-Transforms runner configuration.
 - `tests/` - unit, utility, batching, datetime, NLP, patient-link, and end-to-end tests.
 - `tests/demo_resources/` - small checked-in demo OMOP CSVs for local tests. Prefer these over network downloads.
@@ -152,7 +151,7 @@ This package is intended to handle large clinical tables. Avoid patterns that wo
 - When adding a new runtime flag, update `main.yaml`, document it in `README.md` if user-facing, and add or adjust tests.
 - When adding or changing a pre-MEDS table:
     1. Update `configs/pre_MEDS/omop_<version>.yaml` for every OMOP version whose CDM has the table.
-    2. Ensure `OMOP.yaml` includes the table for the right OMOP versions.
+    2. Ensure the `omop_schema` schema of each OMOP version has the table (`get_table_names()`).
     3. Add or update entries in `event_configs.yaml` if the table should produce MEDS events.
     4. Add tests using `tests/demo_resources` or synthetic temporary Parquet/CSV data.
 - Each OMOP version has its own pre-MEDS config file. Make a change in every version where the CDM table is the same; `tests/test_omop_versions.py` fails when tables the CDM left unchanged are configured differently, or a configured column is not a CDM field.
@@ -234,7 +233,7 @@ Before reporting completion, verify and summarize:
 
 ### Add support for a new OMOP source column
 
-1. Confirm the column exists in OMOP 5.3, 5.4 or 5.5 (`tests/omop_cdm_spec/`), or list it as a known extension in `NON_CDM_COLUMNS` in `tests/test_omop_versions.py`.
+1. Confirm the column exists in OMOP 5.3, 5.4 or 5.5 (the `omop_schema` schemas follow the CDM specification), or list it as a known extension in `NON_CDM_COLUMNS` in `tests/test_omop_versions.py`.
 2. Add the column to the relevant `output_data_cols` only when it is needed downstream.
 3. Ensure the column survives metadata-column dropping if required.
 4. Add event config usage only if it should become a MEDS event field.

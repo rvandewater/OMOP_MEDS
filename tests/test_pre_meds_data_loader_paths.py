@@ -1,5 +1,5 @@
-"""Loading paths of `pre_meds_data_loader` not exercised by the demo/e2e runs: parquet inputs, batching
-estimates and modes, unreadable shards, and the shard schema-harmonization helpers."""
+"""Loading paths of `pre_meds_data_loader` not exercised by the demo/e2e runs: parquet inputs, column case,
+columns outside the OMOP schema, batching estimates and modes, and unreadable shards."""
 
 from pathlib import Path
 
@@ -8,17 +8,7 @@ import pyarrow as pa
 import pytest
 from omop_schema.utils import get_schema_loader
 
-from OMOP_MEDS.pre_meds_data_loader import (
-    ShardedTableDataLoader,
-    _align_shard_to_schema,
-    _resolve_conflict,
-    collect_shard_schemas,
-    harmonize_shard,
-    load_raw_file,
-    project_to_target_schema,
-    resolve_target_schema,
-    scan_harmonized,
-)
+from OMOP_MEDS.pre_meds_data_loader import ShardedTableDataLoader, load_raw_file
 
 OMOP_53 = get_schema_loader(5.3)
 CARE_SITE_COLUMNS = [
@@ -101,7 +91,9 @@ def test_single_parquet_file_is_cast_to_the_omop_schema_and_lowercased(tmp_path)
     assert df.rows() == [("A", 1, 10, 1.5), ("B", 2, None, 2.5)]
 
 
-def test_parquet_directory_aligns_every_shard_to_the_omop_schema(tmp_path):
+def test_parquet_directory_aligns_every_shard_and_keeps_columns_outside_the_schema(
+    tmp_path,
+):
     table_dir = tmp_path / "care_site"
     (table_dir / "nested").mkdir(parents=True)
     pl.DataFrame({"care_site_id": [1], "care_site_name": ["A"]}).write_parquet(
@@ -120,7 +112,8 @@ def test_parquet_directory_aligns_every_shard_to_the_omop_schema(tmp_path):
 
     df = load_raw_file(table_dir, OMOP_53).collect().sort("care_site_id")
 
-    assert df.columns == CARE_SITE_COLUMNS
+    assert set(df.columns) == {*CARE_SITE_COLUMNS, "not_in_omop"}
+    assert df["not_in_omop"].to_list() == [None, 1]
     assert df.schema["care_site_id"] == pl.Int64
     assert df.schema["location_id"] == pl.Int64
     assert df.select("care_site_id", "care_site_name", "location_id").rows() == [
@@ -324,118 +317,54 @@ def test_by_rows_counts_an_unreadable_shard_as_empty(tmp_path):
     assert loader.estimate_batches(table_dir) == 1
 
 
-# --- shard schema harmonization ---------------------------------------------------------------------------
+# --- column case and extension columns -------------------------------------------------------------------
 
-
-@pytest.mark.parametrize(
-    ("dtypes", "expected"),
-    [
-        ({pl.Int64}, pl.Int64),
-        ({pl.Decimal(10, 2), pl.Decimal(12, 2)}, pl.Float64),
-        ({pl.Int8, pl.Int32, pl.UInt16}, pl.Int32),
-        ({pl.Int32, pl.Float32}, pl.Float64),
-        ({pl.Datetime("ms"), pl.Datetime("us", "UTC")}, pl.Datetime("us", "UTC")),
-        ({pl.Int64, pl.String}, pl.String),
-        ({pl.Date, pl.Datetime("us")}, pl.String),
-    ],
-    ids=[
-        "single",
-        "decimals",
-        "int_widths",
-        "int_and_float",
-        "datetimes",
-        "mixed",
-        "date_and_datetime",
-    ],
-)
-def test_resolve_conflict(dtypes, expected):
-    assert _resolve_conflict(dtypes) == expected
-
-
-def _write_mixed_shards(root: Path) -> tuple[Path, Path]:
-    (root / "nested").mkdir(parents=True)
-    first = root / "a.parquet"
-    second = root / "nested" / "b.parquet"
-    pl.DataFrame(
-        {"id": pl.Series([1, 2], dtype=pl.Int32), "name": ["x", "y"]}
-    ).write_parquet(first)
-    pl.DataFrame({"id": [3], "score": [1.5]}).write_parquet(second)
-    return first, second
-
-
-def test_collect_and_resolve_target_schema(tmp_path):
-    first, second = _write_mixed_shards(tmp_path)
-
-    schemas = collect_shard_schemas([first, second])
-
-    assert dict(schemas[first]) == {"id": pl.Int32, "name": pl.String}
-    assert dict(schemas[second]) == {"id": pl.Int64, "score": pl.Float64}
-    assert resolve_target_schema(schemas) == {
-        "id": pl.Int64,
-        "name": pl.String,
-        "score": pl.Float64,
+NOTES = pl.DataFrame(
+    {
+        "note_id": [1, 2],
+        "person_id": [1, 2],
+        "note_date": ["2020-01-01", "2020-01-02"],
+        "note_datetime": ["2020-01-01 08:00:00", "2020-01-02 08:00:00"],
+        "note_text": ["a", "b"],
+        "xtn_note_last_edit_datetime": ["2020-01-03 09:00:00", None],
     }
-    assert list(resolve_target_schema(schemas, keep_columns=["score", "id"])) == [
-        "score",
-        "id",
-    ]
-    with pytest.raises(ValueError, match="not found in any shard"):
-        resolve_target_schema(schemas, keep_columns=["id", "missing"])
+)
 
 
-def test_harmonize_shard_adds_missing_drops_extra_and_casts(tmp_path):
-    first, _ = _write_mixed_shards(tmp_path)
+def test_uppercase_csv_headers_get_their_omop_types(tmp_path):
+    # SQL Server exports write uppercase headers; their columns used to skip the schema and stay text.
+    fp = tmp_path / "note.csv"
+    NOTES.rename(str.upper).write_csv(fp)
 
-    df = harmonize_shard(
-        first,
-        {"id": pl.Int64, "score": pl.Float64},
-        collect_shard_schemas([first])[first],
-    ).collect()
+    df = load_raw_file(fp, OMOP_53).collect()
 
-    assert df.schema == pl.Schema({"id": pl.Int64, "score": pl.Float64})
-    assert df.rows() == [(1, None), (2, None)]
+    assert df.columns == NOTES.columns
+    assert df.schema["note_id"] == pl.Int64
+    assert df.schema["note_date"] == pl.Date
+    assert df.schema["note_datetime"] == pl.Datetime("us")
 
 
-def test_scan_harmonized_unions_shards_recursively(tmp_path):
-    _write_mixed_shards(tmp_path)
-
-    df = scan_harmonized(tmp_path).collect().sort("id")
-
-    assert df.schema == pl.Schema(
-        {"id": pl.Int64, "name": pl.String, "score": pl.Float64}
+@pytest.mark.parametrize("batched", [False, True])
+def test_sharded_parquet_notes_keep_their_last_edit_extension_columns(
+    tmp_path, batched
+):
+    # Dropping them silently gave notes their creation time, not their leakage-safe last-edit time.
+    (tmp_path / "note").mkdir()
+    for i in range(NOTES.height):
+        NOTES[i : i + 1].write_parquet(tmp_path / "note" / f"part_{i}.parquet")
+    loader = ShardedTableDataLoader(
+        schema_loader=OMOP_53,
+        chunked_tables=["note"],
+        batching_row_threshold=0,
+        batch_mode="per_shard",
     )
-    assert df.rows() == [(1, "x", None), (2, "y", None), (3, None, 1.5)]
-    assert scan_harmonized(tmp_path, keep_columns=["id"]).collect().sort(
-        "id"
-    ).rows() == [
-        (1,),
-        (2,),
-        (3,),
-    ]
 
+    frames = (
+        list(loader.iter_table_batches("note", tmp_path / "note"))
+        if batched
+        else [load_raw_file(tmp_path / "note", OMOP_53)]
+    )
 
-def test_scan_harmonized_with_schema_sample_for_stable_shards(tmp_path):
-    for i in range(3):
-        pl.DataFrame({"id": [i], "name": [f"n{i}"]}).write_parquet(
-            tmp_path / f"s{i}.parquet"
-        )
-
-    df = scan_harmonized(tmp_path, schema_sample=1).collect().sort("id")
-
-    assert df.rows() == [(0, "n0"), (1, "n1"), (2, "n2")]
-
-
-def test_scan_harmonized_without_shards_raises(tmp_path):
-    with pytest.raises(FileNotFoundError, match="No parquet files"):
-        scan_harmonized(tmp_path)
-
-
-@pytest.mark.parametrize("project", [project_to_target_schema, _align_shard_to_schema])
-def test_projection_to_target_schema(project):
-    lf = pl.LazyFrame({"id": ["1", "not a number"], "dropped": [1, 2]})
-
-    df = project(lf, {"id": pl.Int64, "added": pl.Date}).collect()
-
-    assert df.schema == pl.Schema({"id": pl.Int64, "added": pl.Date})
-    # Casts are permissive: an unparsable value becomes null rather than failing the shard.
-    assert df.rows() == [(1, None), (None, None)]
+    df = pl.concat([f.collect() for f in frames], how="diagonal").sort("note_id")
+    assert df["xtn_note_last_edit_datetime"].to_list() == ["2020-01-03 09:00:00", None]
+    assert len(frames) == (NOTES.height if batched else 1)

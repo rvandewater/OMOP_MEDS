@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  "MEDS-extract~=0.8.0", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.26", "omop_schema", "meds~=0.4.1",
+  "MEDS-extract~=0.8.0", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
     "tqdm"
 ]
 

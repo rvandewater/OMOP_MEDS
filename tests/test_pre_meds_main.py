@@ -101,6 +101,26 @@ def test_repeated_runs_keep_note_preferred_time_and_package_config(
 # --- batched loading of large tables -----------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("overrides", [{}, BATCH_EVERY_SHARD], ids=["whole", "batched"])
+def test_sharded_parquet_notes_keep_their_leakage_safe_last_edit_time(
+    raw: Path, tmp_path: Path, overrides: dict
+):
+    # The last-edit time is an extension column outside the OMOP schema. Parquet shards used to lose it,
+    # so notes silently fell back to their creation time.
+    pre_meds_main(_cfg(raw, tmp_path / "csv"))
+    csv_notes = pl.read_parquet(tmp_path / "csv" / "pre_MEDS" / "note.parquet")
+    _shard_as_parquet(raw, "note", 2)
+
+    pre_meds_main(_cfg(raw, tmp_path / "sharded", **overrides))
+
+    sharded = tmp_path / "sharded" / "pre_MEDS"
+    sharded_notes = pl.read_parquet(
+        sharded / "note" / "*.parquet" if overrides else sharded / "note.parquet"
+    )
+    assert (csv_notes["preferred_time"] > csv_notes["note_datetime"]).all()
+    assert _sorted(sharded_notes.select(csv_notes.columns)).equals(_sorted(csv_notes))
+
+
 def test_batched_table_is_written_as_a_subsharded_directory(raw: Path, tmp_path: Path):
     unbatched_raw = _stage_demo(tmp_path / "raw_unbatched")
     pre_meds_main(_cfg(unbatched_raw, tmp_path / "unbatched"))

@@ -18,7 +18,7 @@ import pyarrow.parquet as pq
 import logging
 from omegaconf import OmegaConf, DictConfig
 
-from . import dataset_info, omop_cfg, premeds_cfg
+from . import dataset_info, premeds_cfg
 from .omop_versions import (
     get_schema_loader,
     load_pre_meds_tables,
@@ -95,7 +95,6 @@ def main(cfg: DictConfig) -> None:
     preprocessors = load_pre_meds_tables(omop_version)
     logger.info(f"Loaded table preprocessors from {pre_meds_config_path(omop_version)}")
     functions = {}
-    omop_cfg_version = omop_cfg[omop_version]
     schema_loader = get_schema_loader(omop_version)
     nlp_config = premeds_cfg.get("nlp_features", None)
 
@@ -130,7 +129,8 @@ def main(cfg: DictConfig) -> None:
                 f"Partial run found at {MEDS_input_dir}; will not overwrite existing files"
             )
     all_fps = []
-    for table in omop_cfg_version["tables"]:
+    # Every table of the OMOP version, in the order of its CDM specification.
+    for table in schema_loader.get_table_names():
         if table in IGNORE_TABLES:
             logger.info(f"Skipping {table} as it is in the ignore list.")
             continue

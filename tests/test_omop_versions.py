@@ -1,43 +1,36 @@
-"""OMOP CDM versions: the per-version pre-MEDS configs, the OMOP 5.5 schema, and what each version produces.
+"""OMOP CDM versions: the per-version pre-MEDS configs and what each version produces.
 
-The configs are checked against the official CDM field lists in `tests/omop_cdm_spec/`, not only against each
-other: a configured column missing from the input is skipped without a warning, so a wrong field name silently
-drops data.
+The configs are checked against the CDM tables and fields of `omop_schema`'s schemas, which its own tests hold
+to the official CDM specification, not only against each other: a configured column missing from the input is
+skipped without a warning, so a wrong field name silently drops data.
 """
 
-import csv
 import json
 import shutil
 from pathlib import Path
 
 import polars as pl
-import pyarrow as pa
 import pytest
 from omegaconf import OmegaConf
-from omop_schema.schema.v5_4 import OMOPSchemaV54
 
-from OMOP_MEDS import MAIN_CFG, omop_cfg
+from OMOP_MEDS import MAIN_CFG
 from OMOP_MEDS.__main__ import main as run_omop_meds
 from OMOP_MEDS.omop_versions import (
     SUPPORTED_OMOP_VERSIONS,
-    OMOPSchemaV55,
+    get_schema_loader,
     load_pre_meds_tables,
     normalize_omop_version,
     pre_meds_config_path,
 )
 from OMOP_MEDS.pre_meds import main as pre_meds_main
 
-SPEC_DIR = Path(__file__).resolve().parent / "omop_cdm_spec"
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 
 
-def _cdm_fields(version: str) -> dict[str, dict[str, str]]:
-    """{table: {field: datatype}} from the official CDM field list of an OMOP version."""
-    fields: dict[str, dict[str, str]] = {}
-    with open(SPEC_DIR / f"cdm_v{version}_fields.csv", newline="") as f:
-        for row in csv.DictReader(f):
-            fields.setdefault(row["table"], {})[row["field"]] = row["datatype"]
-    return fields
+def _cdm_fields(version: str) -> dict[str, dict[str, object]]:
+    """{table: {field: Arrow type}} of every CDM table of an OMOP version."""
+    schema = get_schema_loader(version)
+    return {table: dict(schema.get_schema(table)) for table in schema.get_table_names()}
 
 
 CDM = {version: _cdm_fields(version) for version in SUPPORTED_OMOP_VERSIONS}
@@ -91,14 +84,17 @@ def test_normalize_omop_version(given, expected):
 
 @pytest.mark.parametrize("given", ["5.2", "6.0", "5", "five", "", None])
 def test_unsupported_omop_versions_are_rejected(given):
-    with pytest.raises(ValueError, match="Set OMOP_VERSION to one of: 5.3, 5.4, 5.5"):
+    with pytest.raises(
+        ValueError,
+        match="supported versions: 5.3, 5.4, 5.5. Set OMOP_VERSION to one of them.",
+    ):
         normalize_omop_version(given)
 
 
 @pytest.mark.parametrize("version", SUPPORTED_OMOP_VERSIONS)
-def test_every_supported_version_has_a_config_and_its_cdm_tables(version):
+def test_every_supported_version_has_a_config_and_a_schema(version):
     assert pre_meds_config_path(version).is_file()
-    assert set(omop_cfg[version].tables) == set(CDM[version])
+    assert get_schema_loader(version).version == version
 
 
 # --- per-version configs against the CDM -------------------------------------------------------------------
@@ -178,39 +174,6 @@ def test_config_blocks_that_are_not_table_blocks_fail_loudly(
 
     with pytest.raises(ValueError, match=match):
         load_pre_meds_tables("5.4")
-
-
-# --- OMOP 5.5 schema ---------------------------------------------------------------------------------------
-
-ARROW_TYPES = {
-    "integer": pa.int64(),
-    "float": pa.float64(),
-    "date": pa.date64(),
-    "datetime": pa.timestamp("us"),
-}
-
-
-def test_omop_5_5_schema_is_5_4_plus_exactly_the_cdm_5_5_additions():
-    v54, v55 = OMOPSchemaV54(), OMOPSchemaV55()
-
-    for table, spec_fields in CDM["5.5"].items():
-        added_in_spec = set(spec_fields) - set(CDM["5.4"].get(table, {}))
-        added = {
-            name: dtype
-            for name, dtype in v55.get_schema(table).items()
-            if name not in v54.get_schema(table)
-        }
-        assert set(added) == added_in_spec, table
-        for name, dtype in added.items():
-            assert dtype == ARROW_TYPES.get(spec_fields[name], pa.string()), (
-                table,
-                name,
-            )
-        assert {
-            name: dtype
-            for name, dtype in v55.get_schema(table).items()
-            if name not in added
-        } == v54.get_schema(table), table
 
 
 # --- pre-MEDS and MEDS output per version ------------------------------------------------------------------
