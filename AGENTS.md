@@ -39,7 +39,7 @@ Pi reads this file as project context. Keep it in the repository root and run `/
 
 ## Environment setup
 
-Use an isolated environment. Python 3.11+ is required; CI currently exercises Python 3.11 and 3.12.
+Use an isolated environment. Python `>=3.11.4,<3.14` is required (the range MEDS-Extract 0.8 supports); CI exercises Python 3.11, 3.12 and 3.13.
 
 ```bash
 python -m venv .venv

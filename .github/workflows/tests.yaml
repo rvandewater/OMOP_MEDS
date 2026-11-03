@@ -17,7 +17,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
       fail-fast: false
 
     # Room for test_e2e's PhysioNet download (25-minute budget, 28-minute test timeout).
@@ -67,7 +67,7 @@ jobs:
 
       - name: Save MIMIC-IV OMOP demo download
         if: ${{ always() && steps.demo-cache.outputs.cache-hit != 'true' && hashFiles('.omop-cache/*.zip') != '' }}
-        # Both matrix jobs share the key; whichever saves second only gets an "already exists" warning.
+        # All matrix jobs share the key; any that saves after the first only gets an "already exists" warning.
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -91,7 +91,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
       fail-fast: false
 
     timeout-minutes: 15
