@@ -33,6 +33,12 @@ E2E_TIMEOUT_S = 10 * 60
 
 N_SUBJECTS = 28
 N_DEATHS = 3
+# Identical under MEDS-Extract 0.6.2 and 0.8.0.
+N_EVENTS = 27_056
+# One start and one end event per visit_occurrence row. Synthea27Nj's visit concepts have no names, so these
+# codes are `OMOP_visit_occurrence//UNK//{start,end}`: MEDS-Extract >= 0.7 drops all of them unless the event
+# config coalesces null code components.
+N_VISITS = 1_791
 # Static demographics carry no timestamp; every other event must have one.
 STATIC_CODE_PREFIXES = {"GENDER", "RACE", "ETHNICITY"}
 EXPECTED_CODE_PREFIXES = {
@@ -157,7 +163,14 @@ def test_e2e_synthea_omop_5_4(tmp_path: Path):
         pl.col("code").str.split("//").list.first().alias("code_prefix")
     )
 
+    assert events.height == N_EVENTS
     assert events["subject_id"].n_unique() == N_SUBJECTS
+    visit_boundaries = (
+        events.filter(pl.col("table_name") == "visit_occurrence")
+        .group_by(pl.col("code").str.extract(r"//(start|end)$"))
+        .len()
+    )
+    assert dict(visit_boundaries.iter_rows()) == {"start": N_VISITS, "end": N_VISITS}
     prefixes = set(events["code_prefix"].unique().to_list())
     assert EXPECTED_CODE_PREFIXES <= prefixes, (
         f"missing: {EXPECTED_CODE_PREFIXES - prefixes}"

@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -41,55 +42,124 @@ def _stage_local_demo_omop(raw_input_dir: Path) -> Path:
     return raw_input_dir
 
 
-def test_local_e2e_demo_resources():
-    """Run a local end-to-end smoke test against the checked-in demo resources."""
-    with (
-        TemporaryDirectory() as output_temp_dir,
-        TemporaryDirectory() as input_temp_dir,
-    ):
-        root = Path(output_temp_dir)
-        raw_input_dir = _stage_local_demo_omop(Path(input_temp_dir) / "raw_input")
+# Expected output over tests/demo_resources, identical under MEDS-Extract 0.6.2 and 0.8.0.
+DEMO_N_EVENTS = 33_160
+DEMO_N_SUBJECTS = 100
+# Observations without a mapped concept name. MEDS-Extract >= 0.7 drops rows whose code has a null component
+# unless the event config coalesces it, which these events need to survive.
+DEMO_N_UNK_OBSERVATIONS = 1_282
+DEMO_EVENT_COLUMNS = {
+    "subject_id",
+    "time",
+    "code",
+    "numeric_value",
+    "text_value",
+    "unit",
+    "visit_occurrence_id",
+    "link_id",
+    "table_name",
+    "source_block",
+}
 
-        cfg = OmegaConf.load(MAIN_CFG)
-        cfg.root_output_dir = str(root.resolve())
-        cfg.raw_input_dir = str(raw_input_dir.resolve())
-        cfg.pre_MEDS_dir = str((root / "pre_MEDS").resolve())
-        cfg.MEDS_cohort_dir = str((root / "MEDS_cohort").resolve())
-        cfg.do_download = False
-        cfg.do_demo = False
-        cfg.do_overwrite = True
-        cfg.prefer_source = False
-        cfg.join_on_visit = False
 
+def _path_without(directory: str) -> str:
+    target = Path(directory).resolve()
+    return os.pathsep.join(
+        p
+        for p in os.environ.get("PATH", "").split(os.pathsep)
+        if p and Path(p).resolve() != target
+    )
+
+
+@pytest.fixture(scope="module")
+def local_demo_cohort(tmp_path_factory) -> Path:
+    """Run the ETL once over the checked-in demo resources and return the MEDS cohort directory.
+
+    This interpreter's scripts directory is removed from `PATH` first, so the run passes only if the ETL
+    launches MEDS-Transforms from its own environment rather than whatever `PATH` would find.
+    """
+    # Separate from the output root, which do_overwrite=True deletes.
+    raw_input_dir = _stage_local_demo_omop(
+        tmp_path_factory.mktemp("local_demo_input") / "raw_input"
+    )
+    root = tmp_path_factory.mktemp("local_demo_output")
+
+    cfg = OmegaConf.load(MAIN_CFG)
+    cfg.root_output_dir = str(root.resolve())
+    cfg.raw_input_dir = str(raw_input_dir.resolve())
+    cfg.pre_MEDS_dir = str((root / "pre_MEDS").resolve())
+    cfg.MEDS_cohort_dir = str((root / "MEDS_cohort").resolve())
+    cfg.do_download = False
+    cfg.do_demo = False
+    cfg.do_overwrite = True
+    cfg.prefer_source = False
+    cfg.join_on_visit = False
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("PATH", _path_without(sysconfig.get_path("scripts")))
         run_omop_meds.__wrapped__(cfg)
 
-        data_path = root / "MEDS_cohort" / "data"
-        data_files = list(data_path.glob("*.parquet")) + list(
-            data_path.glob("**/*.parquet")
-        )
-        all_files = [x for x in data_path.glob("**/*") if x.is_file()]
+    return root / "MEDS_cohort"
 
-        assert len(data_files) > 0, (
-            f"No data files found in {data_path}; found {all_files}"
-        )
 
-        metadata_path = root / "MEDS_cohort" / "metadata"
-        all_files = [x for x in metadata_path.glob("**/*") if x.is_file()]
+@pytest.fixture(scope="module")
+def local_demo_events(local_demo_cohort: Path) -> pl.DataFrame:
+    data_files = sorted((local_demo_cohort / "data").rglob("*.parquet"))
+    assert data_files, f"No MEDS data shards under {local_demo_cohort / 'data'}"
+    return pl.concat([pl.read_parquet(fp) for fp in data_files])
 
-        dataset_metadata = metadata_path / "dataset.json"
-        assert dataset_metadata.exists(), (
-            f"Dataset metadata not found in {metadata_path}; found {all_files}"
-        )
 
-        codes_metadata = metadata_path / "codes.parquet"
-        assert codes_metadata.exists(), (
-            f"Codes metadata not found in {metadata_path}; found {all_files}"
-        )
+def test_local_e2e_demo_resources(local_demo_cohort: Path):
+    """Run a local end-to-end smoke test against the checked-in demo resources."""
+    data_path = local_demo_cohort / "data"
+    data_files = list(data_path.glob("**/*.parquet"))
+    all_files = [x for x in data_path.glob("**/*") if x.is_file()]
 
-        subject_splits = metadata_path / "subject_splits.parquet"
-        assert subject_splits.exists(), (
-            f"Subject splits not found in {metadata_path}; found {all_files}"
-        )
+    assert len(data_files) > 0, f"No data files found in {data_path}; found {all_files}"
+
+    metadata_path = local_demo_cohort / "metadata"
+    all_files = [x for x in metadata_path.glob("**/*") if x.is_file()]
+
+    dataset_metadata = metadata_path / "dataset.json"
+    assert dataset_metadata.exists(), (
+        f"Dataset metadata not found in {metadata_path}; found {all_files}"
+    )
+
+    codes_metadata = metadata_path / "codes.parquet"
+    assert codes_metadata.exists(), (
+        f"Codes metadata not found in {metadata_path}; found {all_files}"
+    )
+
+    subject_splits = metadata_path / "subject_splits.parquet"
+    assert subject_splits.exists(), (
+        f"Subject splits not found in {metadata_path}; found {all_files}"
+    )
+
+
+def test_local_e2e_demo_events(local_demo_events: pl.DataFrame):
+    events = local_demo_events
+
+    # MEDS-Extract's internal `code_components` linkage column must not leak into the final shards.
+    assert set(events.columns) == DEMO_EVENT_COLUMNS
+    assert events.height == DEMO_N_EVENTS
+    assert events["subject_id"].n_unique() == DEMO_N_SUBJECTS
+    assert events["code"].null_count() == 0
+    assert (
+        events.filter(pl.col("code") == "MEDS_BIRTH")["subject_id"].n_unique()
+        == DEMO_N_SUBJECTS
+    )
+    assert (
+        events.filter(pl.col("code") == "OMOP_observation//UNK").height
+        == DEMO_N_UNK_OBSERVATIONS
+    )
+
+
+def test_local_e2e_demo_codes_metadata_covers_every_code(
+    local_demo_cohort: Path, local_demo_events: pl.DataFrame
+):
+    codes = pl.read_parquet(local_demo_cohort / "metadata" / "codes.parquet")
+
+    assert set(codes["code"]) == set(local_demo_events["code"])
 
 
 # Downloads from PhysioNet, which is slow and flaky from CI runners: runs on pushes to main, on a schedule
