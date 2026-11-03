@@ -3,6 +3,8 @@ from importlib.resources import files
 
 from omegaconf import OmegaConf
 
+from OMOP_MEDS.linked_data import build_meds_extract_linked_data
+
 __package_name__ = "OMOP_MEDS"
 try:
     __version__ = version(__package_name__)
@@ -27,6 +29,7 @@ HAS_PRE_MEDS = PRE_MEDS_PY.exists()
 event_config = OmegaConf.load(EVENT_CFG)
 
 __all__ = [
+    "build_meds_extract_linked_data",
     "event_config",
     "EVENT_CFG",
     "ETL_CFG",
