@@ -593,7 +593,7 @@ requires-dist = [
     { name = "mdformat-admon", marker = "extra == 'dev'" },
     { name = "meds", specifier = "~=0.4.1" },
     { name = "meds-extract", specifier = "~=0.8.0" },
-    { name = "omop-schema" },
+    { name = "omop-schema", git = "https://github.com/rvandewater/omop_schema?rev=0110f997f39bf1ea3973def4aa91e6daccc07de0" },
     { name = "polars", specifier = ">=1.26" },
     { name = "polars", extras = ["rt64"], marker = "extra == 'large-data'" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "<4" },
@@ -606,14 +606,11 @@ provides-extras = ["dev", "tests", "local-parallelism", "slurm-parallelism", "la
 
 [[package]]
 name = "omop-schema"
-version = "0.0.3"
-source = { registry = "https://pypi.org/simple" }
+version = "0.0.5.dev3+g0110f997f"
+source = { git = "https://github.com/rvandewater/omop_schema?rev=0110f997f39bf1ea3973def4aa91e6daccc07de0#0110f997f39bf1ea3973def4aa91e6daccc07de0" }
 dependencies = [
     { name = "pyarrow" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/31/56/4ad76dbbec4a5d3e3288dbf8a0fde2e9a33669ab8f4793373995a9b0f5ab/omop_schema-0.0.3.tar.gz", hash = "sha256:f9042b84930bd24141b5b61586a5c54184b1cc4edca44024cc47ce954aed3883", size = 21344, upload-time = "2025-04-09T14:06:50.769Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/cd/cb9ce2fc55a4e786c96e3b2b562ae6cafb7884a36f24036b339ceda19555/omop_schema-0.0.3-py3-none-any.whl", hash = "sha256:9b38c50e48f51a00f286cd7c4f7ea24b96bb2c4e8f0ea9c78df3abeb4c01c9ea", size = 16579, upload-time = "2025-04-09T14:06:49.463Z" },
+    { name = "rich" },
 ]
 
 [[package]]
@@ -885,6 +882,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
+]
+
+[[package]]
+name = "rich"
+version = "15.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markdown-it-py" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb", size = 310654, upload-time = "2026-04-12T08:24:02.83Z" },
 ]
 
 [[package]]

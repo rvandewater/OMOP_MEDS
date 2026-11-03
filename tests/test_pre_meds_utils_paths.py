@@ -19,8 +19,6 @@ from OMOP_MEDS.pre_meds_utils import (
     SUBJECT_ID,
     build_preferred_event_datetime,
     calculate_nlp_features,
-    cast_files_to_schema,
-    check_column_mismatches,
     col_selector,
     extract_nlp_features,
     get_patient_link,
@@ -234,51 +232,6 @@ def test_col_selector_requires_columns_or_patterns():
 )
 def test_col_selector_selects_by_name_and_pattern(kwargs, expected):
     assert WIDE.select(col_selector(**kwargs)).columns == expected
-
-
-# --- check_column_mismatches / cast_files_to_schema -------------------------------------------------------
-
-
-def _write_shards(folder: Path, consistent: bool) -> Path:
-    folder.mkdir()
-    pl.DataFrame({"id": [1, 2], "v": [1, 2], "extra": ["a", "b"]}).write_parquet(
-        folder / "a.parquet"
-    )
-    pl.DataFrame({"id": [3], "v": [3] if consistent else ["3"]}).write_parquet(
-        folder / "b.parquet"
-    )
-    return folder
-
-
-def test_check_column_mismatches_reports_inconsistent_dtypes(tmp_path: Path, capsys):
-    mismatched = check_column_mismatches(_write_shards(tmp_path / "in", False))
-
-    assert {col: set(dtypes) for col, dtypes in mismatched.items()} == {
-        "v": {pl.Int64, pl.String}
-    }
-    assert "Mismatched columns found:" in capsys.readouterr().out
-
-
-def test_check_column_mismatches_on_consistent_shards(tmp_path: Path, capsys):
-    assert check_column_mismatches(_write_shards(tmp_path / "in", True)) == {}
-    assert "All schemas are consistent" in capsys.readouterr().out
-
-
-def test_cast_files_to_schema_aligns_every_shard(tmp_path: Path, capsys):
-    src = _write_shards(tmp_path / "in", False)
-    target = {"id": pl.Int64, "v": pl.Float64, "w": pl.String}
-
-    cast_files_to_schema(str(src), target, str(tmp_path / "out"))
-
-    out = {fp.name: pl.read_parquet(fp) for fp in sorted((tmp_path / "out").iterdir())}
-    assert sorted(out) == ["a.parquet", "b.parquet"]
-    for df in out.values():
-        # Extra columns are dropped, missing ones added as nulls, mismatched ones cast.
-        assert df.schema == pl.Schema(target)
-        assert df["w"].null_count() == df.height
-    assert out["a.parquet"]["v"].to_list() == [1.0, 2.0]
-    assert out["b.parquet"]["v"].to_list() == [3.0]
-    assert "Found mismatched columns" in capsys.readouterr().out
 
 
 # --- rename_demo_files ------------------------------------------------------------------------------------
