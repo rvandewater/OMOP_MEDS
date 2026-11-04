@@ -54,6 +54,7 @@ Optional extras:
 python -m pip install -e '.[local_parallelism]'
 python -m pip install -e '.[slurm_parallelism]'
 python -m pip install -e '.[large_data]'
+python -m pip install -e '.[athena]'  # suMEDS, for the optional Athena fallback of codes.parquet
 ```
 
 Do not bump pinned or compatibility-sensitive dependencies unless the task requires it. If dependencies change, update `pyproject.toml`, note why, and run relevant tests.

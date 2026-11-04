@@ -7,7 +7,9 @@ from tempfile import TemporaryDirectory
 import os
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
+from meds import CodeMetadataSchema
 from omegaconf import OmegaConf
 
 from OMOP_MEDS.__main__ import main as run_omop_meds
@@ -160,6 +162,16 @@ def test_local_e2e_demo_codes_metadata_covers_every_code(
     codes = pl.read_parquet(local_demo_cohort / "metadata" / "codes.parquet")
 
     assert set(codes["code"]) == set(local_demo_events["code"])
+
+
+def test_local_e2e_demo_codes_metadata_is_valid_and_described(local_demo_cohort: Path):
+    codes_table = pq.read_table(local_demo_cohort / "metadata" / "codes.parquet")
+    CodeMetadataSchema.validate(codes_table)
+    codes = pl.from_arrow(codes_table)
+    # Observation codes are vocabulary_id//concept_code (mapped and source concept); the demo concept
+    # table holds the MIMIC-IV local concepts, which must be described.
+    observation = codes.filter(pl.col("table_name") == "observation")
+    assert observation["description"].is_not_null().sum() > 0
 
 
 # Downloads from PhysioNet, which is slow and flaky from CI runners: runs on pushes to main, on a schedule

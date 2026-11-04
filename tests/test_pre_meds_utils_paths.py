@@ -190,14 +190,19 @@ def test_join_concept_with_a_single_reference_column_given_as_str():
         SUBJECT_ID,
         "preferred_concept_name",
         "preferred_vocabulary_name",
+        "preferred_concept_id",
     ]
     # Concept id 0 means "no concept": it is nulled, joins nothing, and the vocabulary falls back to the
-    # table-specific OMOP_<table> name.
+    # table-specific OMOP_<table> name. With one reference column the code ends in the concept_id itself,
+    # which is also the concept the code metadata is joined on.
     assert out.select(
-        "concept_name", "preferred_concept_name", "preferred_vocabulary_name"
+        "concept_name",
+        "preferred_concept_name",
+        "preferred_vocabulary_name",
+        "preferred_concept_id",
     ).rows() == [
-        ("Heart rate", 10, "LOINC"),
-        (None, None, "OMOP_observation"),
+        ("Heart rate", 10, "LOINC", 10),
+        (None, None, "OMOP_observation", None),
     ]
 
 

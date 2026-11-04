@@ -18,8 +18,10 @@ import zipfile
 from pathlib import Path
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
 import requests
+from meds import CodeMetadataSchema
 
 pytestmark = pytest.mark.synthea
 
@@ -195,3 +197,17 @@ def test_e2e_synthea(tmp_path: Path, omop_version: str):
     assert untimed <= STATIC_CODE_PREFIXES, (
         f"events without a time: {untimed - STATIC_CODE_PREFIXES}"
     )
+
+    # Synthea ships the concepts its tables use, so every code built from a concept is described, both those
+    # ending in a concept_code (observation, measurement, ...) and those ending in a concept_id (eras,
+    # drug exposures). Only literal codes and concepts missing from its concept table stay undescribed.
+    codes_table = pq.read_table(metadata / "codes.parquet")
+    CodeMetadataSchema.validate(codes_table)
+    codes = pl.from_arrow(codes_table)
+    assert set(codes["code"]) == set(events["code"])
+    undescribed = codes.filter(pl.col("description").is_null())
+    assert set(undescribed["table_name"]) <= {
+        "person",
+        "person_death",
+        "observation_period",
+    }, undescribed.group_by("table_name").len().rows()

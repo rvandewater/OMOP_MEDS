@@ -113,7 +113,7 @@ def test_pipeline_command_and_environment(tmp_path, fake_pipeline):
 
     assert cohort_dir.is_dir()
     assert fake_pipeline["finish"] == [
-        (Path(cfg.MEDS_cohort_dir), Path(cfg.pre_MEDS_dir))
+        (Path(cfg.MEDS_cohort_dir), Path(cfg.pre_MEDS_dir), EVENT_CFG)
     ]
     assert fake_pipeline["renamed"] == []
 
@@ -178,6 +178,47 @@ def test_missing_pre_meds_table_is_pruned_from_event_config(
     assert "note" not in pruned
     assert set(pruned) == {"_defaults", *fake_pipeline["tables"]}
     assert "Removing table note from event config." in caplog.text
+    # The codes are linked to their concepts through the config MEDS-Extract used.
+    ((_, _, event_cfg_path),) = fake_pipeline["finish"]
+    assert event_cfg_path == pruned_fp
+
+
+def test_athena_csv_dir_fills_the_written_codes_metadata(
+    tmp_path, fake_pipeline, monkeypatch
+):
+    codes_fp = tmp_path / "out" / "MEDS_cohort" / "metadata" / "codes.parquet"
+    enriched = []
+    monkeypatch.setattr(cli, "finish_codes_metadata", lambda *args: codes_fp)
+    monkeypatch.setattr(
+        cli, "enrich_codes_metadata_with_athena", lambda *args: enriched.append(args)
+    )
+    cfg = _cfg(tmp_path, athena_csv_dir="~/athena")
+
+    _run(cfg, fake_pipeline)
+
+    assert enriched == [
+        (codes_fp, Path(cfg.pre_MEDS_dir), Path("~/athena").expanduser())
+    ]
+
+
+@pytest.mark.parametrize(
+    ("athena_csv_dir", "codes_written"),
+    [(None, True), ("/athena", False)],
+    ids=["no-athena-dir", "no-codes-metadata"],
+)
+def test_athena_fallback_is_skipped(
+    tmp_path, fake_pipeline, monkeypatch, athena_csv_dir, codes_written
+):
+    codes_fp = tmp_path / "codes.parquet" if codes_written else None
+    enriched = []
+    monkeypatch.setattr(cli, "finish_codes_metadata", lambda *args: codes_fp)
+    monkeypatch.setattr(
+        cli, "enrich_codes_metadata_with_athena", lambda *args: enriched.append(args)
+    )
+
+    _run(_cfg(tmp_path, athena_csv_dir=athena_csv_dir), fake_pipeline)
+
+    assert enriched == []
 
 
 def test_overwrite_removes_outputs_including_pre_meds_outside_root(
