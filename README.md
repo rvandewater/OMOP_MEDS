@@ -9,7 +9,7 @@ alt="omop-to-meds logo" height="300">
 [![codecov](https://codecov.io/gh/rvandewater/OMOP_MEDS/graph/badge.svg?token=RW6JXHNT0W)](https://codecov.io/gh/rvandewater/OMOP_MEDS)
 [![tests](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/tests.yml)
 [![code-quality](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/rvandewater/OMOP_MEDS/actions/workflows/code-quality-main.yaml)
-![python](https://img.shields.io/badge/-Python_3.12%20%7C%203.13-blue?logo=python&logoColor=white)
+![python](https://img.shields.io/badge/-Python_3.11%20%7C%203.12%20%7C%203.13-blue?logo=python&logoColor=white)
 [![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/rvandewater/OMOP_MEDS#license)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/rvandewater/OMOP_MEDS/pulls)
 [![contributors](https://img.shields.io/github/contributors/rvandewater/OMOP_MEDS.svg)](https://github.com/rvandewater/OMOP_MEDS/graphs/contributors)
@@ -21,20 +21,37 @@ datasets into MEDS using MEDS-Extract.
 We gratefully acknowledge the developers of the first OMOP MEDS ETL, from which we took inspiration,
 which can be found here: https://github.com/Medical-Event-Data-Standard/meds_etl.
 
-We currently support OMOP 5.3 and 5.4 datasets. Earlier versions might work but are not tested and are perhaps (?)
-not used in practice anymore. Please open pull requests if you want to add support for earlier versions.
+We support OMOP CDM 5.3, 5.4 and 5.5 datasets (see [OMOP CDM versions](#omop-cdm-versions)). Earlier versions
+might work but are not tested and are perhaps (?) not used in practice anymore. Please open pull requests if you
+want to add support for earlier versions.
 
 - More information about OMOP can be found here: https://ohdsi.github.io/CommonDataModel/
 - More information about MEDS can be found here: https://medical-event-data-standard.github.io/
 
 For reading in OMOP in the right schema, we use the `omop-schema` package (developed for this ETL but can be used
-elswehere), which can be found here:
+elsewhere), which can be found here:
 https://github.com/rvandewater/omop_schema.
+It holds the table schemas of OMOP CDM 5.3, 5.4 and 5.5, checked against the official CDM specification, and
+reads the input tables (`omop_schema.scan.scan_table`):
+
+- CSV, gzipped CSV and Parquet files, and directories of their shards, are supported.
+- Column names are lowercased before the schema is applied, so uppercase headers (as SQL Server exports write them)
+    get their types.
+- Columns outside the schema, such as the `xtn_note_last_edit_*` columns notes need for leakage-safe times, are
+    kept, also when a table is a directory of Parquet shards.
+- DATE columns written with a midnight time (`2005-05-07 00:00:00`) are read as dates.
+- Values must fit their OMOP type in CSV files and single Parquet files. Directories of Parquet shards are cast
+    permissively (a value that does not fit becomes null), and every schema column is added to them, because
+    large exports drift in type from shard to shard.
+
 If your OMOP schema is non-standard (but still approximately OMOP), you should be able to use the `omop-schema` package to define your own schema and use it in this ETL.
 
 ## Setup
 
-Requires Python `>=3.12,<3.14` (`MEDS-extract 0.6.2` does not support 3.11).
+Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.8 supports: its Hydra command line fails on Python 3.14
+([MEDS_extract#248](https://github.com/mmcdermott/MEDS_extract/issues/248)), and its archive extraction on 3.11.0–3.11.3
+([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.8
+and MEDS-Transforms 0.7.
 
 First install the package:
 
@@ -46,7 +63,7 @@ Then:
 
 ```bash
 export DATASET_NAME="Your_OMOP_Dataset_Name" # e.g. MIMIC_IV_OMOP
-export OMOP_VERSION="5.3" # or 5.4
+export OMOP_VERSION="5.3" # 5.3, 5.4 or 5.5
 export RAW_INPUT_DIR="path/to/your/input"
 export ROOT_OUTPUT_DIR="/path/to/your/output"
 OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR
@@ -99,7 +116,8 @@ We make a few important choices that have impact on your downstream training and
     be more clean, especially if you are working with a limited tokenizer on a large dataset.
     You can still use the source concepts by setting `++prefer_source=True`.
 - We use more tables than in the original `meds_etl_omop` package, which can lead to more complete patient histories.
-    Watch for potential information leakage. You can change your table configs in pre_MEDS.yaml and event_configs.yaml
+    Watch for potential information leakage. You can change your table configs in
+    `configs/pre_MEDS/omop_<version>.yaml` and `event_configs.yaml`.
 - This package is more resource intensive, please adjust your `n_shards` and watch your memory usage.
 
 ## Different package versions
@@ -115,11 +133,20 @@ pip install OMOP_MEDS[large_data] # for handling large datasets with polars (rt6
 pip install OMOP_MEDS[athena] # for the optional Athena fallback of the code metadata (suMEDS)
 ```
 
-Run routine tests (without the downloaded e2e test makes it a lot faster, simply remove the `-k` flag to run all tests):
+Run routine tests (skipping the two end-to-end tests that download data; drop `-m` to run everything):
 
 ```bash
-pytest -q -k 'not test_e2e'
+pytest -q -m 'not physionet and not synthea'
 ```
+
+The two end-to-end tests run the full ETL over downloaded data:
+
+- `pytest -m synthea` uses OHDSI's [Synthea27Nj](https://github.com/OHDSI/EunomiaDatasets) sample: 28 synthetic
+    subjects in OMOP CDM 5.4 (Apache-2.0), pinned and SHA-256 verified, cached in `~/.cache/OMOP_MEDS/test-data`
+    (override with `SYNTHEA_OMOP_CACHE_DIR`). CI runs it in its own job on every pull request.
+- `pytest -m physionet` downloads the MIMIC-IV OMOP demo (OMOP CDM 5.3) from PhysioNet. CI runs it on pushes to
+    `main`, nightly and on demand, but not on pull requests, because PhysioNet is slow and unreliable from CI
+    runners.
 
 ## Pre-MEDS settings
 
@@ -159,6 +186,43 @@ Also check out the `main.yaml` config file for more default settings and details
 which can be found here:
 src/OMOP_MEDS/configs/main.yaml
 
+## OMOP CDM versions
+
+`OMOP_VERSION` (5.3, 5.4 or 5.5; a patch release such as `5.4.2` counts as its minor version) picks the CDM
+tables and their schemas from `omop-schema`, and the pre-MEDS table config
+`src/OMOP_MEDS/configs/pre_MEDS/omop_<version>.yaml`. Each version's file is complete on its own: it lists every
+table the ETL converts and the columns kept from it, under that version's CDM field names. Settings that do not
+depend on the version (subject and admission ID columns, input file types, metadata columns to drop, NLP
+features) are in `configs/pre_MEDS/common.yaml`.
+
+A configured column missing from the input is skipped without a warning, so a misspelled column silently drops
+data. `tests/test_omop_versions.py` therefore checks every configured column against the `omop-schema` schemas,
+which that package tests against the official CDM field lists. It also requires tables the CDM left unchanged
+between versions to be configured identically, so a fix made in one version's file is made in the others.
+
+OMOP CDM 5.5 ([changes from 5.4](https://ohdsi.github.io/CommonDataModel/cdm55Changes.html)) only adds optional
+fields and vocabulary-metadata tables, so a 5.4 export also converts as 5.5, to the same events. The pre-MEDS
+output keeps the new `observation.value_as_date`, `observation.value_as_source_concept_id`,
+`observation.unit_source_concept_id` and `specimen.visit_occurrence_id` / `visit_detail_id`. The event config is
+shared by all versions, so no MEDS event field reads them yet. The new `pack_content`, `concept_metadata` and
+`concept_relationship_metadata` tables are not converted.
+
+### Upgrading from a single pre-MEDS config
+
+`configs/pre_MEDS_minimal.yaml`, with its `5.3:` / `5.4:` blocks, and the unused `configs/pre_MEDS.yaml` were
+replaced by one file per version. If you changed `pre_MEDS_minimal.yaml`, copy each table block into
+`omop_<version>.yaml` without the version level, and the top-level settings into `common.yaml`. In Python,
+`OMOP_MEDS.PRE_MEDS_CFG` became `OMOP_MEDS.omop_versions.pre_meds_config_path(version)`, and
+`OMOP_MEDS.premeds_cfg` now holds only the shared settings.
+
+The table lists in `configs/OMOP.yaml` (`OMOP_MEDS.OMOP_CFG`, `OMOP_MEDS.omop_cfg`) were replaced by the schemas'
+`get_table_names()`, and `OMOP_MEDS.omop_versions.OMOPSchemaV55` by `omop_schema.schema.v5_5.OMOPSchemaV55`.
+
+The OMOP 5.4 `visit_occurrence` and `visit_detail` blocks asked for `admitted_source_value` and
+`admitted_source_concept_id` instead of the CDM 5.4 `admitted_from_source_value` and `admitted_from_concept_id`,
+so pre-MEDS output from OMOP 5.4 data lacked them. They are now kept; no event reads them, so the MEDS events are
+unchanged.
+
 ## MEDS-Extract settings
 
 If you want to convert a large dataset, you can use parallelization with MEDS-transforms
@@ -183,14 +247,30 @@ subjects you have in your dataset:
 export N_SUBJECTS_PER_SHARD=100000
 ```
 
-For large datasets, the pipeline keeps high `shard_events` limits by default:
-
-```yaml
-row_chunksize: 20000000000
-infer_schema_length: 999999999
-```
+The first MEDS-Extract stage, `convert_to_parquet`, rewrites each pre-MEDS parquet table once, keeping only the
+columns the event config reads. It replaced `shard_events`, whose `row_chunksize` / `infer_schema_length` settings
+no longer exist; per-stage memory is bounded by `N_SUBJECTS_PER_SHARD` instead.
 
 Optional local parallelism is still available via `OMOP_MEDS[local_parallelism]` and `N_WORKERS`.
+
+`OMOP_MEDS` runs `MEDS_transform-pipeline` (and, through it, each stage) from the Python environment it is
+installed in, even when another environment's MEDS-Transforms comes first on `PATH`.
+
+### Upgrading from MEDS-Extract 0.6
+
+MEDS-Extract 0.7 changed the pipeline and event (MESSY) config formats. The configs shipped here are already
+ported, and the output events are unchanged on the demo and Synthea test datasets. If you maintain a modified
+`event_configs.yaml` or `ETL.yaml`, port it the same way:
+
+- `subject_id_col: person_id` becomes `_defaults: {subject_id: $person_id}`.
+- In `ETL.yaml`, `event_conversion_config_fp` becomes `MESSY_config_fp`, `shard_events` becomes
+    `convert_to_parquet`, and `extract_code_metadata` must come before `merge_to_MEDS_cohort`.
+- Pre-MEDS tables written in several batches (large `measurement` / `observation` / `note` tables) are now a
+    `pre_MEDS/<table>/` directory of parts instead of `pre_MEDS/<table>.parquet/`, the layout MEDS-Extract 0.7+
+    reads. Older pre-MEDS output in the old layout is renamed automatically when the ETL resumes.
+- A null component in an f-string code now drops the event instead of rendering as `UNK`. Coalesce every
+    component to keep the old behaviour, e.g. `code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"`.
+    Dropped rows are counted only in the stage logs under `MEDS_cohort/convert_to_MEDS_events/.logs`.
 
 ## The MIMIC-IV OMOP Dataset
 
@@ -202,9 +282,9 @@ be functional. We also include a small sample of synthetic (LLM-generated) data 
 
 `metadata/codes.parquet` lists every code in the data, once per OMOP table it comes from (`table_name`,
 `occurrence_count`), and links it to the OMOP concept it was built from (`concept_id`). Codes from tables
-with a mapped and a source concept (measurement, condition and procedure occurrences, device exposure end,
-and observation and visit occurrence in OMOP 5.3) end in the concept's `concept_code`, e.g. `LOINC//718-7`;
-the other tables end in its `concept_id`. From the source database's own vocabulary tables, each code gets:
+with a mapped and a source concept (observation, measurement, visit occurrence, condition and procedure
+occurrences, and device exposure end) end in the concept's `concept_code`, e.g. `LOINC//718-7`; the other
+tables end in its `concept_id`. From the source database's own vocabulary tables, each code gets:
 
 - `description`: the `concept_name` in the `concept` table;
 - `parent_codes`: the `vocabulary_id//concept_code` of every concept it "Maps to" in `concept_relationship`.
@@ -245,7 +325,8 @@ procedures, LOINC). This ETL does not, and the fallback above does not use that 
 To handle datetime resolution in a more flexible way, you can configure the `datetime_resolver` settings in your config file.
 This allows you to specify which columns to use for determining the datetime of events, with support for both primary and override columns.
 The primary purpose of this is to prevent information leakage by using the last edit datetime (of notes) instead of the original note datetime, if available.
-The following block can be found in the pre_MEDS.yaml config file, and you can adjust the column names based on your dataset's schema:
+The following block is the `note` table's in each `configs/pre_MEDS/omop_<version>.yaml`, and you can adjust the
+column names based on your dataset's schema:
 
 ```yaml
 datetime_resolver:

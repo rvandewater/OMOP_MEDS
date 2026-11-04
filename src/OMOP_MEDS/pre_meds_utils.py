@@ -5,12 +5,11 @@ from typing import Any
 import polars as pl
 import polars.selectors as cs
 from polars import Boolean
-from polars.type_aliases import SelectorType
+from polars._typing import SelectorType
 from typing import Optional
 from loguru import logger
-from omop_schema.convert import convert_to_schema_polars
 from omop_schema.schema.base import OMOPSchemaBase
-from omop_schema.utils import pyarrow_to_polars_schema
+from omop_schema.utils import get_table_path
 
 from . import dataset_info, premeds_cfg
 from .pre_meds_data_loader import load_raw_file
@@ -19,16 +18,6 @@ DATASET_NAME = dataset_info.dataset_name
 ADMISSION_ID = premeds_cfg.admission_id
 SUBJECT_ID = premeds_cfg.subject_id
 OMOP_TIME_FORMATS: Iterable[str] = ("%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d")
-
-
-def get_table_path(input_dir: Path, table_name: str) -> Path | None:
-    table_path = input_dir / table_name
-    if table_path.exists():
-        return table_path
-    table_path_with_ext = list(input_dir.glob(f"{table_name}.*"))
-    if table_path_with_ext:
-        return table_path_with_ext[0]
-    return None
 
 
 def parse_time(time: pl.Expr, time_formats: Iterable[str]) -> pl.Expr:
@@ -263,9 +252,7 @@ def get_patient_link(
         date_of_birth = date_parsing
 
     if death_df is None:
-        death_schema = pyarrow_to_polars_schema(
-            schema_loader.get_pyarrow_schema("death")
-        )
+        death_schema = schema_loader.get_polars_schema("death")
         death_df = (
             pl.DataFrame(
                 data=[],
@@ -493,89 +480,6 @@ def col_selector(
             selector = regex_sel if selector is None else selector | regex_sel
 
     return selector
-
-
-def cast_files_to_schema(folder_path: str, target_schema: dict, output_folder: str):
-    """
-    Casts all files in a folder to the target schema using convert_to_schema_polars.
-    Used when the schema of the files in the folder is inconsistent.
-
-    Args:
-        folder_path (str): Path to the folder containing the files.
-        target_schema (dict): The target schema (column name -> data type).
-        output_folder (str): Path to the folder where processed files will be saved.
-
-    Returns:
-        None
-    """
-    folder = Path(folder_path)
-    output_dir = Path(output_folder)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Check for column mismatches
-    mismatched_columns = check_column_mismatches(folder_path)
-
-    if mismatched_columns:
-        print(f"Found mismatched columns: {mismatched_columns}")
-
-    # Process each file in the folder
-    for file in folder.glob("*.parquet"):
-        print(f"Processing file: {file}")
-        df = pl.scan_parquet(file)
-
-        # Align the file's schema with the target schema
-        df = convert_to_schema_polars(
-            dataset=df.lazy(),
-            target_schema=target_schema,
-            allow_extra_columns=False,
-            allow_missing_columns=True,
-            add_missing_columns=True,
-        ).collect()
-
-        # Save the processed file to the output folder
-        output_file = output_dir / file.name
-        df.write_parquet(output_file)
-        print(f"File saved to: {output_file}")
-
-
-def check_column_mismatches(folder_path: str):
-    """
-    Check for column mismatches (e.g., datatype inconsistencies) across all Parquet files in a folder.
-
-    Parameters:
-    folder_path (str): The path to the folder containing Parquet files.
-
-    Returns:
-    dict: A dictionary where keys are column names and values are lists of inconsistent datatypes.
-    """
-    column_types = {}
-
-    # Iterate through all Parquet files in the folder
-    for file in Path(folder_path).glob("*.parquet"):
-        print(f"Checking file: {file}")
-        # Read the schema of the Parquet file
-        df = pl.read_parquet(file)
-        schema = df.schema
-
-        # Compare the schema with the accumulated column types
-        for col, dtype in schema.items():
-            if col not in column_types:
-                column_types[col] = set()
-            column_types[col].add(dtype)
-
-    # Identify mismatched columns
-    mismatched_columns = {
-        col: list(dtypes) for col, dtypes in column_types.items() if len(dtypes) > 1
-    }
-
-    if mismatched_columns:
-        print("Mismatched columns found:")
-        for col, dtypes in mismatched_columns.items():
-            print(f"  Column: {col}, Datatypes: {dtypes}")
-    else:
-        print("No mismatched columns found. All schemas are consistent.")
-
-    return mismatched_columns
 
 
 def extract_codes_metadata(

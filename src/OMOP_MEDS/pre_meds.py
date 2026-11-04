@@ -14,11 +14,17 @@ os.environ["POLARS_MAX_THREADS"] = str(
 os.environ["POLARS_STREAMING_CHUNK_SIZE"] = "100000"
 import polars as pl
 import polars.selectors as cs
+import pyarrow.parquet as pq
 import logging
 from omegaconf import OmegaConf, DictConfig
-from omop_schema.utils import get_schema_loader
 
-from . import dataset_info, omop_cfg, premeds_cfg
+from . import dataset_info, premeds_cfg
+from .omop_versions import (
+    get_schema_loader,
+    load_pre_meds_tables,
+    normalize_omop_version,
+    pre_meds_config_path,
+)
 from .pre_meds_utils import (
     DATASET_NAME,
     get_table_path,
@@ -47,18 +53,50 @@ def get_shard_prefix(root: Path, path: Path) -> str:
     return path.name if path.is_dir() else path.stem.split(".")[0]
 
 
+def migrate_legacy_batched_outputs(pre_MEDS_dir: Path) -> list[str]:
+    """Rename batched pre-MEDS tables from the old `<table>.parquet/` layout to `<table>/`.
+
+    A table written in several batches is a directory of parts. Older versions named it `<table>.parquet/`,
+    which MEDS-Extract >= 0.7 does not read: it expects a sub-sharded `<table>/*.parquet` directory or a bare
+    `<table>.parquet` file. Renaming keeps a completed (`.done`) pre-MEDS output from an older version usable.
+
+    Returns:
+        The names of the renamed tables.
+
+    Examples:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     legacy = Path(d) / "measurement.parquet"
+        ...     legacy.mkdir()
+        ...     _ = (legacy / "part_00001.parquet").write_bytes(b"")
+        ...     _ = (Path(d) / "person.parquet").write_bytes(b"")
+        ...     renamed = migrate_legacy_batched_outputs(Path(d))
+        ...     renamed, sorted(p.name for p in Path(d).iterdir()), (Path(d) / "measurement").is_dir()
+        (['measurement'], ['measurement', 'person.parquet'], True)
+    """
+    renamed = []
+    for legacy_dir in sorted(pre_MEDS_dir.glob("*.parquet")):
+        target = legacy_dir.with_suffix("")
+        if legacy_dir.is_dir() and not target.exists():
+            legacy_dir.replace(target)
+            logger.info(f"Renamed legacy batched output {legacy_dir} to {target}")
+            renamed.append(target.name)
+    return renamed
+
+
 def main(cfg: DictConfig) -> None:
     """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
 
-    logger.info(f"Loading table preprocessors from {premeds_cfg}...")
-    preprocessors = premeds_cfg  # OmegaConf.load(premeds_cfg)
-    functions = {}
-    omop_version = float(dataset_info.omop_version)
-    supported_omop_versions = [5.3, 5.4]
+    omop_version = normalize_omop_version(dataset_info.omop_version)
     logger.info(f"Expecting OMOP version: {omop_version}")
-    omop_cfg_version = omop_cfg[omop_version]
+    # Loaded afresh on every run: the setup below pops each table's `datetime_resolver`, and a config shared
+    # across runs would then make a second run in this process build notes without `preferred_time`, the
+    # last-edit timestamp that prevents temporal leakage.
+    preprocessors = load_pre_meds_tables(omop_version)
+    logger.info(f"Loaded table preprocessors from {pre_meds_config_path(omop_version)}")
+    functions = {}
     schema_loader = get_schema_loader(omop_version)
-    nlp_config = preprocessors.pop("nlp_features", None)
+    nlp_config = premeds_cfg.get("nlp_features", None)
 
     if cfg.prefer_source:
         logger.warning(
@@ -68,6 +106,7 @@ def main(cfg: DictConfig) -> None:
     OMOP_input_dir = Path(cfg.raw_input_dir)
     MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
+    migrate_legacy_batched_outputs(MEDS_input_dir)
     limit = cfg.get("limit_subjects", 0)
     if limit > 0:
         logger.info(f"Limiting to {limit} subjects for debugging purposes.")
@@ -90,7 +129,8 @@ def main(cfg: DictConfig) -> None:
                 f"Partial run found at {MEDS_input_dir}; will not overwrite existing files"
             )
     all_fps = []
-    for table in omop_cfg_version["tables"]:
+    # Every table of the OMOP version, in the order of its CDM specification.
+    for table in schema_loader.get_table_names():
         if table in IGNORE_TABLES:
             logger.info(f"Skipping {table} as it is in the ignore list.")
             continue
@@ -104,17 +144,8 @@ def main(cfg: DictConfig) -> None:
         table_name,
         preprocessor_cfg,
     ):
-        datetime_resolver_cfg = None
         logger.info(f"  Adding preprocessor for {table_name}:\n{preprocessor_cfg}")
-        if any(item in supported_omop_versions for item in preprocessor_cfg.keys()):
-            if omop_version in preprocessor_cfg:
-                preprocessor_cfg = preprocessor_cfg[omop_version]
-                datetime_resolver_cfg = preprocessor_cfg.pop("datetime_resolver", None)
-            else:
-                raise ValueError(
-                    f"OMOP version {omop_version} not supported for {table_name}."
-                )
-        # (some configs include nlp_features at the same level as versioned dicts)
+        datetime_resolver_cfg = preprocessor_cfg.pop("datetime_resolver", None)
         functions[table_name] = join_concept(
             table_name=table_name,
             **preprocessor_cfg,
@@ -151,18 +182,7 @@ def main(cfg: DictConfig) -> None:
         return fn
 
     pl.Config.set_streaming_chunk_size(50_000)  # default is ~200k–1M; tune downward
-    # Ensure any nlp_features config isn't accidentally forwarded to join_concept
     for table_name, preprocessor_cfg in preprocessors.items():
-        if table_name in [
-            "subject_id",
-            "admission_id",
-            "raw_data_extensions",
-            "expected_not_processed_tables",
-            "tables_to_ignore",
-            "metadata_cols_to_drop",
-        ]:
-            # These are config variables and not tables
-            continue
         # Always register the preprocessor function so it's available later
         add_preprocessor(table_name, preprocessor_cfg)
 
@@ -290,6 +310,9 @@ def main(cfg: DictConfig) -> None:
     for in_fp in all_fps:
         tbl_prefix = get_shard_prefix(OMOP_input_dir, in_fp)
         out_fp = MEDS_input_dir / f"{tbl_prefix}.parquet"
+        # A table written in several batches becomes a directory of parts named after the table: the
+        # sub-sharded `<table>/*.parquet` layout MEDS-Extract reads (it does not read `<table>.parquet/`).
+        out_dir = MEDS_input_dir / tbl_prefix
 
         if tbl_prefix in unused_tables:
             logger.warning(
@@ -312,7 +335,7 @@ def main(cfg: DictConfig) -> None:
                 )
             continue
 
-        if out_fp.exists():
+        if out_fp.exists() or out_dir.exists():
             logger.info(f"Done with {tbl_prefix}. Continuing")
             continue
 
@@ -358,7 +381,9 @@ def main(cfg: DictConfig) -> None:
                 processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
                 part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
                 processed_df.sink_parquet(part_fp, row_group_size=128_000)
-                if part_fp.exists() and part_fp.stat().st_size > 0:
+                # A zero-row parquet file still has a footer, so check rows, not bytes: an all-empty table is
+                # then skipped like in the non-batched path below instead of being written as empty parts.
+                if part_fp.exists() and pq.ParquetFile(part_fp).metadata.num_rows > 0:
                     written_parts.append(part_fp)
                 elif part_fp.exists():
                     part_fp.unlink()
@@ -377,9 +402,9 @@ def main(cfg: DictConfig) -> None:
                     f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
                 )
             else:
-                temp_out_dir.replace(out_fp)
+                temp_out_dir.replace(out_dir)
                 logger.info(
-                    f"Processed and wrote {len(written_parts)} parts to {str(out_fp.resolve())} in {datetime.now() - st}"
+                    f"Processed and wrote {len(written_parts)} parts to {str(out_dir.resolve())} in {datetime.now() - st}"
                 )
         else:
             # Singular execution for smaller tables that Polars can handle

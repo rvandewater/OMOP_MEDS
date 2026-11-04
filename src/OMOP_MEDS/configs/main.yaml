@@ -23,6 +23,9 @@ tables_to_ignore:
     "vocabulary",
     "concept_ancestor",
     "concept_relationship",
+    "pack_content",
+    "concept_metadata",
+    "concept_relationship_metadata",
   ]
 prefer_source: False
 raw_input_dir: ${root_output_dir}/raw_input

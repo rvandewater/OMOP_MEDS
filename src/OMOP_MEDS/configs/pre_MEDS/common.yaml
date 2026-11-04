@@ -1,0 +1,19 @@
+# Pre-MEDS settings shared by every OMOP CDM version. Table preprocessing is per version, in
+# omop_<version>.yaml next to this file.
+subject_id: "person_id"
+admission_id: "visit_occurrence_id"
+raw_data_extensions: ["*.parquet", "*.csv", "*.csv.gz"]
+metadata_cols_to_drop: # optional, removes metadata columns when scanning (lazily loading) — omit key to skip
+  columns: []
+  patterns: ["(?i)xtn_", "(?i)etl_", "(?i)air_"]
+#nlp_features:
+#  enabled: true
+#  text_column: "note_text"
+#  features:
+#    - word_count
+#    - char_count
+#    - lexical_diversity
+#  prefix: "note"
+#  output_data_cols:
+#    - note_date
+#    - note_type_concept_id
