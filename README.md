@@ -69,6 +69,12 @@ export ROOT_OUTPUT_DIR="/path/to/your/output"
 OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR
 ```
 
+This writes the MEDS dataset to `$ROOT_OUTPUT_DIR/MEDS_cohort` (`data/` and `metadata/`, per the
+[MEDS standard](https://medical-event-data-standard.github.io/)). As its last step,
+[suMEDS](https://github.com/rvandewater/SumMEDS) (installed with this package) adds official vocabulary titles and
+ancestors to `metadata/codes.parquet` (see [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
+For the plain ETL output, add `do_enrich=False`.
+
 To try with the MIMIC-IV OMOP demo dataset (this downloads a version to your local machine), you can run:
 
 ```bash
@@ -130,7 +136,6 @@ pip install OMOP_MEDS[tests] # for running tests
 pip install OMOP_MEDS[local_parallelism] # for local parallelization with hydra-joblib-launcher
 pip install OMOP_MEDS[slurm_parallelism] # for parallelization with slurm using hydra-submitit-launcher
 pip install OMOP_MEDS[large_data] # for handling large datasets with polars (rt64), more than 3.2B rows
-pip install OMOP_MEDS[athena] # for the optional Athena fallback of the code metadata (suMEDS)
 ```
 
 Run routine tests (skipping the two end-to-end tests that download data; drop `-m` to run everything):
@@ -171,6 +176,8 @@ OMOP_MEDS \
 - `++process_notes`: Set to `True` to .
 - `athena_csv_dir`: Optional local OHDSI Athena download used as a fallback for the code metadata (see
     [Code metadata](#code-metadata-codesparquet)).
+- `do_enrich`: Set to `False` to skip the suMEDS enrichment of the code metadata, and `sumeds_args` to pass options
+    on to it (see [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
 Pre-meds batching settings. This is relevant if (some of) your input tables are very large, and you want to process
 them in batches. This can be useful to reduce memory usage, but it also increases the runtime, so use with caution.
@@ -300,25 +307,57 @@ subset) keep their `concept_id` but get no description. To fill those gaps, poin
 `CONCEPT_RELATIONSHIP.csv`):
 
 ```bash
-pip install OMOP_MEDS[athena]
 OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR athena_csv_dir=/path/to/athena
 ```
 
-This only fills what is missing; values from the source tables are never changed. Descriptions come from
-[suMEDS](https://github.com/rvandewater/suMEDS) (valid concepts only), parent codes from the "Maps to"
-relationships of the source, else of Athena. You bring your own Athena download: the ETL never ships
-vocabulary content, and CPT4 names are only in an Athena export completed with a UMLS license (Athena's CPT4
-utility and your UMLS API key).
+This only fills what is missing; values from the source tables are never changed. Each code is looked up by its
+`concept_id`: descriptions come from Athena through [suMEDS](https://github.com/rvandewater/SumMEDS) (valid
+concepts only), parent codes from the "Maps to" relationships of the source, else of Athena. On the MIMIC-IV demo,
+this describes 7,987 of its 8,480 codes, which the source tables leave undescribed. You bring your own Athena
+download: the ETL never ships vocabulary content, and CPT4 names are only in an Athena export completed with a UMLS
+license (Athena's CPT4 utility and your UMLS API key).
 
-Other MEDS ETLs ship a suMEDS rules file, so that `suMEDS-enrich` can add vocabulary hierarchy without Athena, from
-suMEDS's versioned ontology data (sumeds-ontologies, pinned release: ICD-10-CM, ICD-10-PCS, ICD-9-CM, ICD-9
-procedures, LOINC). This ETL does not, and the fallback above does not use that data either:
+### Enriching code metadata with suMEDS
 
-- every gap the fallback fills is a concept known only by its `concept_id`, while that data is keyed on vocabulary
-    codes; where the source `concept` table gives a concept's vocabulary code, it also gives its name;
-- rules match code strings, and an OMOP MEDS code ends in a `concept_code` or a `concept_id` depending on its table
-    (see above), so a pattern such as `ICD10PCS//<7 characters>` can also match a concept id. The concept behind each
-    code is already resolved into `vocabulary_id` and `concept_code`.
+Vocabulary ancestors come from [suMEDS](https://github.com/rvandewater/SumMEDS) rather than from this ETL. The last
+step of `OMOP_MEDS` runs `suMEDS-enrich` on `metadata/codes.parquet` in place, with the rules this package ships,
+[`src/OMOP_MEDS/sumeds_rules.yaml`](src/OMOP_MEDS/sumeds_rules.yaml). They are registered in suMEDS's
+`sumeds.rules` entry-point group as `OMOP`, so `--rules OMOP` works for any suMEDS command. The file holds no
+rules: OMOP codes already are `vocabulary_id//concept_code`, which suMEDS reads without one. suMEDS replaces
+`codes.parquet` only once the enriched table is complete, and it stays valid MEDS code metadata. The vocabulary
+data comes from suMEDS's ontology packs (versioned, pinned release: ICD-10-CM, ICD-10-PCS, ICD-9-CM, ICD-9
+procedures, LOINC), fetched from GitHub on first use and cached; no Athena download is needed. `do_enrich=False`
+skips the step, and `sumeds_args` passes options on to `suMEDS-enrich`:
+
+```bash
+# Use only already cached packs (no network):
+OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR 'sumeds_args=[--offline]'
+# Also add the LOINC Parts of the LOINC multiaxial hierarchy as parents of LOINC codes:
+OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR 'sumeds_args=[--loinc-hierarchy]'
+```
+
+To enrich the `codes.parquet` of an existing build instead:
+
+```bash
+suMEDS-enrich "$ROOT_OUTPUT_DIR/MEDS_cohort/metadata/codes.parquet" \
+  -o "$ROOT_OUTPUT_DIR/MEDS_cohort/metadata/codes.parquet" --rules OMOP
+```
+
+suMEDS validates every code that ends in a `concept_code` of a pack vocabulary. It adds the official title where
+the code has none, and the code's vocabulary ancestors to `parent_codes`, after the "Maps to" parents from the ETL.
+It also looks up those parents and appends their ancestors. Every added parent is named in `parent_names`, a map
+from code to name. Nothing the ETL wrote is changed. A code ending in a `concept_id` is never matched itself, as no
+concept id of these vocabularies looks like one of their codes. For OMOP data this mostly means the ancestors of the ICD-10-PCS and ICD-9 procedure codes of
+`procedure_occurrence`; conditions, drugs and measurements are mostly SNOMED, RxNorm and LOINC, which the source
+`concept` table already describes. On a credentialed OMOP CDM 5.4 extract, 4,396 of its 56,992 codes (3,682
+ICD-10-PCS and 714 ICD-9 procedure codes) gained 23,491 parents. Synthea27Nj and the MIMIC-IV demo have no such
+codes, so the packs add nothing to them, except LOINC Parts to 139 Synthea27Nj codes with `--loinc-hierarchy`.
+
+`'sumeds_args=[--athena-csv,/path/to/athena]'` would add Athena's `CONCEPT_ANCESTOR` ancestors for every
+vocabulary, but is not recommended: suMEDS matches code strings, so a code ending in a `concept_id` matches the
+concept whose `concept_code` is that number, a different concept. In Synthea27Nj, `RxNorm//1154062//start`
+(concept 1154062, a fentanyl patch) matches RxNorm code 1154062 (an aspirin / butalbital product) and gets its
+ancestors. `athena_csv_dir` (above) looks codes up by `concept_id` instead.
 
 ## Advanced datetime resolution
 

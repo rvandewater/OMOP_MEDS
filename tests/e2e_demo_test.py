@@ -96,6 +96,8 @@ def local_demo_cohort(tmp_path_factory) -> Path:
     cfg.do_overwrite = True
     cfg.prefer_source = False
     cfg.join_on_visit = False
+    # The plain ETL output; tests/test_run_with_enrichment.py runs the suMEDS step, offline.
+    cfg.do_enrich = False
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("PATH", _path_without(sysconfig.get_path("scripts")))

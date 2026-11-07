@@ -238,7 +238,6 @@ def _write_athena(athena_dir: Path) -> None:
 
 
 def test_athena_fallback_only_fills_gaps(tmp_path):
-    pytest.importorskip("sumeds")
     pre_MEDS_dir, MEDS_cohort_dir = _write_dataset(tmp_path)
     codes_fp = finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir, EVENT_CFG)
     before = _rows(pl.read_parquet(codes_fp))

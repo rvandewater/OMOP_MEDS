@@ -54,7 +54,6 @@ Optional extras:
 python -m pip install -e '.[local_parallelism]'
 python -m pip install -e '.[slurm_parallelism]'
 python -m pip install -e '.[large_data]'
-python -m pip install -e '.[athena]'  # suMEDS, for the optional Athena fallback of codes.parquet
 ```
 
 Do not bump pinned or compatibility-sensitive dependencies unless the task requires it. If dependencies change, update `pyproject.toml`, note why, and run relevant tests.
@@ -116,7 +115,9 @@ The pipeline has four conceptual phases:
 1. Optional dataset download and demo filename normalization.
 2. Pre-MEDS wrangling from OMOP tables to intermediate Parquet tables under `pre_MEDS`.
 3. MEDS-Transforms event conversion and sharding into `MEDS_cohort`.
-4. Final MEDS metadata completion, including `codes.parquet`.
+4. Final MEDS metadata completion, including `codes.parquet`, which suMEDS then enriches in place
+    (`suMEDS-enrich --rules OMOP`, from its ontology packs; `do_enrich=False` skips it). Tests run it offline,
+    against a local pack fixture (`tests/test_run_with_enrichment.py`).
 
 Preserve these invariants:
 

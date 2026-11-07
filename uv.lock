@@ -613,13 +613,11 @@ dependencies = [
     { name = "omop-schema" },
     { name = "polars" },
     { name = "requests" },
+    { name = "sumeds" },
     { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
-athena = [
-    { name = "sumeds" },
-]
 dev = [
     { name = "mdformat-admon" },
     { name = "pre-commit" },
@@ -637,7 +635,6 @@ tests = [
     { name = "hydra-joblib-launcher" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "sumeds" },
 ]
 
 [package.metadata]
@@ -650,7 +647,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "mdformat-admon", marker = "extra == 'dev'" },
     { name = "meds", specifier = "~=0.4.1" },
-    { name = "meds-extract", specifier = "~=0.8.0" },
+    { name = "meds-extract", specifier = ">=0.8.0,<0.9" },
     { name = "omop-schema", specifier = ">=0.1.0" },
     { name = "polars", specifier = ">=1.26" },
     { name = "polars", extras = ["rt64"], marker = "extra == 'large-data'" },
@@ -658,11 +655,10 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'tests'" },
     { name = "pytest-cov", marker = "extra == 'tests'" },
     { name = "requests" },
-    { name = "sumeds", marker = "extra == 'athena'", specifier = ">=0.3.2" },
-    { name = "sumeds", marker = "extra == 'tests'", specifier = ">=0.3.2" },
+    { name = "sumeds", specifier = ">=0.6,<0.7" },
     { name = "tqdm" },
 ]
-provides-extras = ["dev", "tests", "local-parallelism", "slurm-parallelism", "large-data", "athena"]
+provides-extras = ["dev", "tests", "local-parallelism", "slurm-parallelism", "large-data"]
 
 [[package]]
 name = "omop-schema"
@@ -1104,7 +1100,7 @@ wheels = [
 
 [[package]]
 name = "sumeds"
-version = "0.3.2"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "meds" },
@@ -1113,9 +1109,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/32/9b/2fb3441c24149468b477e857fb2567b7eb98d9d3f92b941bd9bf85e51115/sumeds-0.3.2.tar.gz", hash = "sha256:2ebcced4c8713c73baea2b33da8bb8ef1f7f7d022b1b1c1d3167e4ad4f1b9944", size = 20878, upload-time = "2026-10-21T18:46:58.688Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/1a/9c00dda2fb5ba5fdc8ba1ccf7d2d2474c120380b803b0bdf3f38f97869d2/sumeds-0.6.0.tar.gz", hash = "sha256:3f3aaa244b509ee78a0d6993a44d918ad27abe5b3cb16bbceb9a5641811e3ad2", size = 48326, upload-time = "2026-11-07T17:54:18.608Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/60/1ea1086fe9d35af7e870ea80b390942655b1584dc666332c7c9e3389c6c4/sumeds-0.3.2-py3-none-any.whl", hash = "sha256:8eef47b3d5569791b0d30997afda9185627bd68631dac5f8d67da869a208dd26", size = 24892, upload-time = "2026-10-21T18:46:57.585Z" },
+    { url = "https://files.pythonhosted.org/packages/58/5a/0d9ea34b131eb068b47eddca9f261312ccaf85c995fd8ffdd2716a57cc73/sumeds-0.6.0-py3-none-any.whl", hash = "sha256:4a0badfbfdfa66d7dbf8cfffc1d134ea4318a04aac998a9db69220d0d6a7d5c9", size = 53432, upload-time = "2026-11-07T17:54:17.415Z" },
 ]
 
 [[package]]

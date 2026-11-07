@@ -8,6 +8,7 @@ import pyarrow.parquet as pq
 from dftly import Parser
 from meds import CodeMetadataSchema
 from omegaconf import OmegaConf
+from sumeds import EnrichmentConfig, enrich_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -257,16 +258,7 @@ def enrich_codes_metadata_with_athena(
     * null parent codes get the `vocabulary_id//concept_code` of the concepts it "Maps to": the source
       relationships, else Athena's, with target codes from the source `concept` table, else Athena's;
     * a null `vocabulary_id` / `concept_code` is taken from Athena.
-
-    Needs the optional `sumeds` dependency (`pip install OMOP_MEDS[athena]`).
     """
-    try:
-        from sumeds import EnrichmentConfig, enrich_metadata
-    except ImportError as e:  # pragma: no cover - depends on the optional extra
-        raise ImportError(
-            "athena_csv_dir needs suMEDS: pip install 'OMOP_MEDS[athena]'"
-        ) from e
-
     athena_csv_dir = Path(athena_csv_dir)
     codes = pl.from_arrow(pq.read_table(codes_fp))
     todo = codes.filter(

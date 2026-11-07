@@ -17,20 +17,28 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+# MEDS-Extract is capped explicitly below the next minor: its 0.x minors are breaking (MESSY syntax, runner CLI),
+# so raise this deliberately when migrating. This ETL runs MEDS-Transforms' pipeline from its own runner, so it
+# needs neither `meds-extract-run` nor its `[download]` extra.
+# suMEDS enriches `metadata/codes.parquet` as the runner's last step (`suMEDS-enrich --rules OMOP`, with the
+# rules registered below). Finding rules by registered name needs 0.5, and 0.6 writes `parent_names` as maps
+# from code to name instead of lists aligned with `parent_codes`. It is capped below the next minor for the same
+# reason (its rules format and CLI are still 0.x).
 dependencies = [
-  "MEDS-extract~=0.8.0", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
-    "tqdm"
+  "MEDS-extract>=0.8.0,<0.9",
+  "sumeds>=0.6,<0.7",
+  "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
+  "tqdm"
 ]
 
 [tool.setuptools_scm]
 
 [project.optional-dependencies]
 dev = ["pre-commit<4", "mdformat-admon"]
-tests = ["pytest", "pytest-cov", "hydra-joblib-launcher", "sumeds>=0.3.2"]
+tests = ["pytest", "pytest-cov", "hydra-joblib-launcher"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 large_data = ["polars[rt64]"]
-athena = ["sumeds>=0.3.2"]
 
 [tool.pytest.ini_options]
 markers = [
@@ -41,6 +49,12 @@ markers = [
 [project.scripts]
 MEDS_extract-OMOP = "OMOP_MEDS.__main__:main"
 OMOP_MEDS = "OMOP_MEDS.__main__:main"
+
+# Registers the suMEDS rules as `OMOP`, so the runner's enrichment step and `suMEDS-enrich --rules OMOP` find
+# them. There is no MEDS-Extract spec (`MEDS_extract.pipelines`) to share the name with: the pre-MEDS step needs
+# this package's own runner, so `meds-extract-run` cannot run this ETL.
+[project.entry-points."sumeds.rules"]
+OMOP = "OMOP_MEDS:sumeds_rules.yaml"
 
 
 [project.urls]

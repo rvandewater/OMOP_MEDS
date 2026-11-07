@@ -8,6 +8,7 @@ from importlib.metadata import version
 
 import hydra
 from omegaconf import DictConfig, OmegaConf, omegaconf
+from sumeds.cli import enrich_main
 
 from OMOP_MEDS.utils import enrich_codes_metadata_with_athena, finish_codes_metadata
 from . import ETL_CFG, EVENT_CFG, MAIN_CFG
@@ -131,6 +132,15 @@ def main(cfg: DictConfig):
         enrich_codes_metadata_with_athena(
             codes_fp, pre_MEDS_dir, Path(athena_csv_dir).expanduser()
         )
+
+    # Step 3: suMEDS enriches codes.parquet in place with the rules this package registers as `OMOP`
+    if codes_fp is not None and cfg.get("do_enrich", True):
+        codes = str(codes_fp)
+        sumeds_args = [str(arg) for arg in cfg.get("sumeds_args") or []]
+        logger.info(
+            f"Enriching code metadata: suMEDS-enrich --rules OMOP {sumeds_args}"
+        )
+        enrich_main([codes, "-o", codes, "--rules", "OMOP", *sumeds_args])
 
 
 if __name__ == "__main__":

@@ -43,8 +43,14 @@ pre_meds_batch_input_rows: 10000000
 stage_runner_fp: null
 
 # Optional fallback for concepts missing from the source database's concept tables: a local OHDSI Athena
-# vocabulary download (the directory with CONCEPT.csv and CONCEPT_RELATIONSHIP.csv). Needs OMOP_MEDS[athena].
+# vocabulary download (the directory with CONCEPT.csv and CONCEPT_RELATIONSHIP.csv).
 athena_csv_dir: null
+
+# Last step: suMEDS enriches metadata/codes.parquet in place (`suMEDS-enrich --rules OMOP`) from its ontology
+# packs. do_enrich=False keeps the plain ETL output. sumeds_args are passed on to suMEDS-enrich, e.g.
+# 'sumeds_args=[--offline]' or 'sumeds_args=[--loinc-hierarchy]' (see the README).
+do_enrich: True
+sumeds_args: []
 
 do_download: False
 do_overwrite: False

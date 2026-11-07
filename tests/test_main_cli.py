@@ -29,7 +29,13 @@ BASE_PATH = os.pathsep.join(["/usr/bin", "/bin"])
 @pytest.fixture
 def fake_pipeline(monkeypatch):
     """Replace every side-effecting step of `main` with a recorder."""
-    calls: dict = {"run_command": [], "finish": [], "renamed": [], "pre_meds": []}
+    calls: dict = {
+        "run_command": [],
+        "finish": [],
+        "renamed": [],
+        "pre_meds": [],
+        "enrich": [],
+    }
 
     def fake_pre_meds(cfg):
         pre_meds_dir = Path(cfg.pre_MEDS_dir)
@@ -56,6 +62,7 @@ def fake_pipeline(monkeypatch):
     monkeypatch.setattr(
         cli, "rename_demo_files", lambda d: calls["renamed"].append(Path(d))
     )
+    monkeypatch.setattr(cli, "enrich_main", lambda argv: calls["enrich"].append(argv))
 
     monkeypatch.setenv("DATASET_NAME", "TEST_DATASET")
     monkeypatch.setenv("RAW_DATASET_VERSION", "0.9")
@@ -219,6 +226,57 @@ def test_athena_fallback_is_skipped(
     _run(_cfg(tmp_path, athena_csv_dir=athena_csv_dir), fake_pipeline)
 
     assert enriched == []
+
+
+def test_sumeds_enriches_the_written_codes_metadata_last(
+    tmp_path, fake_pipeline, monkeypatch
+):
+    """suMEDS enriches codes.parquet in place, after the Athena fallback, with the rules registered as OMOP."""
+    codes_fp = tmp_path / "out" / "MEDS_cohort" / "metadata" / "codes.parquet"
+    steps = []
+    monkeypatch.setattr(cli, "finish_codes_metadata", lambda *args: codes_fp)
+    monkeypatch.setattr(
+        cli, "enrich_codes_metadata_with_athena", lambda *args: steps.append("athena")
+    )
+    monkeypatch.setattr(cli, "enrich_main", lambda argv: steps.append(argv))
+
+    _run(_cfg(tmp_path, athena_csv_dir="/athena"), fake_pipeline)
+
+    codes = str(codes_fp)
+    assert steps == ["athena", [codes, "-o", codes, "--rules", "OMOP"]]
+
+
+def test_sumeds_args_are_passed_on_to_sumeds_enrich(
+    tmp_path, fake_pipeline, monkeypatch
+):
+    codes_fp = tmp_path / "codes.parquet"
+    monkeypatch.setattr(cli, "finish_codes_metadata", lambda *args: codes_fp)
+    # As Hydra parses 'sumeds_args=[--offline,--child-codes,--child-depth,2]': the depth arrives as an int.
+    cfg = _cfg(tmp_path, sumeds_args=["--offline", "--child-codes", "--child-depth", 2])
+
+    _run(cfg, fake_pipeline)
+
+    codes = str(codes_fp)
+    assert fake_pipeline["enrich"] == [
+        [codes, "-o", codes, "--rules", "OMOP"]
+        + ["--offline", "--child-codes", "--child-depth", "2"]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("do_enrich", "codes_written"),
+    [(False, True), (True, False)],
+    ids=["do_enrich-false", "no-codes-metadata"],
+)
+def test_sumeds_enrichment_is_skipped(
+    tmp_path, fake_pipeline, monkeypatch, do_enrich, codes_written
+):
+    codes_fp = tmp_path / "codes.parquet" if codes_written else None
+    monkeypatch.setattr(cli, "finish_codes_metadata", lambda *args: codes_fp)
+
+    _run(_cfg(tmp_path, do_enrich=do_enrich), fake_pipeline)
+
+    assert fake_pipeline["enrich"] == []
 
 
 def test_overwrite_removes_outputs_including_pre_meds_outside_root(
