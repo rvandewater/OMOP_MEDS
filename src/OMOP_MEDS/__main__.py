@@ -133,10 +133,14 @@ def main(cfg: DictConfig):
             codes_fp, pre_MEDS_dir, Path(athena_csv_dir).expanduser()
         )
 
-    # Step 3: suMEDS enriches codes.parquet in place with the rules this package registers as `OMOP`
+    # Step 3: suMEDS enriches codes.parquet in place with the rules this package registers as `OMOP`, and records
+    # it in metadata/dataset.json. A failed enrichment (e.g. no internet) leaves codes.parquet as it was, records
+    # that and does not fail the run, as `suMEDS-extract` does; `sumeds_args=[--strict]` fails instead.
     if codes_fp is not None and cfg.get("do_enrich", True):
         codes = str(codes_fp)
         sumeds_args = [str(arg) for arg in cfg.get("sumeds_args") or []]
+        if {"--soft-fail", "--strict"}.isdisjoint(sumeds_args):
+            sumeds_args.append("--soft-fail")
         logger.info(
             f"Enriching code metadata: suMEDS-enrich --rules OMOP {sumeds_args}"
         )

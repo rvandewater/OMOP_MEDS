@@ -22,11 +22,13 @@ classifiers = [
 # needs neither `meds-extract-run` nor its `[download]` extra.
 # suMEDS enriches `metadata/codes.parquet` as the runner's last step (`suMEDS-enrich --rules OMOP`, with the
 # rules registered below). Finding rules by registered name needs 0.5, and 0.6 writes `parent_names` as maps
-# from code to name instead of lists aligned with `parent_codes`. It is capped below the next minor for the same
-# reason (its rules format and CLI are still 0.x).
+# from code to name instead of lists aligned with `parent_codes`. 0.6.1 adds the soft fail (`--soft-fail`: a
+# failed enrichment, e.g. on a server without internet, leaves the ETL output as it was and exits 0) and the
+# `sumeds_enrichment` record in `metadata/dataset.json`. It is capped below the next minor for the same reason
+# (its rules format and CLI are still 0.x).
 dependencies = [
   "MEDS-extract>=0.8.0,<0.9",
-  "sumeds>=0.6,<0.7",
+  "sumeds>=0.6.1,<0.7",
   "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
   "tqdm"
 ]

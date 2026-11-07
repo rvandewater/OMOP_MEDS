@@ -2,7 +2,9 @@
 
 The runner's last step runs `suMEDS-enrich --rules OMOP` on `metadata/codes.parquet` in place. The ETL runs twice
 over the synthetic demo resources, plain (`do_enrich=False`) and enriched, and the enriched code metadata must
-add to the plain one without changing it.
+add to the plain one without changing it, and `metadata/dataset.json` records it. A failed enrichment leaves the
+plain output, records the failure and does not fail the run unless `sumeds_args=[--strict]`; `suMEDS-enrich
+MEDS_COHORT_DIR` then enriches it as the runner would have.
 
 The ontology source is a tiny pack repository in suMEDS's `sumeds-ontologies/0.1` layout, built here and passed
 through `sumeds_args`, so the test reads nothing over the network and does not depend on the published packs.
@@ -21,9 +23,11 @@ import polars as pl
 import pyarrow.parquet as pq
 import pytest
 from e2e_demo_test import _stage_local_demo_omop
-from meds import CodeMetadataSchema
+from meds import CodeMetadataSchema, DatasetMetadataSchema
 from omegaconf import OmegaConf
+from sumeds.cli import enrich_main
 
+import OMOP_MEDS.__main__ as cli
 from OMOP_MEDS import MAIN_CFG
 from OMOP_MEDS.__main__ import main as run_omop_meds
 
@@ -217,3 +221,96 @@ def test_data_matches_the_plain_etl(plain_metadata: Path, enriched_metadata: Pat
 
     key = ["subject_id", "time", "code"]
     assert events(enriched_metadata).sort(key).equals(events(plain_metadata).sort(key))
+
+
+# The ETL writes the rows of codes.parquet in no fixed order, so two builds compare as tables sorted by this key.
+KEY = ["code", "table_name"]
+
+
+def _table(metadata: Path) -> pl.DataFrame:
+    return pl.read_parquet(metadata / "codes.parquet").sort(KEY)
+
+
+@pytest.fixture
+def unenriched_codes(monkeypatch) -> list[bytes]:
+    """The bytes of codes.parquet as the ETL wrote it, read as the runner calls suMEDS-enrich on it."""
+    seen = []
+
+    def enrich(argv):
+        seen.append(Path(argv[0]).read_bytes())
+        return enrich_main(argv)
+
+    monkeypatch.setattr(cli, "enrich_main", enrich)
+    return seen
+
+
+def _dataset(metadata: Path) -> dict:
+    """`metadata/dataset.json`, which must stay valid MEDS dataset metadata."""
+    dataset = json.loads((metadata / "dataset.json").read_text())
+    DatasetMetadataSchema.validate(dataset)
+    return dataset
+
+
+def test_dataset_json_records_the_enrichment(
+    plain_metadata: Path, enriched_metadata: Path
+):
+    assert "sumeds_enrichment" not in _dataset(plain_metadata)
+    record = _dataset(enriched_metadata)["sumeds_enrichment"]
+    assert record["enriched"] is True
+    assert record["rules"] == "OMOP"
+    assert record["ontology_source"] == "local"
+    coverage = record["coverage"]
+    assert coverage["codes"] == len(_codes(enriched_metadata))
+    assert coverage["described"][0] <= coverage["described"][1]
+    assert coverage["with_parent_codes"][0] < coverage["with_parent_codes"][1]
+
+
+def test_failed_enrichment_keeps_the_etl_output_and_is_enriched_later(
+    tmp_path: Path,
+    raw_input_dir: Path,
+    ontology_source: Path,
+    plain_metadata: Path,
+    enriched_metadata: Path,
+    unenriched_codes: list[bytes],
+    capsys,
+):
+    """No ontology data (as without internet): the run succeeds, unenriched, and says so."""
+    missing = tmp_path / "no_ontologies"
+    metadata = _run(
+        raw_input_dir,
+        tmp_path / "out",
+        sumeds_args=["--ontology-source", str(missing)],
+    )
+    assert "suMEDS-enrich: warning: enrichment failed" in capsys.readouterr().err
+    assert [(metadata / "codes.parquet").read_bytes()] == unenriched_codes
+    assert _table(metadata).equals(_table(plain_metadata))
+    record = _dataset(metadata)["sumeds_enrichment"]
+    assert record["enriched"] is False
+    assert record["rules"] == "OMOP"
+    assert record["retry"] == "suMEDS-enrich <MEDS_ROOT> --ontology-source <PACKS_DIR>"
+    assert str(missing) not in json.dumps(record)
+
+    # `suMEDS-enrich MEDS_COHORT_DIR` reuses the recorded rules and options; the local pack source is a path,
+    # so it is given again.
+    retry = [str(metadata.parent), "--ontology-source", str(ontology_source)]
+    assert enrich_main(retry) == 0
+    assert _table(metadata).equals(_table(enriched_metadata))
+    record = _dataset(metadata)["sumeds_enrichment"]
+    assert record["enriched"] is True
+    assert record["rules"] == "OMOP"
+
+
+def test_strict_enrichment_fails_the_run(
+    tmp_path: Path, raw_input_dir: Path, unenriched_codes: list[bytes]
+):
+    missing = tmp_path / "no_ontologies"
+    with pytest.raises(SystemExit) as failed:
+        _run(
+            raw_input_dir,
+            tmp_path / "out",
+            sumeds_args=["--strict", "--ontology-source", str(missing)],
+        )
+    assert failed.value.code == 1
+    metadata = tmp_path / "out" / "MEDS_cohort" / "metadata"
+    assert [(metadata / "codes.parquet").read_bytes()] == unenriched_codes
+    assert "sumeds_enrichment" not in _dataset(metadata)

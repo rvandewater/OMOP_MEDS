@@ -231,7 +231,10 @@ def test_athena_fallback_is_skipped(
 def test_sumeds_enriches_the_written_codes_metadata_last(
     tmp_path, fake_pipeline, monkeypatch
 ):
-    """suMEDS enriches codes.parquet in place, after the Athena fallback, with the rules registered as OMOP."""
+    """suMEDS enriches codes.parquet in place, after the Athena fallback, with the rules registered as OMOP.
+
+    A failed enrichment (e.g. no internet) must not fail the run, so it soft-fails by default.
+    """
     codes_fp = tmp_path / "out" / "MEDS_cohort" / "metadata" / "codes.parquet"
     steps = []
     monkeypatch.setattr(cli, "finish_codes_metadata", lambda *args: codes_fp)
@@ -243,7 +246,7 @@ def test_sumeds_enriches_the_written_codes_metadata_last(
     _run(_cfg(tmp_path, athena_csv_dir="/athena"), fake_pipeline)
 
     codes = str(codes_fp)
-    assert steps == ["athena", [codes, "-o", codes, "--rules", "OMOP"]]
+    assert steps == ["athena", [codes, "-o", codes, "--rules", "OMOP", "--soft-fail"]]
 
 
 def test_sumeds_args_are_passed_on_to_sumeds_enrich(
@@ -259,8 +262,22 @@ def test_sumeds_args_are_passed_on_to_sumeds_enrich(
     codes = str(codes_fp)
     assert fake_pipeline["enrich"] == [
         [codes, "-o", codes, "--rules", "OMOP"]
-        + ["--offline", "--child-codes", "--child-depth", "2"]
+        + ["--offline", "--child-codes", "--child-depth", "2", "--soft-fail"]
     ]
+
+
+@pytest.mark.parametrize("option", ["--strict", "--soft-fail"])
+def test_a_failure_mode_in_sumeds_args_replaces_the_soft_fail(
+    tmp_path, fake_pipeline, monkeypatch, option
+):
+    """`sumeds_args=[--strict]` makes a failed enrichment fail the run; suMEDS rejects both options at once."""
+    codes_fp = tmp_path / "codes.parquet"
+    monkeypatch.setattr(cli, "finish_codes_metadata", lambda *args: codes_fp)
+
+    _run(_cfg(tmp_path, sumeds_args=[option]), fake_pipeline)
+
+    codes = str(codes_fp)
+    assert fake_pipeline["enrich"] == [[codes, "-o", codes, "--rules", "OMOP", option]]
 
 
 @pytest.mark.parametrize(

@@ -73,7 +73,7 @@ This writes the MEDS dataset to `$ROOT_OUTPUT_DIR/MEDS_cohort` (`data/` and `met
 [MEDS standard](https://medical-event-data-standard.github.io/)). As its last step,
 [suMEDS](https://github.com/rvandewater/SumMEDS) (installed with this package) adds official vocabulary titles and
 ancestors to `metadata/codes.parquet` (see [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
-For the plain ETL output, add `do_enrich=False`.
+For the plain ETL output, add `do_enrich=False`. A failed enrichment (e.g. without internet) does not fail the run.
 
 To try with the MIMIC-IV OMOP demo dataset (this downloads a version to your local machine), you can run:
 
@@ -334,13 +334,20 @@ skips the step, and `sumeds_args` passes options on to `suMEDS-enrich`:
 OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR 'sumeds_args=[--offline]'
 # Also add the LOINC Parts of the LOINC multiaxial hierarchy as parents of LOINC codes:
 OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR 'sumeds_args=[--loinc-hierarchy]'
+# Fail the run if the enrichment fails:
+OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR 'sumeds_args=[--strict]'
 ```
 
-To enrich the `codes.parquet` of an existing build instead:
+Enrichment is on by default and soft-fails: if it fails, for example on a hospital server without internet access,
+`metadata/codes.parquet` stays as the ETL wrote it, a warning gives the command to enrich it later, and the run
+still succeeds. Whether a build was enriched is recorded in `metadata/dataset.json`, under
+`sumeds_enrichment.enriched` (`true`, or `false` with the `error` and the `retry` command). To enrich a build
+afterwards, with the rules and options of the run, and update `dataset.json` to match:
 
 ```bash
-suMEDS-enrich "$ROOT_OUTPUT_DIR/MEDS_cohort/metadata/codes.parquet" \
-  -o "$ROOT_OUTPUT_DIR/MEDS_cohort/metadata/codes.parquet" --rules OMOP
+suMEDS-enrich "$ROOT_OUTPUT_DIR/MEDS_cohort"
+# Without internet, from a copy of the sumeds-ontologies packs directory:
+suMEDS-enrich "$ROOT_OUTPUT_DIR/MEDS_cohort" --ontology-source /path/to/sumeds-ontologies/ontologies --offline
 ```
 
 suMEDS validates every code that ends in a `concept_code` of a pack vocabulary. It adds the official title where

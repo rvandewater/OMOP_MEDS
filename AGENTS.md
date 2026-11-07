@@ -116,8 +116,9 @@ The pipeline has four conceptual phases:
 2. Pre-MEDS wrangling from OMOP tables to intermediate Parquet tables under `pre_MEDS`.
 3. MEDS-Transforms event conversion and sharding into `MEDS_cohort`.
 4. Final MEDS metadata completion, including `codes.parquet`, which suMEDS then enriches in place
-    (`suMEDS-enrich --rules OMOP`, from its ontology packs; `do_enrich=False` skips it). Tests run it offline,
-    against a local pack fixture (`tests/test_run_with_enrichment.py`).
+    (`suMEDS-enrich --rules OMOP --soft-fail`, from its ontology packs; `do_enrich=False` skips it, and a failure
+    is recorded in `metadata/dataset.json` without failing the run unless `sumeds_args=[--strict]`). Tests run it
+    offline, against a local pack fixture (`tests/test_run_with_enrichment.py`).
 
 Preserve these invariants:
 
