@@ -1,15 +1,11 @@
-"""Guards for the MEDS-Extract (>= 0.8) / MEDS-Transforms (>= 0.7) configs and glue this package ships.
+"""Guards for the MEDS-Extract (>= 0.8.1) / MEDS-Transforms (>= 0.7) spec and stages this package ships.
 
 MEDS-Extract 0.7 reworked the pipeline and MESSY config formats; mistakes there either fail late inside a
-stage subprocess or, worse, silently drop events. These tests check the shipped configs against the installed
+stage subprocess or, worse, silently drop events. These tests check the shipped spec against the installed
 MEDS-Extract itself, so a future upgrade that changes its canonical pipeline or parsing rules fails here first.
 """
 
-import os
 import re
-import shutil
-import subprocess
-import sysconfig
 from importlib.metadata import entry_points
 from importlib.resources import files
 from pathlib import Path
@@ -18,23 +14,21 @@ import polars as pl
 import pytest
 import yaml
 from MEDS_extract.config import EventConfig, MessyConfig
-from omegaconf import OmegaConf
 
-from OMOP_MEDS import ETL_CFG, EVENT_CFG
-from OMOP_MEDS.event_config import prune_event_config
-from OMOP_MEDS.commands import (
-    MEDS_PIPELINE_CMD,
-    path_with_scripts_dir_first,
-    run_command,
-)
+from OMOP_MEDS import EVENT_CFG
+
+RESERVED_KEYS = {"etl", "sources", "_defaults"}
 
 
 def _stage_names(stages: list) -> list[str]:
     return [next(iter(s)) if isinstance(s, dict) else s for s in stages]
 
 
-def _raw_pipeline_cfg() -> dict:
-    return OmegaConf.to_container(OmegaConf.load(ETL_CFG), resolve=False)
+def _pipeline_cfg(**kwargs) -> dict:
+    """The pipeline config `meds-extract-run spec=OMOP` synthesizes."""
+    return MessyConfig.load("OMOP").pipeline_config(
+        input_dir=Path("/raw"), output_dir=Path("/out"), **kwargs
+    )
 
 
 def _event_cfg() -> dict:
@@ -46,59 +40,80 @@ def _code_events() -> list[tuple[str, str, str]]:
     return [
         (table, event, spec["code"])
         for table, events in _event_cfg().items()
-        if not table.startswith("_")
+        if table not in RESERVED_KEYS
         for event, spec in events.items()
     ]
 
 
-# --- pipeline config (ETL.yaml) ---------------------------------------------------------------------------
+# --- the registered spec and its pipeline -------------------------------------------------------------------
 
 
-def test_pipeline_config_uses_meds_extract_08_keys():
-    raw = _raw_pipeline_cfg()
+def test_spec_is_registered_as_omop():
+    (ep,) = [
+        ep for ep in entry_points(group="MEDS_extract.pipelines") if ep.name == "OMOP"
+    ]
+    messy = MessyConfig.load("OMOP")
 
-    assert raw["MESSY_config_fp"] == "${oc.env:EVENT_CONVERSION_CONFIG_FP}"
-    assert "event_conversion_config_fp" not in raw, "renamed to MESSY_config_fp in 0.7"
-    assert raw["input_dir"] == "${oc.env:PRE_MEDS_DIR}"
-    assert raw["output_dir"] == "${oc.env:MEDS_COHORT_DIR}"
-    assert raw["shards_map_fp"] == "${output_dir}/metadata/.shards.json"
-    # finalize_MEDS_metadata reads these two keys into dataset.json.
-    assert raw["etl_metadata"]["dataset_name"] == "${oc.env:DATASET_NAME}"
-    assert raw["etl_metadata"]["dataset_version"] == "${oc.env:DATASET_VERSION}"
+    assert ep.value == "OMOP_MEDS.configs:event_configs.yaml"
+    assert Path(messy.source_fp) == Path(str(EVENT_CFG))
+    assert messy.spec_ref == "pkg://OMOP_MEDS.configs.event_configs.yaml"
+    assert messy.dataset_name == "OMOP"
 
 
-def test_pipeline_stages_match_meds_extract_canonical_order():
-    # The installed MEDS-Extract ships its canonical pipeline; extract_code_metadata must precede
-    # merge_to_MEDS_cohort and the finalize stages must come last, or the run fails mid-pipeline.
+def test_pipeline_is_the_canonical_one_between_the_omop_stages():
+    # The installed MEDS-Extract ships its canonical pipeline; the spec only adds extension stages around it.
     canonical = yaml.safe_load(
         files("MEDS_extract.configs").joinpath("_extract.yaml").read_text()
     )["stages"]
 
-    assert _stage_names(_raw_pipeline_cfg()["stages"]) == _stage_names(canonical)
-
-
-def test_every_pipeline_stage_is_registered():
-    registered = {ep.name for ep in entry_points(group="MEDS_transforms.stages")}
-
-    stages = _stage_names(_raw_pipeline_cfg()["stages"])
-    assert set(stages) <= registered, f"unregistered: {set(stages) - registered}"
-    assert "shard_events" not in stages, "replaced by convert_to_parquet in 0.7"
-
-
-@pytest.mark.parametrize(
-    ("env_value", "expected"), [(None, 10_000), ("123", 123)], ids=["default", "env"]
-)
-def test_subjects_per_shard_is_overridable_from_env(monkeypatch, env_value, expected):
-    if env_value is None:
-        monkeypatch.delenv("N_SUBJECTS_PER_SHARD", raising=False)
-    else:
-        monkeypatch.setenv("N_SUBJECTS_PER_SHARD", env_value)
-    stages = OmegaConf.load(ETL_CFG).stages
-    (split_stage,) = [
-        s for s in stages if not isinstance(s, str) and "split_and_shard_subjects" in s
+    assert _stage_names(_pipeline_cfg()["stages"]) == [
+        "omop_pre_meds",
+        *_stage_names(canonical),
+        "omop_codes_metadata",
+        "sumeds_enrich",
     ]
 
-    assert split_stage.split_and_shard_subjects.n_subjects_per_shard == expected
+
+def test_extension_stages_are_installed_and_of_the_right_kind():
+    registered = {ep.name for ep in entry_points(group="MEDS_transforms.stages")}
+
+    assert {"omop_pre_meds", "omop_codes_metadata", "sumeds_enrich"} <= registered
+    MessyConfig.load("OMOP").etl.check_extension_stages()
+
+
+def test_enrichment_uses_the_omop_rules_and_can_be_skipped():
+    (enrich,) = [
+        s
+        for s in _pipeline_cfg()["stages"]
+        if isinstance(s, dict) and "sumeds_enrich" in s
+    ]
+    assert enrich["sumeds_enrich"]["rules"] == "OMOP"
+    # Athena is not passed on (see the README): suMEDS matches code strings, and OMOP codes may end in a concept_id.
+    assert "athena_csv" not in enrich["sumeds_enrich"]
+
+    skipped = _stage_names(_pipeline_cfg(skip_stages=["sumeds_enrich"])["stages"])
+    assert "sumeds_enrich" not in skipped
+    assert skipped[-1] == "omop_codes_metadata"
+
+
+def test_pipeline_options_and_version_stamps():
+    cfg = _pipeline_cfg()
+    (split,) = [
+        s
+        for s in cfg["stages"]
+        if isinstance(s, dict) and "split_and_shard_subjects" in s
+    ]
+
+    assert split["split_and_shard_subjects"]["n_subjects_per_shard"] == 10_000
+    assert cfg["etl_metadata"]["dataset_name"] == "OMOP"
+    # Any OMOP dataset: its version is unknown unless given (dataset_version=); the demo's is 0.9.
+    assert cfg["etl_metadata"]["dataset_version"].startswith("unknown:")
+    assert _pipeline_cfg(key="demo")["etl_metadata"]["dataset_version"].startswith(
+        "0.9:"
+    )
+    assert (
+        _pipeline_cfg(dataset_version="v1")["etl_metadata"]["dataset_version"] == "v1"
+    )
 
 
 # --- event config (event_configs.yaml) --------------------------------------------------------------------
@@ -107,7 +122,7 @@ def test_subjects_per_shard_is_overridable_from_env(monkeypatch, env_value, expe
 def test_event_config_is_valid_messy():
     cfg = MessyConfig.load(EVENT_CFG)
 
-    expected_tables = {t for t in _event_cfg() if not t.startswith("_")}
+    expected_tables = set(_event_cfg()) - RESERVED_KEYS
     assert set(cfg.table_prefixes) == expected_tables
     for table in cfg.event_tables:
         assert table.subject_id_node.referenced_columns == {"person_id"}, (
@@ -164,91 +179,3 @@ def test_null_code_components_render_as_unk(table, event, code, dtype):
         re.sub(r"\{[^}]*\}", str(present), template),
         re.sub(r"\{[^}]*\}", "UNK", template),
     ]
-
-
-# --- event-config pruning ---------------------------------------------------------------------------------
-
-
-def test_prune_event_config_keeps_defaults_and_round_trips(tmp_path: Path):
-    original = OmegaConf.load(EVENT_CFG)
-    tables = [t for t in original if not str(t).startswith("_")]
-    kept = {"person", "measurement", "note"}
-
-    pruned, removed = prune_event_config(original, kept | {"codes"})
-
-    assert list(pruned.keys()) == [
-        "_defaults",
-        *[t for t in tables if t in kept],
-    ]
-    assert removed == [t for t in tables if t not in kept]
-
-    # __main__ saves the pruned config with OmegaConf for MEDS-Extract to re-read; the dftly expressions (with
-    # their `??` and nested quotes) must survive that round trip unchanged.
-    fp = tmp_path / "event_configs.yaml"
-    OmegaConf.save(config=pruned, f=fp)
-    reloaded = yaml.safe_load(fp.read_text())
-    assert reloaded == {k: v for k, v in _event_cfg().items() if k in pruned}
-    assert set(MessyConfig.load(fp).table_prefixes) == kept
-
-
-def test_prune_event_config_without_missing_tables_removes_nothing():
-    original = OmegaConf.load(EVENT_CFG)
-
-    pruned, removed = prune_event_config(original, set(original.keys()))
-
-    assert removed == []
-    assert list(pruned.keys()) == list(original.keys())
-
-
-# --- MEDS-Transforms command resolution -------------------------------------------------------------------
-
-
-def test_this_environment_ships_the_pipeline_runner():
-    scripts_dir = sysconfig.get_path("scripts")
-    assert shutil.which(MEDS_PIPELINE_CMD, path=scripts_dir), scripts_dir
-
-
-def test_pipeline_runner_resolves_from_this_environment_first():
-    scripts_dir = sysconfig.get_path("scripts")
-    elsewhere = os.pathsep.join(["/usr/bin", "/bin"])
-
-    new_path = path_with_scripts_dir_first(MEDS_PIPELINE_CMD, elsewhere)
-
-    assert new_path.split(os.pathsep) == [scripts_dir, "/usr/bin", "/bin"]
-    resolved = Path(shutil.which(MEDS_PIPELINE_CMD, path=new_path))
-    assert resolved.parent == Path(scripts_dir)
-
-
-def _fake_scripts_dir(tmp_path: Path, command: str) -> Path:
-    scripts = tmp_path / "bin"
-    scripts.mkdir()
-    exe = scripts / command
-    exe.write_text("#!/bin/sh\n")
-    exe.chmod(0o755)
-    return scripts
-
-
-def test_scripts_dir_is_moved_to_front_not_duplicated(tmp_path: Path):
-    scripts = _fake_scripts_dir(tmp_path, "tool")
-    path = os.pathsep.join(["/usr/bin", str(scripts), "/bin"])
-
-    new = path_with_scripts_dir_first("tool", path, scripts_dir=scripts)
-
-    assert new.split(os.pathsep) == [str(scripts), "/usr/bin", "/bin"]
-
-
-def test_scripts_dir_without_command_leaves_path_unchanged(tmp_path: Path):
-    scripts = _fake_scripts_dir(tmp_path, "other_tool")
-    path = os.pathsep.join(["/usr/bin", "/bin"])
-
-    assert path_with_scripts_dir_first("tool", path, scripts_dir=scripts) == path
-
-
-def test_run_command_uses_argv_and_env_not_shell():
-    def fake_run(cmd, capture_output, env):
-        assert cmd == ["echo", "ok"]
-        assert capture_output is True
-        assert env["OMOP_MEDS_TEST_ENV"] == "1"
-        return subprocess.CompletedProcess(cmd, 0, b"ok", b"")
-
-    run_command(["echo", "ok"], env={"OMOP_MEDS_TEST_ENV": "1"}, runner_fn=fake_run)

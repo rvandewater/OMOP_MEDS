@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 import zipfile
 from pathlib import Path
 
@@ -22,6 +21,7 @@ import pyarrow.parquet as pq
 import pytest
 import requests
 from meds import CodeMetadataSchema
+from omop_run import run_omop
 
 pytestmark = pytest.mark.synthea
 
@@ -124,47 +124,33 @@ def test_e2e_synthea(tmp_path: Path, omop_version: str):
         "concept",
     } <= set(tables)
 
-    root = tmp_path / "output"
-    command = [
-        sys.executable,
-        "-m",
-        "OMOP_MEDS.__main__",
-        f"raw_input_dir={raw_input_dir}",
-        f"root_output_dir={root}",
-        "do_download=False",
-        "do_overwrite=True",
-    ]
-    env = os.environ | {
-        "HYDRA_FULL_ERROR": "1",
-        "DATASET_NAME": "SYNTHEA27NJ",
-        "RAW_DATASET_VERSION": "5.4",
-        "OMOP_VERSION": omop_version,
-    }
+    cohort = tmp_path / "MEDS_cohort"
     try:
-        result = subprocess.run(
-            command, capture_output=True, env=env, timeout=E2E_TIMEOUT_S
+        run_omop(
+            cohort,
+            raw_input_dir,
+            "dataset_version=5.4",
+            "overrides=['etl_metadata.dataset_name=SYNTHEA27NJ']",
+            env={"OMOP_VERSION": omop_version},
+            timeout=E2E_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired as e:
         pytest.fail(
             f"Command timed out after {E2E_TIMEOUT_S}s.\n"
-            f"stdout:\n{(e.stdout or b'').decode()}\nstderr:\n{(e.stderr or b'').decode()}"
+            f"stdout:\n{e.stdout or ''}\nstderr:\n{e.stderr or ''}"
         )
-    assert result.returncode == 0, (
-        f"Command failed with return code {result.returncode}.\n"
-        f"stdout:\n{result.stdout.decode()}\nstderr:\n{result.stderr.decode()}"
-    )
 
-    metadata = root / "MEDS_cohort" / "metadata"
+    metadata = cohort / "metadata"
     for fname in ("dataset.json", "codes.parquet", "subject_splits.parquet"):
         assert (metadata / fname).is_file(), f"{fname} missing from {metadata}"
     dataset = json.loads((metadata / "dataset.json").read_text())
     assert dataset["dataset_name"] == "SYNTHEA27NJ"
-    assert dataset["dataset_version"].endswith(f":OMOP_{omop_version}"), dataset[
-        "dataset_version"
-    ]
+    assert dataset["dataset_version"] == "5.4"
+    # Enriched, or soft-failed (e.g. GitHub unreachable): either way the run succeeds and says so.
+    assert dataset["sumeds_enrichment"]["rules"] == "OMOP"
 
-    data_files = sorted((root / "MEDS_cohort" / "data").rglob("*.parquet"))
-    assert data_files, f"No MEDS data shards under {root / 'MEDS_cohort' / 'data'}"
+    data_files = sorted((cohort / "data").rglob("*.parquet"))
+    assert data_files, f"No MEDS data shards under {cohort / 'data'}"
     events = pl.concat([pl.read_parquet(fp) for fp in data_files]).with_columns(
         pl.col("code").str.split("//").list.first().alias("code_prefix")
     )

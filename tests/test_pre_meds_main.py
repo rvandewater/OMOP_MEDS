@@ -12,10 +12,12 @@ import pytest
 from omegaconf import OmegaConf
 from omop_schema.utils import get_schema_loader
 
-from OMOP_MEDS import MAIN_CFG, premeds_cfg
-from OMOP_MEDS.__main__ import main as run_omop_meds
+from omop_run import run_omop
+
+from OMOP_MEDS import premeds_cfg
 from OMOP_MEDS.pre_meds import main as pre_meds_main
 from OMOP_MEDS.pre_meds_data_loader import load_raw_file
+from OMOP_MEDS.stages import PRE_MEDS_STAGE, pre_meds_config
 
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 SCHEMA_5_3 = get_schema_loader(5.3)
@@ -51,16 +53,9 @@ def _shard_as_parquet(raw: Path, table: str, n_shards: int) -> pl.DataFrame:
     return rows
 
 
-def _cfg(raw: Path, root: Path, **overrides):
-    cfg = OmegaConf.load(MAIN_CFG)
-    cfg.raw_input_dir = str(raw)
-    cfg.root_output_dir = str(root)
-    cfg.pre_MEDS_dir = str(root / "pre_MEDS")
-    cfg.MEDS_cohort_dir = str(root / "MEDS_cohort")
-    cfg.do_overwrite = True
-    for key, value in overrides.items():
-        OmegaConf.update(cfg, key, value, force_add=True)
-    return cfg
+def _cfg(raw: Path, root: Path, **options):
+    """The `omop_pre_meds` stage's pre-MEDS configuration, writing into `root/pre_MEDS`."""
+    return pre_meds_config(raw, root / "pre_MEDS", **{"do_overwrite": True, **options})
 
 
 BATCH_EVERY_SHARD = {
@@ -398,10 +393,7 @@ def test_table_without_known_subjects_is_skipped(raw: Path, tmp_path: Path, capl
 
 def _meds_events(root: Path) -> pl.DataFrame:
     return pl.concat(
-        [
-            pl.read_parquet(f)
-            for f in sorted((root / "MEDS_cohort/data").rglob("*.parquet"))
-        ]
+        [pl.read_parquet(f) for f in sorted((root / "data").rglob("*.parquet"))]
     )
 
 
@@ -412,17 +404,15 @@ def test_batched_pre_meds_output_converts_like_unbatched(tmp_path: Path):
     batched_raw = _stage_demo(tmp_path / "raw_batched")
     _shard_as_parquet(batched_raw, "observation", n_shards=3)
 
-    run_omop_meds.__wrapped__(_cfg(unbatched_raw, tmp_path / "unbatched"))
-    run_omop_meds.__wrapped__(
-        _cfg(
-            batched_raw,
-            tmp_path / "batched",
-            pre_meds_chunked_tables=["observation"],
-            **BATCH_EVERY_SHARD,
-        )
-    )
+    skip = "skip_stages=[sumeds_enrich]"
+    run_omop(tmp_path / "unbatched", unbatched_raw, skip)
+    batching = ["++stage_cfg.pre_meds_chunked_tables=[observation]"] + [
+        f"++stage_cfg.{key}={value}" for key, value in BATCH_EVERY_SHARD.items()
+    ]
+    overrides = "overrides=[" + ",".join(f"'{o}'" for o in batching) + "]"
+    run_omop(tmp_path / "batched", batched_raw, skip, overrides)
 
-    assert (tmp_path / "batched/pre_MEDS/observation").is_dir()
+    assert (tmp_path / "batched" / PRE_MEDS_STAGE / "observation").is_dir()
     unbatched = _meds_events(tmp_path / "unbatched")
     batched = _meds_events(tmp_path / "batched")
     assert batched.height == unbatched.height > 0

@@ -11,10 +11,9 @@ from loguru import logger
 from omop_schema.schema.base import OMOPSchemaBase
 from omop_schema.utils import get_table_path
 
-from . import dataset_info, premeds_cfg
+from . import premeds_cfg
 from .pre_meds_data_loader import load_raw_file
 
-DATASET_NAME = dataset_info.dataset_name
 ADMISSION_ID = premeds_cfg.admission_id
 SUBJECT_ID = premeds_cfg.subject_id
 OMOP_TIME_FORMATS: Iterable[str] = ("%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d")
@@ -752,15 +751,6 @@ def determine_concept_id(
         concept.alias("preferred_concept_id"),
     )
     return df
-
-
-def rename_demo_files(directory: Path):
-    """Rename files in the directory by removing the '2b_' prefix in the MIMIC-OMOP demo."""
-    for file_path in directory.glob("2b_*"):
-        new_name = file_path.name.replace("2b_", "")
-        new_path = file_path.with_name(new_name)
-        file_path.rename(new_path)
-        logger.info(f"Renamed: {file_path} to {new_path}")
 
 
 # ── Type resolution ────────────────────────────────────────────────────────────

@@ -24,9 +24,9 @@ from OMOP_MEDS.pre_meds_utils import (
     get_patient_link,
     get_table_path,
     join_concept,
-    rename_demo_files,
     set_up_metadata,
 )
+from OMOP_MEDS.pre_meds import unprefixed_view
 from OMOP_MEDS.utils import finish_codes_metadata
 
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
@@ -239,20 +239,28 @@ def test_col_selector_selects_by_name_and_pattern(kwargs, expected):
     assert WIDE.select(col_selector(**kwargs)).columns == expected
 
 
-# --- rename_demo_files ------------------------------------------------------------------------------------
+# --- the MIMIC-IV OMOP demo's 2b_ prefix ------------------------------------------------------------------
 
 
-def test_rename_demo_files_strips_the_2b_prefix_only(tmp_path: Path):
-    for name in ["2b_person.csv", "2b_visit_occurrence.csv", "concept.csv"]:
-        (tmp_path / name).write_text("x\n")
+def test_prefixed_demo_tables_are_read_through_links_and_never_renamed(tmp_path: Path):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    for name in ["2b_concept.csv", "2b_vocabulary.csv", "person.csv"]:
+        (raw / name).write_text(name)
 
-    rename_demo_files(tmp_path)
+    view = unprefixed_view(raw, tmp_path / "view")
 
-    assert sorted(p.name for p in tmp_path.iterdir()) == [
+    assert sorted(p.name for p in raw.iterdir()) == [
+        "2b_concept.csv",
+        "2b_vocabulary.csv",
+        "person.csv",
+    ]
+    assert sorted(p.name for p in view.iterdir()) == [
         "concept.csv",
         "person.csv",
-        "visit_occurrence.csv",
+        "vocabulary.csv",
     ]
+    assert get_table_path(view, "concept").read_text() == "2b_concept.csv"
 
 
 # --- set_up_metadata --------------------------------------------------------------------------------------

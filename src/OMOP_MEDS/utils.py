@@ -19,6 +19,7 @@ ARROW_STRING_TYPES = {
     pa.list_(pa.large_string()): pa.list_(pa.string()),
     pa.large_list(pa.large_string()): pa.list_(pa.string()),
 }
+RESERVED_SPEC_KEYS = frozenset({"etl", "sources"})
 CODES_METADATA_COLUMNS = [
     "code",
     "table_name",
@@ -129,6 +130,9 @@ def code_concept_links(pre_MEDS_dir: Path, event_cfg) -> pl.DataFrame:
     """
     links = []
     for table, events in event_cfg.items():
+        # `etl:` and `sources:` are reserved MESSY keys, `_defaults` a MESSY setting: none is a table.
+        if table in RESERVED_SPEC_KEYS or str(table).startswith("_"):
+            continue
         if not hasattr(events, "items"):
             continue
         fp = pre_MEDS_dir / f"{table}.parquet"
