@@ -5,16 +5,14 @@ to the official CDM specification, not only against each other: a configured col
 skipped without a warning, so a wrong field name silently drops data.
 """
 
-import json
 import shutil
 from pathlib import Path
 
 import polars as pl
 import pytest
 from omegaconf import OmegaConf
+from omop_run import run_omop
 
-from OMOP_MEDS import MAIN_CFG
-from OMOP_MEDS.__main__ import main as run_omop_meds
 from OMOP_MEDS.omop_versions import (
     SUPPORTED_OMOP_VERSIONS,
     get_schema_loader,
@@ -23,6 +21,7 @@ from OMOP_MEDS.omop_versions import (
     pre_meds_config_path,
 )
 from OMOP_MEDS.pre_meds import main as pre_meds_main
+from OMOP_MEDS.stages import pre_meds_config
 
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 
@@ -250,13 +249,7 @@ def _stage_demo_as(version: str, raw: Path) -> Path:
 
 
 def _main_cfg(raw: Path, root: Path):
-    cfg = OmegaConf.load(MAIN_CFG)
-    cfg.raw_input_dir = str(raw)
-    cfg.root_output_dir = str(root)
-    cfg.pre_MEDS_dir = str(root / "pre_MEDS")
-    cfg.MEDS_cohort_dir = str(root / "MEDS_cohort")
-    cfg.do_overwrite = True
-    return cfg
+    return pre_meds_config(raw, root / "pre_MEDS", do_overwrite=True)
 
 
 def _non_null_counts(df: pl.DataFrame, columns: list[str]) -> dict[str, int]:
@@ -310,14 +303,16 @@ def test_the_same_export_in_each_versions_layout_gives_the_same_meds_events(
     events = {}
     for version in SUPPORTED_OMOP_VERSIONS:
         raw = _stage_demo_as(version, tmp_path / f"raw_{version}")
-        root = tmp_path / f"out_{version}"
-        monkeypatch.setenv("OMOP_VERSION", version)
+        cohort = tmp_path / f"out_{version}"
+        # The stage option, which takes precedence over OMOP_VERSION.
+        monkeypatch.setenv("OMOP_VERSION", "5.3")
+        run_omop(
+            cohort,
+            raw,
+            "skip_stages=[sumeds_enrich]",
+            f"overrides=['++stage_cfg.omop_version={version}']",
+        )
 
-        run_omop_meds.__wrapped__(_main_cfg(raw, root))
-
-        cohort = root / "MEDS_cohort"
-        dataset = json.loads((cohort / "metadata" / "dataset.json").read_text())
-        assert dataset["dataset_version"].endswith(f":OMOP_{version}")
         df = pl.concat(
             [pl.read_parquet(fp) for fp in sorted((cohort / "data").rglob("*.parquet"))]
         )

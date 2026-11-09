@@ -1,4 +1,41 @@
-# MESSY event conversion config (MEDS-Extract >= 0.7); every value is a dftly expression.
+# The OMOP ETL as one MEDS-Extract spec (MESSY), registered as `OMOP`:
+#
+#   meds-extract-run spec=OMOP output_dir=OUT do_download=false input_dir=OMOP_DIR
+#
+# The `etl:` block adds this package's OMOP steps and suMEDS around MEDS-Extract's canonical stages (see
+# src/OMOP_MEDS/stages.py): `omop_pre_meds` turns the raw OMOP tables into the pre-MEDS tables read below,
+# `omop_codes_metadata` writes metadata/codes.parquet from the source's own vocabulary tables, and
+# `sumeds_enrich` adds vocabulary titles and ancestors and records that in metadata/dataset.json.
+etl:
+  # This spec converts any OMOP CDM dataset, so it sets no license or description URI. Name a build with
+  # "overrides=['etl_metadata.dataset_name=MY_DATASET']" and dataset_version=MY_VERSION.
+  n_subjects_per_shard: 10000
+  # visit_occurrence_id and note_id (as link_id) join events back to their OMOP rows.
+  raw_source_id_columns: [visit_occurrence_id, link_id]
+  pre_stages:
+    - omop_pre_meds
+  post_stages:
+    - omop_codes_metadata
+    # Rules registered by this package (src/OMOP_MEDS/sumeds_rules.yaml). No Athena source: suMEDS matches
+    # code strings, and many OMOP codes end in a concept_id (see the README).
+    - sumeds_enrich:
+        rules: OMOP
+
+# `dataset_key=demo` downloads the public MIMIC-IV OMOP demo, PhysioNet's project zip (~11 MB); the pre-stage
+# reads its 1_omop_data_csv folder. There is no `dataset` bucket: point input_dir at your own OMOP data.
+sources:
+  dataset_version:
+    dataset: unknown
+    demo: "0.9"
+  demo:
+    - type: http
+      urls:
+        - url: https://physionet.org/content/mimic-iv-demo-omop/get-zip/0.9/
+          rel_path: mimic-iv-demo-omop-0.9.zip
+          unarchive: zip
+          cleanup_archive: true
+
+# Every value below is a dftly expression, over the pre-MEDS tables `omop_pre_meds` writes.
 #
 # Every interpolated code component is coalesced with `?? 'UNK'`. MEDS-Extract < 0.7 rendered a null component
 # as "UNK" (e.g. `OMOP_visit_occurrence//UNK//start` for a visit with no mapped concept); from 0.7 a null

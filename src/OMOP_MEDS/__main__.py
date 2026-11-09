@@ -1,135 +1,129 @@
 #!/usr/bin/env python
-import logging
+"""Deprecated `OMOP_MEDS` / `MEDS_extract-OMOP` commands: they run `meds-extract-run spec=OMOP`.
+
+The ETL is the MEDS-Extract spec registered as `OMOP`, run with `meds-extract-run` (see the README). These two
+commands only translate the arguments of the old runner for one more release, and will be removed:
+
+    OMOP_MEDS raw_input_dir=RAW root_output_dir=ROOT [++prefer_source=True ...]
+
+runs
+
+    meds-extract-run spec=OMOP output_dir=ROOT/MEDS_cohort do_download=false input_dir=RAW \
+        "overrides=['++stage_cfg.prefer_source=True', ...]"
+
+The MEDS cohort stays in `ROOT/MEDS_cohort`; the pre-MEDS tables move to `ROOT/MEDS_cohort/omop_pre_meds`.
+"""
+
 import os
 import shutil
 import sys
+import sysconfig
 from pathlib import Path
-from importlib.metadata import version
 
-import hydra
-from omegaconf import DictConfig, OmegaConf, omegaconf
+from .stages import CODES_METADATA_DEFAULTS, PRE_MEDS_DEFAULTS
 
-from OMOP_MEDS.utils import finish_codes_metadata
-from . import ETL_CFG, EVENT_CFG, MAIN_CFG
-from . import __version__ as PKG_VERSION
-from . import dataset_info
-from .commands import MEDS_PIPELINE_CMD, path_with_scripts_dir_first, run_command
-from .download import download_data
-from .event_config import prune_event_config
-from .pre_meds import main as pre_MEDS_transform
-from .pre_meds_utils import rename_demo_files
-
-logger = logging.getLogger(__name__)
-
-
-@hydra.main(
-    version_base=None, config_path=str(MAIN_CFG.parent), config_name=MAIN_CFG.stem
-)
-def main(cfg: DictConfig):
-    """Runs the end-to-end MEDS Extraction pipeline."""
-    raw_input_dir = Path(cfg.raw_input_dir)
-    pre_MEDS_dir = Path(cfg.pre_MEDS_dir)
-    MEDS_cohort_dir = Path(cfg.MEDS_cohort_dir)
-    stage_runner_fp = cfg.get("stage_runner_fp", None)
-    root_output_dir = Path(cfg.root_output_dir)
-    if cfg.do_overwrite:
-        if root_output_dir.exists():
-            logger.info("Removing existing MEDS cohort directory.")
-            shutil.rmtree(root_output_dir)
-        if pre_MEDS_dir.exists():
-            logger.info("Removing existing pre-MEDS directory.")
-            shutil.rmtree(pre_MEDS_dir)
-    else:
-        logger.info("Not overwriting existing data as do_overwrite is False.")
-    # Step 0: Data downloading
-    if cfg.do_download:  # pragma: no cover
-        if cfg.get("do_demo", False):
-            logger.info("Downloading demo data.")
-            # Only the public demo is cached; credentialed datasets may contain PHI and are never copied
-            # into a shared cache directory.
-            cache_dir = cfg.get("download_cache_dir", None)
-            download_data(
-                raw_input_dir,
-                dataset_info,
-                do_demo=True,
-                cache_dir=Path(cache_dir).expanduser() if cache_dir else None,
-                cache_max_age_days=cfg.get("download_cache_max_age_days", 7),
-            )
-            rename_demo_files(raw_input_dir)
-        else:
-            logger.info("Downloading data.")
-            download_data(raw_input_dir, dataset_info)
-            rename_demo_files(raw_input_dir)
-    else:  # pragma: no cover
-        logger.info("Skipping data download.")
-
-    if cfg.do_demo:
-        rename_demo_files(raw_input_dir)
-
-    # Step 1: Pre-MEDS Data Wrangling
-    event_cfg = OmegaConf.load(EVENT_CFG)
-    pre_MEDS_transform(cfg)
-    pre_MEDS_tables = {item.stem for item in pre_MEDS_dir.iterdir()}
-    event_cfg_new, removed_tables = prune_event_config(event_cfg, pre_MEDS_tables)
-    for table in removed_tables:
-        logger.warning(f"Removing table {table} from event config.")
-
-    if removed_tables:
-        event_cfg_path = pre_MEDS_dir / "event_configs.yaml"
-        with open(event_cfg_path, "w") as f:
-            omegaconf.OmegaConf.save(config=event_cfg_new, f=f)
-    else:
-        event_cfg_path = EVENT_CFG
-
-    # Step 2: MEDS Cohort Creation
-    # Ensure output directories exist before MEDS runs.
-    # CI failures showed lockfile creation can error if parent directories don't exist.
-    MEDS_cohort_dir.mkdir(parents=True, exist_ok=True)
-
-    # Ensure the pre-meds dir exists (should, but defensive)
-    pre_MEDS_dir.mkdir(parents=True, exist_ok=True)
-
-    env = {
-        "DATASET_NAME": dataset_info.dataset_name,
-        "DATASET_VERSION": f"{dataset_info.raw_dataset_version}:{PKG_VERSION}:OMOP_{dataset_info.omop_version}",
-        "EVENT_CONVERSION_CONFIG_FP": str(Path(event_cfg_path).resolve()),
-        "PRE_MEDS_DIR": str(pre_MEDS_dir.resolve()),
-        "MEDS_COHORT_DIR": str(MEDS_cohort_dir.resolve()),
-        # The pipeline and its per-stage subprocesses must come from this environment's MEDS-Transforms,
-        # matching the MEDS-Extract version the shipped configs target.
-        "PATH": path_with_scripts_dir_first(MEDS_PIPELINE_CMD),
+#: Old runner options that are now options of the OMOP stages, passed as `++stage_cfg.<option>` overrides.
+STAGE_OPTIONS = frozenset({*PRE_MEDS_DEFAULTS, *CODES_METADATA_DEFAULTS})
+#: `meds-extract-run` options, passed on unchanged.
+RUN_OPTIONS = frozenset(
+    {
+        "dataset_version",
+        "do_cleanup_intermediates",
+        "skip_stages",
+        "stage_runner_fp",
+        "do_profile",
+        "overrides",
     }
+)
 
-    command_parts = [MEDS_PIPELINE_CMD, str(ETL_CFG.resolve())]
 
-    if stage_runner_fp:
-        command_parts.append(f"--stage_runner_fp={stage_runner_fp}")
+def _bool(value: str) -> bool:
+    return value.strip().lower() in {"true", "1", "yes"}
 
-    overrides = [f"output_dir={MEDS_cohort_dir.resolve()!s}"]
-    if cfg.get("do_overwrite") is not None:
-        overrides.append(f"do_overwrite={cfg.do_overwrite}")
-    if cfg.get("seed") is not None:
-        overrides.append(f"seed={cfg.seed}")
-    if cfg.get("do_profile", False):
-        command_parts.append("--do_profile")
-    if int(os.getenv("N_WORKERS", 1)) > 1:
-        overrides.extend(
-            [
-                f"++parallelize.n_workers={os.getenv('N_WORKERS')}",
-                "++parallelize.launcher=joblib",
-            ]
+
+def translate(args: list[str], env: dict[str, str] | None = None) -> list[str]:
+    """The `meds-extract-run` arguments for the old runner's arguments `args`.
+
+    `DATASET_NAME` in `env` names the build, as it did for the old runner.
+
+    Examples:
+        >>> translate(["raw_input_dir=/raw", "root_output_dir=/root", "++limit_subjects=50"], env={})
+        ['spec=OMOP', 'output_dir=/root/MEDS_cohort', 'do_download=false', 'input_dir=/raw',
+         "overrides=['++stage_cfg.limit_subjects=50']"]
+        >>> translate(["root_output_dir=/root", "do_download=True", "do_demo=True", "do_enrich=False"],
+        ...           env={"DATASET_NAME": "DEMO"})
+        ['spec=OMOP', 'output_dir=/root/MEDS_cohort', 'dataset_key=demo', 'download_dest_dir=/root/raw_input',
+         'skip_stages=[sumeds_enrich]', "overrides=['etl_metadata.dataset_name=DEMO']"]
+        >>> translate(["root_output_dir=/root", "sumeds_args=[--strict]"], env={})
+        Traceback (most recent call last):
+            ...
+        ValueError: OMOP_MEDS no longer takes sumeds_args=; run meds-extract-run spec=OMOP (see the README).
+    """
+    env = os.environ if env is None else env
+    given = {}
+    for arg in args:
+        key, sep, value = arg.lstrip("+").partition("=")
+        if not sep:
+            raise ValueError(f"Expected key=value arguments, got {arg!r}.")
+        given[key] = value
+    if "root_output_dir" not in given:
+        raise ValueError("root_output_dir= is required.")
+    root = Path(given.pop("root_output_dir"))
+    raw = given.pop("raw_input_dir", str(root / "raw_input"))
+    argv = ["spec=OMOP", f"output_dir={root / 'MEDS_cohort'}"]
+    if _bool(given.pop("do_download", "false")):
+        # The old runner downloaded the MIMIC-IV OMOP demo with and without do_demo.
+        given.pop("do_demo", None)
+        argv += ["dataset_key=demo", f"download_dest_dir={raw}"]
+    else:
+        given.pop("do_demo", None)
+        argv += ["do_download=false", f"input_dir={raw}"]
+    if not _bool(given.pop("do_enrich", "true")):
+        argv.append("skip_stages=[sumeds_enrich]")
+    given.pop("do_overwrite", None)  # handled by main()
+    overrides = []
+    if env.get("DATASET_NAME"):
+        overrides.append(f"etl_metadata.dataset_name={env['DATASET_NAME']}")
+    for key, value in given.items():
+        if key in STAGE_OPTIONS:
+            overrides.append(f"++stage_cfg.{key}={value}")
+        elif key in RUN_OPTIONS:
+            argv.append(f"{key}={value}")
+        else:
+            raise ValueError(
+                f"OMOP_MEDS no longer takes {key}=; run meds-extract-run spec=OMOP (see the README)."
+            )
+    if overrides:
+        argv.append("overrides=[" + ",".join(f"'{o}'" for o in overrides) + "]")
+    return argv
+
+
+def main() -> None:
+    """Run `meds-extract-run spec=OMOP` with the old runner's arguments, after a deprecation warning."""
+    from MEDS_extract.run.cli import main as meds_extract_run
+
+    args = sys.argv[1:]
+    try:
+        argv = translate(args)
+    except ValueError as e:
+        sys.exit(f"{Path(sys.argv[0]).name}: {e}")
+    print(
+        f"{Path(sys.argv[0]).name} is deprecated and will be removed; it runs:\n"
+        f"  meds-extract-run {' '.join(argv)}",
+        file=sys.stderr,
+    )
+    given = dict(a.lstrip("+").partition("=")[::2] for a in args)
+    if _bool(given.get("do_overwrite", "false")):
+        # As the old runner did, start from an empty output.
+        shutil.rmtree(
+            Path(given["root_output_dir"]) / "MEDS_cohort", ignore_errors=True
         )
-    command_parts.extend(["--overrides", *overrides])
-
-    run_command(command_parts, env=env)
-
-    # Copy codes.parquet to MEDS cohort directory
-    finish_codes_metadata(MEDS_cohort_dir, pre_MEDS_dir)
+    # MEDS-Transforms starts every stage as `MEDS_transform-stage` from PATH: use this environment's.
+    scripts = sysconfig.get_path("scripts")
+    os.environ["PATH"] = os.pathsep.join([scripts, os.environ.get("PATH", "")])
+    sys.argv = ["meds-extract-run", *argv]
+    meds_extract_run()
 
 
 if __name__ == "__main__":
-    if "--version" in sys.argv:
-        print(f"OMOP_MEDS version: {version('OMOP-MEDS')}")
-        print(f"Hydra version: {hydra.__version__}")
-        sys.exit(0)
     main()

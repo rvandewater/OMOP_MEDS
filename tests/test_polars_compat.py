@@ -14,9 +14,9 @@ from OMOP_MEDS.pre_meds_utils import extract_codes_metadata
 SRC_DIR = Path(OMOP_MEDS.__file__).parent
 
 
-def test_parent_codes_are_single_element_lists_or_null():
-    # Polars 2 no longer casts String to List(String); the replacement must keep 1.x's output exactly.
-    # IDs are Int64, as the OMOP schema loader types them.
+def test_parent_codes_are_string_lists_or_null():
+    # Polars 2 no longer casts String to List(String); the parent codes are aggregated into lists instead,
+    # which must give List(String) on both. IDs are Int64, as the OMOP schema loader types them.
     concept = pl.LazyFrame(
         {
             "concept_id": [1, 2, 3],

@@ -1,14 +1,3 @@
-dataset_name: ${oc.decode:${oc.env:DATASET_NAME, "MIMIC_IV_OMOP_DEMO"}}
-raw_dataset_version: ${oc.decode:${oc.env:RAW_DATASET_VERSION, "0.9"}}
+# The OMOP CDM version of the input (5.3, 5.4 or 5.5), when the `omop_pre_meds` stage's `omop_version` option is
+# not set: the OMOP_VERSION environment variable, else 5.3.
 omop_version: ${oc.decode:${oc.env:OMOP_VERSION, "5.3"}}
-
-# MIMIC-IV-OMOP demo data repository
-urls:
-  dataset:
-    - https://physionet.org/files/mimic-iv-demo-omop/${raw_dataset_version}/1_omop_data_csv/
-  # The demo is fetched as PhysioNet's project zip (~11 MB) rather than crawling the ~70 MB of
-  # uncompressed CSVs file by file; only the CSV folder is extracted.
-  demo:
-    - url: https://physionet.org/content/mimic-iv-demo-omop/get-zip/${raw_dataset_version}/
-      format: zip
-      archive_subdir: 1_omop_data_csv
