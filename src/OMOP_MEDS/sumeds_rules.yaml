@@ -1,0 +1,18 @@
+# suMEDS enrichment rules for OMOP_MEDS code metadata (format `sumeds-rules/0.1`, read by suMEDS >= 0.4;
+# https://github.com/rvandewater/SumMEDS), registered as `OMOP` (see pyproject.toml). The runner's last step
+# applies them to metadata/codes.parquet; for an existing build:
+#
+#   suMEDS-enrich "$OUT/metadata/codes.parquet" -o "$OUT/metadata/codes.parquet" --rules OMOP
+#
+# There are deliberately no rules. OMOP codes already are `vocabulary_id//concept_code` (or end in a
+# `concept_id`, see the README), which suMEDS's built-in `VOCABULARY//CODE` layout reads without a rule. suMEDS
+# validates them against its versioned ontology packs (ICD-10-CM, ICD-10-PCS, ICD-9-CM, ICD-9 procedures and
+# LOINC), adds the official title where a code has none, and the vocabulary ancestors as `parent_codes`. A code
+# ending in a `concept_id` does not validate, because no concept id of these vocabularies has the shape of one of
+# their codes (ICD-10-CM codes start with a letter, LOINC codes have a dash, ICD-9 codes have at most five digits,
+# and ICD-10-PCS concept ids have ten), so the packs leave it alone. suMEDS needs a rules file (or Athena) to use
+# the packs at all, hence this file.
+#
+# No hierarchy rule either: a `from_ontology` rule (parents that are codes of the same table) added no parent
+# to any build it was tried on, so it is left out.
+schema: sumeds-rules/0.1

@@ -8,6 +8,7 @@ import pyarrow.parquet as pq
 from dftly import Parser
 from meds import CodeMetadataSchema
 from omegaconf import OmegaConf
+from sumeds import EnrichmentConfig, enrich_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ ARROW_STRING_TYPES = {
     pa.list_(pa.large_string()): pa.list_(pa.string()),
     pa.large_list(pa.large_string()): pa.list_(pa.string()),
 }
+RESERVED_SPEC_KEYS = frozenset({"etl", "sources"})
 CODES_METADATA_COLUMNS = [
     "code",
     "table_name",
@@ -128,6 +130,9 @@ def code_concept_links(pre_MEDS_dir: Path, event_cfg) -> pl.DataFrame:
     """
     links = []
     for table, events in event_cfg.items():
+        # `etl:` and `sources:` are reserved MESSY keys, `_defaults` a MESSY setting: none is a table.
+        if table in RESERVED_SPEC_KEYS or str(table).startswith("_"):
+            continue
         if not hasattr(events, "items"):
             continue
         fp = pre_MEDS_dir / f"{table}.parquet"
@@ -257,16 +262,7 @@ def enrich_codes_metadata_with_athena(
     * null parent codes get the `vocabulary_id//concept_code` of the concepts it "Maps to": the source
       relationships, else Athena's, with target codes from the source `concept` table, else Athena's;
     * a null `vocabulary_id` / `concept_code` is taken from Athena.
-
-    Needs the optional `sumeds` dependency (`pip install OMOP_MEDS[athena]`).
     """
-    try:
-        from sumeds import EnrichmentConfig, enrich_metadata
-    except ImportError as e:  # pragma: no cover - depends on the optional extra
-        raise ImportError(
-            "athena_csv_dir needs suMEDS: pip install 'OMOP_MEDS[athena]'"
-        ) from e
-
     athena_csv_dir = Path(athena_csv_dir)
     codes = pl.from_arrow(pq.read_table(codes_fp))
     todo = codes.filter(

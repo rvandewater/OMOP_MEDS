@@ -21,19 +21,17 @@ Pi reads this file as project context. Keep it in the repository root and run `/
 ## Repository map
 
 - `pyproject.toml` - package metadata, Python requirement, dependencies, optional extras, console scripts.
-- `src/OMOP_MEDS/__main__.py` - Hydra CLI entry point for the end-to-end pipeline.
+- `src/OMOP_MEDS/configs/event_configs.yaml` - the MESSY spec registered as `OMOP` (`meds-extract-run spec=OMOP`): MEDS events from the pre-MEDS tables, plus the `etl:` block (extension stages, shard size, dataset metadata) and the demo's `sources:`.
+- `src/OMOP_MEDS/stages.py` - the MEDS-Extract extension stages `omop_pre_meds` (pre-stage) and `omop_codes_metadata` (post-stage), and their options.
+- `src/OMOP_MEDS/__main__.py` - the deprecated `OMOP_MEDS` / `MEDS_extract-OMOP` commands, which translate the old runner's arguments into `meds-extract-run spec=OMOP`.
 - `src/OMOP_MEDS/pre_meds.py` - pre-MEDS OMOP wrangling orchestration.
 - `src/OMOP_MEDS/pre_meds_utils.py` - table joins, concept selection, datetime handling, metadata helpers.
 - `src/OMOP_MEDS/pre_meds_data_loader.py` - raw table loading, sharded table handling, batching utilities.
-- `src/OMOP_MEDS/download.py` - dataset download helpers.
-- `src/OMOP_MEDS/utils.py` - final MEDS metadata helpers.
-- `src/OMOP_MEDS/dataset.yaml` - default dataset metadata and download URLs, overridden by environment variables.
-- `src/OMOP_MEDS/configs/main.yaml` - top-level Hydra defaults and runtime options.
-- `src/OMOP_MEDS/configs/pre_MEDS/omop_<version>.yaml` - pre-MEDS table preprocessing for one OMOP CDM version (5.3, 5.4, 5.5), chosen by `OMOP_VERSION`.
+- `src/OMOP_MEDS/utils.py` - the code metadata (`codes.parquet`) written by `omop_codes_metadata`.
+- `src/OMOP_MEDS/dataset.yaml` - the default OMOP CDM version (`OMOP_VERSION`, else 5.3).
+- `src/OMOP_MEDS/configs/pre_MEDS/omop_<version>.yaml` - pre-MEDS table preprocessing for one OMOP CDM version (5.3, 5.4, 5.5), chosen by the `omop_pre_meds` option `omop_version`, else `OMOP_VERSION`.
 - `src/OMOP_MEDS/configs/pre_MEDS/common.yaml` - pre-MEDS settings shared by every OMOP version.
 - `src/OMOP_MEDS/omop_versions.py` - supported OMOP versions and loading their pre-MEDS configs. Table schemas, CDM table lists and reading input tables come from the `omop_schema` package.
-- `src/OMOP_MEDS/configs/event_configs.yaml` - mapping from pre-MEDS tables/columns to MEDS events.
-- `src/OMOP_MEDS/configs/ETL.yaml` and `runner.yaml` - MEDS-Transforms runner configuration.
 - `tests/` - unit, utility, batching, datetime, NLP, patient-link, and end-to-end tests.
 - `tests/demo_resources/` - small checked-in demo OMOP CSVs for local tests. Prefer these over network downloads.
 
@@ -54,7 +52,6 @@ Optional extras:
 python -m pip install -e '.[local_parallelism]'
 python -m pip install -e '.[slurm_parallelism]'
 python -m pip install -e '.[large_data]'
-python -m pip install -e '.[athena]'  # suMEDS, for the optional Athena fallback of codes.parquet
 ```
 
 Do not bump pinned or compatibility-sensitive dependencies unless the task requires it. If dependencies change, update `pyproject.toml`, note why, and run relevant tests.
@@ -83,40 +80,46 @@ python -m build
 Notes:
 
 - Prefer `test_local_e2e_demo_resources` for ETL smoke tests because it uses checked-in demo files.
+- Tests run the ETL as users do, with `meds-extract-run spec=OMOP` from the test environment (`tests/omop_run.py`).
 - `tests/e2e_demo_test.py::test_e2e` may download demo data from PhysioNet. Do not run network/downloading tests unless the task requires it or the user permits it.
 - If `pre-commit` changes files, inspect the diff and rerun the relevant hook or test.
 
 ## Running the CLI safely
 
-The package exposes `OMOP_MEDS` and `MEDS_extract-OMOP` console scripts. A minimal local run looks like:
+The ETL is the MEDS-Extract spec registered as `OMOP`. A minimal local run looks like:
 
 ```bash
-export DATASET_NAME='MIMIC_IV_OMOP_DEMO'
-export RAW_DATASET_VERSION='0.9'
-export OMOP_VERSION='5.3'
-HYDRA_FULL_ERROR=1 OMOP_MEDS \
-  raw_input_dir=/path/to/omop_input \
-  root_output_dir=/tmp/omop_meds_output \
-  do_download=False \
-  do_overwrite=False
+OMOP_VERSION=5.3 meds-extract-run spec=OMOP output_dir=/tmp/omop_meds_output \
+  do_download=false input_dir=/path/to/omop_input 'skip_stages=[sumeds_enrich]'
 ```
+
+The deprecated `OMOP_MEDS` and `MEDS_extract-OMOP` commands translate the old runner's arguments into this
+command (`src/OMOP_MEDS/__main__.py`). Stage options are set for one run with
+`"overrides=['++stage_cfg.<option>=<value>']"` (see `src/OMOP_MEDS/stages.py`).
 
 Safety rules:
 
 - Never run destructive ETL commands against user data paths without explicit approval.
-- `do_overwrite=True` can remove existing output directories. Use temporary directories for tests and examples.
-- Avoid `do_download=True` unless the task requires a download.
+- `"overrides=['do_overwrite=True']"` can remove existing outputs. Use temporary directories for tests and examples.
+- Avoid `dataset_key=demo` without `do_download=false` unless the task requires a download.
 - Do not print raw rows from real patient tables, especially `note_text` or patient-level identifiers.
-- Prefer small `++limit_subjects=<n>` debug runs when validating pipeline behavior on non-demo data.
+- Prefer small `"overrides=['++stage_cfg.limit_subjects=<n>']"` debug runs when validating pipeline behavior on
+    non-demo data.
 
 ## ETL architecture and invariants
 
-The pipeline has four conceptual phases:
+The pipeline is `meds-extract-run spec=OMOP`, in four phases:
 
-1. Optional dataset download and demo filename normalization.
-2. Pre-MEDS wrangling from OMOP tables to intermediate Parquet tables under `pre_MEDS`.
-3. MEDS-Transforms event conversion and sharding into `MEDS_cohort`.
-4. Final MEDS metadata completion, including `codes.parquet`.
+1. Optional download of the MIMIC-IV OMOP demo (`dataset_key=demo`, the spec's `sources:`).
+2. The `omop_pre_meds` pre-stage: pre-MEDS wrangling from the OMOP tables in `input_dir` to Parquet tables under
+    `OUTPUT_DIR/omop_pre_meds`, which MEDS-Extract reads instead of the raw tables. It writes every table the spec
+    reads, empty when the input has none, so the one registered spec fits every OMOP dataset.
+3. MEDS-Extract's canonical stages: event conversion and sharding into `OUTPUT_DIR/data` and `metadata/`.
+4. Post-stages: `omop_codes_metadata` writes `codes.parquet` from the pre-MEDS vocabulary tables, then suMEDS's
+    `sumeds_enrich` enriches it in place with the rules registered as `OMOP` and records that in
+    `metadata/dataset.json`. A failed enrichment is recorded without failing the run unless the stage's `strict`
+    option is set; `skip_stages=[sumeds_enrich]` leaves it out. Tests run it offline, against a local pack
+    fixture (`tests/test_run_with_enrichment.py`).
 
 Preserve these invariants:
 
@@ -149,7 +152,7 @@ This package is intended to handle large clinical tables. Avoid patterns that wo
 
 - Keep user-facing defaults in YAML whenever possible; keep Python code responsible for orchestration and validation.
 - Use Hydra/OmegaConf interpolation patterns already present in the repo for environment-variable overrides.
-- When adding a new runtime flag, update `main.yaml`, document it in `README.md` if user-facing, and add or adjust tests.
+- When adding a new runtime option, add it to the stage's defaults in `stages.py` (MEDS-Extract rejects spec options a stage does not declare), document it in `README.md` if user-facing, and add or adjust tests.
 - When adding or changing a pre-MEDS table:
     1. Update `configs/pre_MEDS/omop_<version>.yaml` for every OMOP version whose CDM has the table.
     2. Ensure the `omop_schema` schema of each OMOP version has the table (`get_table_names()`).
@@ -206,7 +209,7 @@ For docs/examples:
 
 - Assume real OMOP tables can contain PHI, even columns that look administrative.
 - Do not upload, paste, summarize, or log real patient-level data outside the local environment.
-- Never commit generated `raw_input`, `pre_MEDS`, `MEDS_cohort`, `.logs`, downloaded datasets, or notebooks with outputs from real data.
+- Never commit generated `raw_input`, `omop_pre_meds`, `MEDS_cohort`, `.logs`, downloaded datasets, or notebooks with outputs from real data.
 - Never add credentials to YAML. Use `${oc.env:...}` or documented environment variables.
 - Keep `detect-private-key` and other pre-commit security hooks enabled.
 - If a task requires inspecting data, use schemas, column names, row counts, and synthetic samples wherever possible.

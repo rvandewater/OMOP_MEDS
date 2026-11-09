@@ -50,62 +50,98 @@ If your OMOP schema is non-standard (but still approximately OMOP), you should b
 
 Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.8 supports: its Hydra command line fails on Python 3.14
 ([MEDS_extract#248](https://github.com/mmcdermott/MEDS_extract/issues/248)), and its archive extraction on 3.11.0–3.11.3
-([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.8
-and MEDS-Transforms 0.7.
+([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.8.1
+(the first with extension stages, which this ETL is made of) and MEDS-Transforms 0.7, with suMEDS 0.6.2.
 
-First install the package:
+First install the package, which brings [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) and
+[suMEDS](https://github.com/rvandewater/SumMEDS):
 
 ```bash
 pip install OMOP_MEDS
 ```
 
-Then:
+The ETL is one [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) spec, registered as `OMOP`, so it runs with
+MEDS-Extract's own command:
 
 ```bash
-export DATASET_NAME="Your_OMOP_Dataset_Name" # e.g. MIMIC_IV_OMOP
-export OMOP_VERSION="5.3" # 5.3, 5.4 or 5.5
-export RAW_INPUT_DIR="path/to/your/input"
-export ROOT_OUTPUT_DIR="/path/to/your/output"
-OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR
+export OMOP_VERSION="5.4" # 5.3, 5.4 or 5.5
+meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+	dataset_version=1.0 "overrides=['etl_metadata.dataset_name=MY_OMOP_DATASET']"
 ```
 
-To try with the MIMIC-IV OMOP demo dataset (this downloads a version to your local machine), you can run:
+`$OMOP_DIR` holds the OMOP CDM tables (CSV, gzipped CSV or Parquet files, or directories of their shards). This
+writes the MEDS dataset to `$MEDS_DIR` (`data/` and `metadata/`, per the
+[MEDS standard](https://medical-event-data-standard.github.io/)). `dataset_version=` and
+`etl_metadata.dataset_name` are recorded in `metadata/dataset.json`; without them, a build is named `OMOP` with
+version `unknown:<OMOP_MEDS version>`. The run has three OMOP-specific steps around MEDS-Extract's canonical
+stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
+([`src/OMOP_MEDS/configs/event_configs.yaml`](src/OMOP_MEDS/configs/event_configs.yaml)):
+
+1. `omop_pre_meds` joins the OMOP tables to their concepts and writes the pre-MEDS tables to
+    `$MEDS_DIR/omop_pre_meds`, where MEDS-Extract reads them. Your OMOP data is never modified.
+2. `omop_codes_metadata` writes `metadata/codes.parquet` from the source's own vocabulary tables (see
+    [Code metadata](#code-metadata-codesparquet)).
+3. `sumeds_enrich` (from suMEDS) adds official vocabulary titles and ancestors to `metadata/codes.parquet` (see
+    [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
+
+Each stage keeps its output under `$MEDS_DIR/<stage>`; `do_cleanup_intermediates=true` deletes those once the
+run has succeeded. A run that is started again resumes, and skips the stages it has finished. To convert again
+from scratch, use a new `output_dir`.
+
+Quote arguments with brackets (`'skip_stages=[sumeds_enrich]'`): shells such as zsh would otherwise expand them.
+
+To try with the MIMIC-IV OMOP demo dataset (this downloads PhysioNet's ~11 MB project zip into
+`$MEDS_DIR/.meds_extract_run/raw_input`, or `download_dest_dir=`):
 
 ```bash
-OMOP_MEDS raw_input_dir=path/to/your/input root_output_dir=/path/to/your/output do_download=True ++do_demo=True
+meds-extract-run spec=OMOP output_dir=/path/to/demo_meds dataset_key=demo
 ```
 
-The demo is fetched as PhysioNet's project zip (~11 MB instead of ~70 MB of uncompressed CSVs) and only its
-`1_omop_data_csv` folder is extracted. The archive is cached in `~/.cache/OMOP_MEDS` (override with
-`download_cache_dir=...` or the `OMOP_MEDS_CACHE_DIR` environment variable) and reused for
-`download_cache_max_age_days` (default 7) days; set `download_cache_dir=null` to always download. Only the public
-demo is cached: credentialed datasets are never copied into the cache.
+### Enrichment, and sites without internet
 
-Example config for an OMOP dataset:
-
-```yaml
-dataset_name: MIMIC_IV_OMOP
-raw_dataset_version: 1.0
-omop_version: 5.3
-
-urls:
-  dataset:
-    - https://physionet.org/content/mimic-iv-demo-omop/0.9/
-    - url: EXAMPLE_CONTROLLED_URL
-      username: ${oc.env:DATASET_DOWNLOAD_USERNAME}
-      password: ${oc.env:DATASET_DOWNLOAD_PASSWORD}
-  demo:
-    - https://physionet.org/content/mimic-iv-demo-omop/0.9/
-  common:
-    - EXAMPLE_SHARED_URL # Often used for shared metadata files
-```
-
-Run this with:
+suMEDS enrichment is on by default and does not need an Athena download: its vocabulary data (ontology packs)
+comes from GitHub and is cached. It never fails the run: if it fails, for example on a hospital server without
+internet access, `metadata/codes.parquet` stays as the ETL wrote it and the failure is recorded. Whether a build
+was enriched is recorded in `metadata/dataset.json`:
 
 ```bash
-OMOP_MEDS ++DATASET_CFG=your_config.yaml raw_input_dir=path/to/your/input root_output_dir=/path/to/your/output \
-do_download=True
+python -c "import json, sys; print(json.load(open(sys.argv[1]))['sumeds_enrichment']['enriched'])" \
+	$MEDS_DIR/metadata/dataset.json
 ```
+
+(`true`, or `false` with the `error` and the `retry` command.) The warning is written to
+`$MEDS_DIR/.logs/pipeline.log`, not to the console. Running `meds-extract-run` again does not retry a failed
+enrichment (the stage is done); to enrich a build afterwards, with the rules and options of the run, and update
+`dataset.json` to match:
+
+```bash
+suMEDS-enrich $MEDS_DIR
+```
+
+- **Without enrichment:** add `'skip_stages=[sumeds_enrich]'`. `suMEDS-enrich $MEDS_DIR --rules OMOP` enriches
+    such a build later.
+
+- **Fail instead:** `"overrides=['++stage_cfg.strict=true']"` makes a failed enrichment fail the run.
+
+- **Compute nodes without internet (e.g. HPC):** fill the pack cache on a machine with internet, such as a login
+    node, with the same cache directory, then run offline, so that nothing waits on the network:
+
+    ```bash
+    export XDG_CACHE_HOME=/shared/project/cache # the same on the login and the compute nodes
+    suMEDS-enrich --prefetch --rules OMOP # on the login node: downloads the pinned pack release (~30 MB)
+    meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+    	"overrides=['++stage_cfg.offline=true']" # on a compute node
+    ```
+
+    A server that never has internet can use a copy of the
+    [sumeds-ontologies](https://github.com/rvandewater/sumeds-ontologies) packs directory instead:
+    `SUMEDS_ONTOLOGY_SOURCE=/path/to/sumeds-ontologies/ontologies`, or
+    `suMEDS-enrich $MEDS_DIR --ontology-source /path/to/sumeds-ontologies/ontologies --offline` afterwards.
+
+The options of the `sumeds_enrich` stage (`strict`, `offline`, `ontology_source`, `loinc_hierarchy`, ...) are
+those of `suMEDS-enrich`, spelled with underscores; set them for one run with
+`"overrides=['++stage_cfg.<option>=<value>']"`. See the
+[suMEDS documentation](https://github.com/rvandewater/SumMEDS/blob/main/docs/usage.md#enrich-inside-a-meds-extract-etl).
 
 ## Differences with the original meds_etl_omop
 
@@ -130,7 +166,6 @@ pip install OMOP_MEDS[tests] # for running tests
 pip install OMOP_MEDS[local_parallelism] # for local parallelization with hydra-joblib-launcher
 pip install OMOP_MEDS[slurm_parallelism] # for parallelization with slurm using hydra-submitit-launcher
 pip install OMOP_MEDS[large_data] # for handling large datasets with polars (rt64), more than 3.2B rows
-pip install OMOP_MEDS[athena] # for the optional Athena fallback of the code metadata (suMEDS)
 ```
 
 Run routine tests (skipping the two end-to-end tests that download data; drop `-m` to run everything):
@@ -150,41 +185,59 @@ The two end-to-end tests run the full ETL over downloaded data:
 
 ## Pre-MEDS settings
 
-The following settings can be used to configure the pre-MEDS steps.
+The options of the `omop_pre_meds` stage are set for one run with `overrides=`, e.g. a debug run on 50 persons:
 
 ```bash
-OMOP_MEDS \
-	root_output_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/meds_debug/small_demo \
-	raw_input_dir=/sc/arion/projects/hpims-hpi/projects/foundation_models_ehr/cohorts/full_omop \
-	do_download=False ++do_overwrite=True ++limit_subjects=50
+meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+	"overrides=['++stage_cfg.limit_subjects=50','++stage_cfg.prefer_source=true']"
 ```
 
-- `root_output_dir`: Set the root output directory.
-- `raw_input_dir`: Path to the raw input directory.
-- `do_download`: Set to `False` to skip downloading the dataset.
-- `download_cache_dir`: Where the demo download is cached (`null` disables caching; demo only).
-- `download_cache_max_age_days`: How many days a cached demo download is reused (default 7).
-- `++do_overwrite`: Set to `True` to overwrite existing files.
-- `++limit_subjects`: Limit the number of subjects to process.
-- `++prefer_source`: Set to `True` to prefer source concepts over mapped concepts.
-- `++join_on_visit`: Set to `True` to join person table on having any associated visits.
-- `++process_notes`: Set to `True` to .
-- `athena_csv_dir`: Optional local OHDSI Athena download used as a fallback for the code metadata (see
-    [Code metadata](#code-metadata-codesparquet)).
+- `omop_version`: the OMOP CDM version of the input (5.3, 5.4 or 5.5); by default the `OMOP_VERSION` environment
+    variable, else 5.3.
+- `limit_subjects`: Limit the number of subjects to process.
+- `prefer_source`: Set to `true` to prefer source concepts over mapped concepts.
+- `join_on_visit`: Set to `true` to keep only persons with at least one visit.
+- `tables_to_ignore`: Tables that are not converted, without a warning.
 
 Pre-meds batching settings. This is relevant if (some of) your input tables are very large, and you want to process
 them in batches. This can be useful to reduce memory usage, but it also increases the runtime, so use with caution.
 The batching settings are as follows:
 
-- `++pre_meds_chunked_tables`: Tables eligible for batched pre-MEDS processing.
-- `++pre_meds_batching_row_threshold`: Row count threshold for batching.
-- `++pre_meds_batch_mode`: `auto`, `per_shard`, `by_shards`, or `by_rows`.
-- `++pre_meds_batch_size_shards`: Shards per batch in `by_shards` mode.
-- `++pre_meds_batch_input_rows`: Max rows per batch in `by_rows` mode.
+- `pre_meds_chunked_tables`: Tables eligible for batched pre-MEDS processing.
+- `pre_meds_batching_row_threshold`: Row count threshold for batching.
+- `pre_meds_batch_mode`: `auto`, `per_shard`, `by_shards`, or `by_rows`.
+- `pre_meds_batch_size_shards`: Shards per batch in `by_shards` mode.
+- `pre_meds_batch_input_rows`: Max rows per batch in `by_rows` mode.
 
-Also check out the `main.yaml` config file for more default settings and details on how to configure the pre-MEDS steps,
-which can be found here:
-src/OMOP_MEDS/configs/main.yaml
+Their defaults are in [`src/OMOP_MEDS/stages.py`](src/OMOP_MEDS/stages.py) (`PRE_MEDS_DEFAULTS`). To change them
+for good, copy the spec and set them on the stage in its `etl:` block (`- omop_pre_meds: {prefer_source: true}`),
+then run `meds-extract-run spec=./my_spec.yaml ...`.
+
+Every table the spec converts is written by `omop_pre_meds`, without rows when the input has none, so the one spec
+fits every OMOP dataset. A dataset without notes therefore still has an (empty) `link_id` column, like one with
+notes.
+
+### Upgrading from the `OMOP_MEDS` runner
+
+The `OMOP_MEDS` and `MEDS_extract-OMOP` commands are deprecated and will be removed in the next release. They now
+run `meds-extract-run spec=OMOP` (and print the command), translating the arguments below. Their output stays in
+`$ROOT_OUTPUT_DIR/MEDS_cohort`; the pre-MEDS tables move from `$ROOT_OUTPUT_DIR/pre_MEDS` to
+`$ROOT_OUTPUT_DIR/MEDS_cohort/omop_pre_meds`.
+
+| `OMOP_MEDS` runner                                                                | `meds-extract-run spec=OMOP`                                  |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `raw_input_dir=RAW root_output_dir=ROOT`                                          | `output_dir=ROOT/MEDS_cohort do_download=false input_dir=RAW` |
+| `do_download=True do_demo=True`                                                   | `dataset_key=demo` (data in `download_dest_dir=`)             |
+| `DATASET_NAME=...` (environment)                                                  | `"overrides=['etl_metadata.dataset_name=...']"`               |
+| `RAW_DATASET_VERSION=...` (environment)                                           | `dataset_version=...`                                         |
+| `++prefer_source=True`, `++limit_subjects=50`, `athena_csv_dir=...`, `pre_meds_*` | `"overrides=['++stage_cfg.prefer_source=true']"`, ...         |
+| `do_enrich=False`                                                                 | `'skip_stages=[sumeds_enrich]'`                               |
+| `'sumeds_args=[--strict]'`, `'sumeds_args=[--offline]'`                           | `"overrides=['++stage_cfg.strict=true']"`, `...offline=true`  |
+| `N_WORKERS=8` (environment)                                                       | `stage_runner_fp=runner.yaml` (see below)                     |
+| `N_SUBJECTS_PER_SHARD=100000` (environment)                                       | `"overrides=['++stage_cfg.n_subjects_per_shard=100000']"`     |
+| `do_overwrite=True`                                                               | a new `output_dir`                                            |
+
+`OMOP_VERSION` is read as before. The recorded `dataset_version` no longer ends in `:OMOP_<version>`.
 
 ## OMOP CDM versions
 
@@ -228,33 +281,27 @@ unchanged.
 If you want to convert a large dataset, you can use parallelization with MEDS-transforms
 (the MEDS-transformation step that takes the longest).
 
-Using local parallelization with the `hydra-joblib-launcher` package, you can set the number of workers:
-
-```
-pip install hydra-joblib-launcher --upgrade
-```
-
-Then, you can set the number of workers as environment variable:
+Using local parallelization with the `hydra-joblib-launcher` package (`OMOP_MEDS[local_parallelism]`), pass a
+stage runner file that sets the number of workers:
 
 ```bash
-export N_WORKERS=8
+printf 'parallelize:\n  n_workers: 8\n  launcher: joblib\n' > runner.yaml
+meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR stage_runner_fp=runner.yaml
 ```
 
-Moreover, you can set the number of subjects per shard to balance the parallelization overhead based on how many
-subjects you have in your dataset:
+Moreover, you can set the number of subjects per shard (default 10,000) to balance the parallelization overhead
+based on how many subjects you have in your dataset:
 
 ```bash
-export N_SUBJECTS_PER_SHARD=100000
+meds-extract-run spec=OMOP ... "overrides=['++stage_cfg.n_subjects_per_shard=100000']"
 ```
 
 The first MEDS-Extract stage, `convert_to_parquet`, rewrites each pre-MEDS parquet table once, keeping only the
 columns the event config reads. It replaced `shard_events`, whose `row_chunksize` / `infer_schema_length` settings
-no longer exist; per-stage memory is bounded by `N_SUBJECTS_PER_SHARD` instead.
+no longer exist; per-stage memory is bounded by the number of subjects per shard instead.
 
-Optional local parallelism is still available via `OMOP_MEDS[local_parallelism]` and `N_WORKERS`.
-
-`OMOP_MEDS` runs `MEDS_transform-pipeline` (and, through it, each stage) from the Python environment it is
-installed in, even when another environment's MEDS-Transforms comes first on `PATH`.
+MEDS-Transforms starts every stage as `MEDS_transform-stage`, found on `PATH`: run `meds-extract-run` from the
+activated environment this package is installed in (or with `uv run`).
 
 ### Upgrading from MEDS-Extract 0.6
 
@@ -270,7 +317,7 @@ ported, and the output events are unchanged on the demo and Synthea test dataset
     reads. Older pre-MEDS output in the old layout is renamed automatically when the ETL resumes.
 - A null component in an f-string code now drops the event instead of rendering as `UNK`. Coalesce every
     component to keep the old behaviour, e.g. `code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"`.
-    Dropped rows are counted only in the stage logs under `MEDS_cohort/convert_to_MEDS_events/.logs`.
+    Dropped rows are counted only in the stage logs under `$MEDS_DIR/convert_to_MEDS_events/.logs`.
 
 ## The MIMIC-IV OMOP Dataset
 
@@ -300,25 +347,51 @@ subset) keep their `concept_id` but get no description. To fill those gaps, poin
 `CONCEPT_RELATIONSHIP.csv`):
 
 ```bash
-pip install OMOP_MEDS[athena]
-OMOP_MEDS raw_input_dir=$RAW_INPUT_DIR root_output_dir=$ROOT_OUTPUT_DIR athena_csv_dir=/path/to/athena
+meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+	"overrides=['++stage_cfg.athena_csv_dir=/path/to/athena']"
 ```
 
-This only fills what is missing; values from the source tables are never changed. Descriptions come from
-[suMEDS](https://github.com/rvandewater/suMEDS) (valid concepts only), parent codes from the "Maps to"
-relationships of the source, else of Athena. You bring your own Athena download: the ETL never ships
-vocabulary content, and CPT4 names are only in an Athena export completed with a UMLS license (Athena's CPT4
-utility and your UMLS API key).
+(`athena_csv_dir` is an option of the `omop_codes_metadata` stage, which writes `codes.parquet`.)
 
-Other MEDS ETLs ship a suMEDS rules file, so that `suMEDS-enrich` can add vocabulary hierarchy without Athena, from
-suMEDS's versioned ontology data (sumeds-ontologies, pinned release: ICD-10-CM, ICD-10-PCS, ICD-9-CM, ICD-9
-procedures, LOINC). This ETL does not, and the fallback above does not use that data either:
+This only fills what is missing; values from the source tables are never changed. Each code is looked up by its
+`concept_id`: descriptions come from Athena through [suMEDS](https://github.com/rvandewater/SumMEDS) (valid
+concepts only), parent codes from the "Maps to" relationships of the source, else of Athena. On the MIMIC-IV demo,
+this describes 7,987 of its 8,480 codes, which the source tables leave undescribed. You bring your own Athena
+download: the ETL never ships vocabulary content, and CPT4 names are only in an Athena export completed with a UMLS
+license (Athena's CPT4 utility and your UMLS API key).
 
-- every gap the fallback fills is a concept known only by its `concept_id`, while that data is keyed on vocabulary
-    codes; where the source `concept` table gives a concept's vocabulary code, it also gives its name;
-- rules match code strings, and an OMOP MEDS code ends in a `concept_code` or a `concept_id` depending on its table
-    (see above), so a pattern such as `ICD10PCS//<7 characters>` can also match a concept id. The concept behind each
-    code is already resolved into `vocabulary_id` and `concept_code`.
+### Enriching code metadata with suMEDS
+
+Vocabulary ancestors come from [suMEDS](https://github.com/rvandewater/SumMEDS) rather than from this ETL. The last
+stage of the `OMOP` spec, suMEDS's `sumeds_enrich`, enriches `metadata/codes.parquet` in place with the rules this
+package ships, [`src/OMOP_MEDS/sumeds_rules.yaml`](src/OMOP_MEDS/sumeds_rules.yaml). They are registered in
+suMEDS's `sumeds.rules` entry-point group as `OMOP`, so `--rules OMOP` works for any suMEDS command. The file holds
+no rules: OMOP codes already are `vocabulary_id//concept_code`, which suMEDS reads without one. suMEDS replaces
+`codes.parquet` only once the enriched table is complete, and it stays valid MEDS code metadata. The vocabulary
+data comes from suMEDS's ontology packs (versioned, pinned release: ICD-10-CM, ICD-10-PCS, ICD-9-CM, ICD-9
+procedures, LOINC), fetched from GitHub on first use and cached; no Athena download is needed. See
+[Enrichment, and sites without internet](#enrichment-and-sites-without-internet) for turning it off, retrying it
+and running it offline. To also add the LOINC Parts of the LOINC multiaxial hierarchy as parents of LOINC codes:
+
+```bash
+meds-extract-run spec=OMOP ... "overrides=['++stage_cfg.loinc_hierarchy=true']"
+```
+
+suMEDS validates every code that ends in a `concept_code` of a pack vocabulary. It adds the official title where
+the code has none, and the code's vocabulary ancestors to `parent_codes`, after the "Maps to" parents from the ETL.
+It also looks up those parents and appends their ancestors. Every added parent is named in `parent_names`, a map
+from code to name. Nothing the ETL wrote is changed. A code ending in a `concept_id` is never matched itself, as no
+concept id of these vocabularies looks like one of their codes. For OMOP data this mostly means the ancestors of the ICD-10-PCS and ICD-9 procedure codes of
+`procedure_occurrence`; conditions, drugs and measurements are mostly SNOMED, RxNorm and LOINC, which the source
+`concept` table already describes. On a credentialed OMOP CDM 5.4 extract, 4,396 of its 56,992 codes (3,682
+ICD-10-PCS and 714 ICD-9 procedure codes) gained 23,491 parents. Synthea27Nj and the MIMIC-IV demo have no such
+codes, so the packs add nothing to them, except LOINC Parts to 139 Synthea27Nj codes with `--loinc-hierarchy`.
+
+suMEDS's own Athena option (`athena_csv`) would add Athena's `CONCEPT_ANCESTOR` ancestors for every vocabulary,
+but the spec does not set it, and it is not recommended: suMEDS matches code strings, so a code ending in a `concept_id` matches the
+concept whose `concept_code` is that number, a different concept. In Synthea27Nj, `RxNorm//1154062//start`
+(concept 1154062, a fentanyl patch) matches RxNorm code 1154062 (an aspirin / butalbital product) and gets its
+ancestors. `athena_csv_dir` (above) looks codes up by `concept_id` instead.
 
 ## Advanced datetime resolution
 

@@ -17,20 +17,27 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+# MEDS-Extract and suMEDS are capped below their next minor: their 0.x minors are breaking (MESSY syntax, runner
+# CLI, rules format), so raise the caps deliberately when migrating. The ETL is the MEDS-Extract spec registered
+# below as `OMOP`, run with `meds-extract-run` (the `[download]` extra fetches the demo, `dataset_key=demo`).
+# MEDS-Extract 0.8.1 runs the spec's extension stages (`etl.pre_stages` / `etl.post_stages`); suMEDS 0.6.2
+# registers the `sumeds_enrich` stage, which enriches metadata/codes.parquet, records that in
+# metadata/dataset.json, and soft-fails (e.g. on a server without internet) so the extraction is kept.
 dependencies = [
-  "MEDS-extract~=0.8.0", "requests", "beautifulsoup4", "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
-    "tqdm"
+  "MEDS-extract[download]>=0.8.1,<0.9",
+  "sumeds>=0.6.2,<0.7",
+  "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
+  "tqdm"
 ]
 
 [tool.setuptools_scm]
 
 [project.optional-dependencies]
 dev = ["pre-commit<4", "mdformat-admon"]
-tests = ["pytest", "pytest-cov", "hydra-joblib-launcher", "sumeds>=0.3.2"]
+tests = ["pytest", "pytest-cov", "hydra-joblib-launcher", "requests"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 large_data = ["polars[rt64]"]
-athena = ["sumeds>=0.3.2"]
 
 [tool.pytest.ini_options]
 markers = [
@@ -38,9 +45,23 @@ markers = [
   "synthea: end-to-end run over OHDSI's Synthea27Nj OMOP 5.4 sample; its own CI job",
 ]
 
+# Deprecated: both run `meds-extract-run spec=OMOP` with the old runner's arguments, for one more release.
 [project.scripts]
 MEDS_extract-OMOP = "OMOP_MEDS.__main__:main"
 OMOP_MEDS = "OMOP_MEDS.__main__:main"
+
+# The ETL is one MEDS-Extract spec, registered as `OMOP`: `meds-extract-run spec=OMOP ...`. Its OMOP steps are
+# MEDS-Extract extension stages registered below, and suMEDS's `sumeds_enrich` stage enriches the result with
+# the rules registered as `OMOP` (also for `suMEDS-enrich --rules OMOP`).
+[project.entry-points."MEDS_extract.pipelines"]
+OMOP = "OMOP_MEDS.configs:event_configs.yaml"
+
+[project.entry-points."MEDS_transforms.stages"]
+omop_pre_meds = "OMOP_MEDS.stages:pre_meds_stage"
+omop_codes_metadata = "OMOP_MEDS.stages:codes_metadata_stage"
+
+[project.entry-points."sumeds.rules"]
+OMOP = "OMOP_MEDS:sumeds_rules.yaml"
 
 
 [project.urls]

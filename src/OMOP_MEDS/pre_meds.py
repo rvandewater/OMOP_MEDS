@@ -26,7 +26,6 @@ from .omop_versions import (
     pre_meds_config_path,
 )
 from .pre_meds_utils import (
-    DATASET_NAME,
     get_table_path,
     join_concept,
     col_selector,
@@ -51,6 +50,104 @@ IGNORE_TABLES = []
 def get_shard_prefix(root: Path, path: Path) -> str:
     """Return the OMOP table prefix for a file or table directory."""
     return path.name if path.is_dir() else path.stem.split(".")[0]
+
+
+#: Files of the MIMIC-IV OMOP demo carry this prefix (`2b_concept.csv`).
+DEMO_FILE_PREFIX = "2b_"
+
+
+def _is_person_table(path: Path) -> bool:
+    """Whether `path` is an OMOP person table: a `person` directory, or a `person` file of a table type."""
+    if path.name == "person":
+        return path.is_dir()
+    return any(path.name == f"person{ext[1:]}" for ext in DATA_FILE_EXTENSIONS)
+
+
+def find_omop_root(input_dir: Path) -> Path:
+    """The directory under `input_dir` that holds the OMOP tables: `input_dir` itself, or the one directory below
+    it with a `person` table (e.g. the `1_omop_data_csv` folder of the MIMIC-IV OMOP demo download).
+
+    Examples:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     d = Path(d)
+        ...     (d / "person.csv").touch()
+        ...     find_omop_root(d) == d
+        True
+
+        The demo download also holds Achilles summaries (`2_achilles_json/person.json`), which are no table:
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     d = Path(d)
+        ...     for sub in ("demo/1_omop_data_csv", "demo/2_achilles_json"):
+        ...         (d / sub).mkdir(parents=True)
+        ...     (d / "demo/1_omop_data_csv/person.csv").touch()
+        ...     (d / "demo/2_achilles_json/person.json").touch()
+        ...     find_omop_root(d).relative_to(d).as_posix()
+        'demo/1_omop_data_csv'
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     find_omop_root(Path(d))
+        Traceback (most recent call last):
+            ...
+        FileNotFoundError: No OMOP person table in ...
+    """
+    if any(_is_person_table(p) for p in input_dir.glob("person*")):
+        return input_dir
+    candidates = sorted(
+        {p.parent for p in input_dir.rglob("person*") if _is_person_table(p)}
+    )
+    if len(candidates) == 1:
+        logger.info(f"Reading the OMOP tables in {candidates[0]}")
+        return candidates[0]
+    if not candidates:
+        raise FileNotFoundError(
+            f"No OMOP person table in {input_dir} or the directories below it."
+        )
+    raise FileNotFoundError(
+        f"More than one directory under {input_dir} has an OMOP person table: "
+        f"{[str(c) for c in candidates]}. Point input_dir at one of them."
+    )
+
+
+def unprefixed_view(omop_dir: Path, view_dir: Path) -> Path:
+    """`omop_dir`, or, if some of its tables carry the MIMIC-IV OMOP demo's `2b_` prefix, a directory of links
+    to its entries under their unprefixed names (`concept.csv` -> `2b_concept.csv`).
+
+    The raw data is never renamed or modified.
+
+    Examples:
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     d = Path(d)
+        ...     (d / "raw").mkdir()
+        ...     for name in ("person.csv", "2b_concept.csv"):
+        ...         _ = (d / "raw" / name).write_text(name)
+        ...     view = unprefixed_view(d / "raw", d / "view")
+        ...     sorted(p.name for p in view.iterdir()), (view / "concept.csv").read_text()
+        (['concept.csv', 'person.csv'], '2b_concept.csv')
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     (Path(d) / "person.csv").touch()
+        ...     unprefixed_view(Path(d), Path(d) / "view") == Path(d)
+        True
+    """
+    entries = sorted(omop_dir.iterdir())
+    if not any(p.name.startswith(DEMO_FILE_PREFIX) for p in entries):
+        return omop_dir
+    view_dir.mkdir(parents=True, exist_ok=True)
+    for old in view_dir.iterdir():
+        old.unlink()
+    names = {p.name for p in entries}
+    for entry in entries:
+        name = entry.name
+        if name.startswith(DEMO_FILE_PREFIX):
+            name = name[len(DEMO_FILE_PREFIX) :]
+            if name in names:
+                continue
+        os.symlink(entry.resolve(), view_dir / name)
+    logger.info(
+        f"Reading the {DEMO_FILE_PREFIX}-prefixed tables of {omop_dir} under their OMOP names."
+    )
+    return view_dir
 
 
 def migrate_legacy_batched_outputs(pre_MEDS_dir: Path) -> list[str]:
@@ -85,9 +182,17 @@ def migrate_legacy_batched_outputs(pre_MEDS_dir: Path) -> list[str]:
 
 
 def main(cfg: DictConfig) -> None:
-    """Performs pre-MEDS data wrangling for INSERT DATASET NAME HERE."""
+    """Converts the raw OMOP tables in `cfg.raw_input_dir` into pre-MEDS tables in `cfg.pre_MEDS_dir`.
 
-    omop_version = normalize_omop_version(dataset_info.omop_version)
+    `cfg` holds the options of the `omop_pre_meds` stage (`OMOP_MEDS.stages.pre_meds_config`). The OMOP tables
+    may also be in the one directory below `raw_input_dir` with a person table, and carry the MIMIC-IV OMOP
+    demo's `2b_` prefix. Every table in `cfg.required_tables` is written, empty if the input has no rows for
+    it, so that a MESSY spec listing it finds it.
+    """
+
+    omop_version = normalize_omop_version(
+        cfg.get("omop_version") or dataset_info.omop_version
+    )
     logger.info(f"Expecting OMOP version: {omop_version}")
     # Loaded afresh on every run: the setup below pops each table's `datetime_resolver`, and a config shared
     # across runs would then make a second run in this process build notes without `preferred_time`, the
@@ -103,8 +208,7 @@ def main(cfg: DictConfig) -> None:
             "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
             " This has major implications for downstream analysis."
         )
-    OMOP_input_dir = Path(cfg.raw_input_dir)
-    MEDS_input_dir = Path(cfg.root_output_dir) / "pre_MEDS"
+    MEDS_input_dir = Path(cfg.pre_MEDS_dir)
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
     migrate_legacy_batched_outputs(MEDS_input_dir)
     limit = cfg.get("limit_subjects", 0)
@@ -128,6 +232,9 @@ def main(cfg: DictConfig) -> None:
             logger.warning(
                 f"Partial run found at {MEDS_input_dir}; will not overwrite existing files"
             )
+    OMOP_input_dir = unprefixed_view(
+        find_omop_root(Path(cfg.raw_input_dir)), MEDS_input_dir / ".omop_input"
+    )
     all_fps = []
     # Every table of the OMOP version, in the order of its CDM specification.
     for table in schema_loader.get_table_names():
@@ -330,7 +437,7 @@ def main(cfg: DictConfig) -> None:
                 )
             else:
                 logger.warning(
-                    f"No function needed for {tbl_prefix}. For {DATASET_NAME}, "
+                    f"No function needed for {tbl_prefix}. "
                     f"THIS IS COULD BE UNEXPECTED if {tbl_prefix} is in your OMOP source file and configuration."
                 )
             continue
@@ -439,6 +546,27 @@ def main(cfg: DictConfig) -> None:
             logger.info(
                 f"Processed and wrote to {str(out_fp.resolve())} in {datetime.now() - st}"
             )
+
+    for table in cfg.get("required_tables") or []:
+        if (MEDS_input_dir / f"{table}.parquet").exists() or (
+            MEDS_input_dir / table
+        ).is_dir():
+            continue
+        if table not in functions:
+            raise ValueError(
+                f"The MESSY spec reads the table {table}, which pre-MEDS does not produce."
+            )
+        # The same steps as for a table with rows, on no rows, give the table its full pre-MEDS schema.
+        empty = pl.LazyFrame(schema=schema_loader.get_polars_schema(table)).select(
+            selector
+        )
+        processed_df = functions[table](empty, concept_df, patient_df)
+        if table == "visit_occurrence":
+            processed_df = maybe_join_visit_occurrence_care_site(processed_df)
+        processed_df.with_columns(table_name=pl.lit(table)).sink_parquet(
+            MEDS_input_dir / f"{table}.parquet"
+        )
+        logger.info(f"Wrote {table} without rows, as the input has none.")
 
     logger.info(
         f"Done! All dataframes processed and written to {str(MEDS_input_dir.resolve())}"
