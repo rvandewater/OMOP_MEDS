@@ -13,6 +13,7 @@ from pathlib import Path
 import polars as pl
 import polars.selectors as cs
 import pytest
+from loguru import logger
 from omop_schema.utils import get_schema_loader
 
 from OMOP_MEDS.pre_meds_utils import (
@@ -101,7 +102,8 @@ def _link(person_df: pl.LazyFrame, death_df: pl.LazyFrame | None, **kwargs):
 
 def test_patient_link_uses_gender_concept_and_birth_parts_and_death_date():
     # No gender_source_concept_id and no birth_datetime: gender comes from gender_concept_id and the birth
-    # datetime is assembled from year/month/day. A date-only death table falls back to death_date.
+    # datetime is assembled from year/month/day. A date-only death table falls back to death_date, at the end of
+    # the day, like every event without a datetime.
     death = pl.LazyFrame({SUBJECT_ID: [2], "death_date": [dt.date(2020, 5, 1)]})
 
     out = _link(_persons(), death)
@@ -112,7 +114,11 @@ def test_patient_link_uses_gender_concept_and_birth_parts_and_death_date():
         dt.datetime(1990, 2, 2),
         dt.datetime(2000, 3, 3),
     ]
-    assert out["date_of_death"].to_list() == [None, dt.datetime(2020, 5, 1), None]
+    assert out["date_of_death"].to_list() == [
+        None,
+        dt.datetime(2020, 5, 1, 23, 59, 59),
+        None,
+    ]
     assert out["table_name"].unique().to_list() == ["person"]
 
 
@@ -389,27 +395,37 @@ def test_set_up_metadata_without_death_table_has_no_deaths(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    ("tables", "drop_relationship", "message"),
-    [
-        ((), False, "No concept table"),
-        (("concept",), False, "No person table"),
-        (
-            ("concept", "person", "visit_occurrence"),
-            True,
-            "No concept relationship table",
-        ),
-    ],
-    ids=["concept", "person", "concept_relationship"],
+    ("tables", "message"),
+    [((), "No concept table"), (("concept",), "No person table")],
+    ids=["concept", "person"],
 )
-def test_set_up_metadata_requires_core_tables(
-    tmp_path: Path, tables, drop_relationship, message
-):
+def test_set_up_metadata_requires_core_tables(tmp_path: Path, tables, message):
     raw = _stage_omop(tmp_path / "raw", tables=tables)
-    if drop_relationship:
-        (raw / "concept_relationship.csv").unlink()
 
     with pytest.raises(FileNotFoundError, match=message):
         _set_up(raw, tmp_path / "pre_MEDS", do_overwrite=False)
+
+
+def test_set_up_metadata_without_concept_relationship_gives_codes_no_parents(
+    tmp_path: Path,
+):
+    # Some exports ship only the concepts they use, without the vocabulary's relationships.
+    raw = _stage_omop(tmp_path / "raw")
+    (raw / "concept_relationship.csv").unlink()
+    out = tmp_path / "pre_MEDS"
+
+    warnings = []
+    sink = logger.add(warnings.append, level="WARNING")
+    try:
+        _set_up(raw, out, do_overwrite=False)
+    finally:
+        logger.remove(sink)
+
+    assert any("No concept_relationship table found" in w for w in warnings)
+    assert pl.read_parquet(out / "concept_relationship.parquet").height == 0
+    codes = pl.read_parquet(out / "codes.parquet")
+    assert codes.height == pl.read_csv(raw / "concept.csv").height
+    assert codes["parent_codes"].null_count() == codes.height
 
 
 # --- NLP features -----------------------------------------------------------------------------------------

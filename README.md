@@ -155,6 +155,10 @@ We make a few important choices that have impact on your downstream training and
     Watch for potential information leakage. You can change your table configs in
     `configs/pre_MEDS/omop_<version>.yaml` and `event_configs.yaml`.
 - This package is more resource intensive, please adjust your `n_shards` and watch your memory usage.
+- OMOP requires an event's date but not its datetime. An event is timed by its `*_datetime` column, or, when that
+    is empty, at the end of its `*_date` (23:59:59): the latest time it can have happened, so it is never placed
+    before something it may have followed. Deaths and notes are timed the same way. Events of the same code and
+    value on the same date then become identical rows, which MEDS keeps once.
 
 ## Different package versions
 
