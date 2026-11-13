@@ -40,7 +40,7 @@ observation:
   output_data_cols: [
       #        "observation_id",
       #        "observation_concept_id",
-      #        "observation_date",
+      "observation_date",
       "observation_datetime",
       "observation_type_concept_id",
       "value_as_number",
@@ -73,7 +73,7 @@ measurement:
   output_data_cols: [
       #        "measurement_id",
       #        "measurement_concept_id",
-      #        "measurement_date",
+      "measurement_date",
       "measurement_datetime",
       #        "measurement_time",
       #        "measurement_type_concept_id",
