@@ -84,9 +84,10 @@ stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
 3. `sumeds_enrich` (from suMEDS) adds official vocabulary titles and ancestors to `metadata/codes.parquet` (see
     [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
-Each stage keeps its output under `$MEDS_DIR/<stage>`; `do_cleanup_intermediates=true` deletes those once the
-run has succeeded. A run that is started again resumes, and skips the stages it has finished. To convert again
-from scratch, use a new `output_dir`.
+Each stage keeps its output under `$MEDS_DIR/<stage>`; `"overrides=['cleanup_intermediates=true']"` deletes
+those once the run has succeeded. (That is the MEDS-Transforms runner's own option; MEDS-Extract 0.8.1's
+`do_cleanup_intermediates=true` is removed in its next release.) A run that is started again resumes, and skips
+the stages it has finished. To convert again from scratch, use a new `output_dir`.
 
 Quote arguments with brackets (`'skip_stages=[sumeds_enrich]'`): shells such as zsh would otherwise expand them.
 
@@ -96,6 +97,77 @@ To try with the MIMIC-IV OMOP demo dataset (this downloads PhysioNet's ~11 MB pr
 ```bash
 meds-extract-run spec=OMOP output_dir=/path/to/demo_meds dataset_key=demo
 ```
+
+### OMOP data without vocabulary tables
+
+`omop_pre_meds` needs the `concept` and `concept_relationship` tables in `$OMOP_DIR`, and stops with
+`No concept table found in the input directory.` without them. Some releases ship only the clinical tables. Take
+`CONCEPT.csv` and `CONCEPT_RELATIONSHIP.csv` from an [OHDSI Athena](https://athena.ohdsi.org) download instead.
+Athena's files are tab-separated and write dates as `YYYYMMDD`, so convert them to parquet first:
+
+```python
+import polars as pl
+
+for name in ("concept", "concept_relationship"):
+    (
+        pl.scan_csv(
+            f"{ATHENA_DIR}/{name.upper()}.csv",
+            separator="\t",
+            quote_char=None,
+            infer_schema_length=0,
+        )
+        .with_columns(
+            pl.col("valid_start_date", "valid_end_date").str.to_date("%Y%m%d")
+        )
+        .sink_parquet(f"{OMOP_DIR}/{name}.parquet")
+    )
+```
+
+### INSPECT and EHRSHOT (Redivis)
+
+[INSPECT](https://som-shahlab.github.io/inspect-website)'s EHR data is released on Redivis as OMOP CDM 5.4
+tables: `person`, `death`, `visit_occurrence`, `visit_detail`, `condition_occurrence`, `procedure_occurrence`,
+`drug_exposure`, `measurement` and `device_exposure`. Download and convert in two commands, so a re-run of the
+conversion never downloads again:
+
+1. Export the tables to `$OMOP_DIR` with MEDS-Extract's `redivis` download source, which writes each table as
+    `<table>.parquet`. Exporting tabular tables (`tables:`) needs a MEDS-Extract release with
+    [MEDS_extract#319](https://github.com/mmcdermott/MEDS_extract/pull/319); until then, export the tables from
+    Redivis yourself into the same layout. With `version:` pinned, a second download reuses what is on disk.
+
+    ```yaml
+    # inspect_download.yaml
+    sources:
+      dataset_version: v1.2
+      dataset:
+        - type: redivis
+          organization: shahlab
+          dataset: inspect_ehr:dzc6
+          version: ${sources.dataset_version}
+          api_token: ${oc.env:REDIVIS_API_TOKEN,null}
+          tables: '*'
+    ```
+
+    ```bash
+    pip install 'MEDS_extract[redivis]'
+    export REDIVIS_API_TOKEN=... # a token for an account with INSPECT access
+    meds-extract-download spec=inspect_download.yaml output_dir=$OMOP_DIR
+    ```
+
+2. Add the vocabulary tables, as in [OMOP data without vocabulary tables](#omop-data-without-vocabulary-tables):
+    INSPECT's release has none.
+
+3. Convert:
+
+    ```bash
+    export OMOP_VERSION=5.4
+    meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+    	dataset_version=v1.2 "overrides=['etl_metadata.dataset_name=INSPECT']"
+    ```
+
+EHRSHOT's [Redivis dataset](https://redivis.com/datasets/53gc-8rhx41kgt) also ships its data in MEDS
+(`EHRSHOT_MEDS.zip`), which needs no conversion, and an OMOP version with the full OMOP tables of the same
+patients, which converts like INSPECT.
 
 ### Enrichment, and sites without internet
 
