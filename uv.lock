@@ -544,7 +544,7 @@ wheels = [
 
 [[package]]
 name = "meds-transforms"
-version = "0.7.1"
+version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -558,9 +558,9 @@ dependencies = [
     { name = "pytest" },
     { name = "yaml-to-disk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e6/7c/6bff4281d64bf31f123a2577895e0d49852e597d36f300ac547dcec35d56/meds_transforms-0.7.1.tar.gz", hash = "sha256:d45e3beb283b001d649c4a6022afc8156765194e7024ec1c2d1a9302796796f2", size = 645236, upload-time = "2026-11-03T17:39:19.378Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/8d/1442a6b1da5ffd4ceec4f0944a514df285d712cb7cafe71ddfe72bc5d379/meds_transforms-0.7.3.tar.gz", hash = "sha256:b4019f77367766c25ebffaa162416afc7347cd21eb9c35fe8d3e8884aab235bb", size = 650405, upload-time = "2026-11-13T22:03:17.338Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/63/6d7a33e2eb7d299219dad54849381d6cab35ddf7000509c488be0f2d01ef/meds_transforms-0.7.1-py3-none-any.whl", hash = "sha256:21b2b424b23b20b27b232451f0d4c4c98f47eb7387a6da0b94ccbe7984228cde", size = 232478, upload-time = "2026-11-03T17:39:17.726Z" },
+    { url = "https://files.pythonhosted.org/packages/89/bb/6b76860dd6d121c5a41ddedefe5e06463821baf1d2497a0fb39f9c622641/meds_transforms-0.7.3-py3-none-any.whl", hash = "sha256:411bba400e4d18e8ec57053b2e73f5b2c08f9057ae7170d0a12b18976389e831", size = 235471, upload-time = "2026-11-13T22:03:15.705Z" },
 ]
 
 [[package]]
@@ -651,6 +651,7 @@ dependencies = [
     { name = "loguru" },
     { name = "meds" },
     { name = "meds-extract", extra = ["download"] },
+    { name = "meds-transforms" },
     { name = "omop-schema" },
     { name = "polars" },
     { name = "sumeds" },
@@ -688,6 +689,7 @@ requires-dist = [
     { name = "mdformat-admon", marker = "extra == 'dev'" },
     { name = "meds", specifier = "~=0.4.1" },
     { name = "meds-extract", extras = ["download"], specifier = ">=0.8.1,<0.9" },
+    { name = "meds-transforms", specifier = ">=0.7.2" },
     { name = "omop-schema", specifier = ">=0.1.0" },
     { name = "polars", specifier = ">=1.26" },
     { name = "polars", extras = ["rt64"], marker = "extra == 'large-data'" },

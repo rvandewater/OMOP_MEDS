@@ -25,6 +25,8 @@ classifiers = [
 # metadata/dataset.json, and soft-fails (e.g. on a server without internet) so the extraction is kept.
 dependencies = [
   "MEDS-extract[download]>=0.8.1,<0.9",
+  # The pipeline runner's `cleanup_intermediates` key (MEDS-Extract drops its own do_cleanup_intermediates).
+  "MEDS-transforms>=0.7.2",
   "sumeds>=0.6.2,<0.7",
   "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
   "tqdm"
