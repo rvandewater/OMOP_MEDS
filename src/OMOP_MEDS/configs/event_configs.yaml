@@ -42,6 +42,9 @@ sources:
 # component nulls the whole code and the row is dropped. Without the fallback, observations and visits whose
 # concept cannot be resolved would be dropped, reported only in the per-stage logs under
 # MEDS_cohort/convert_to_MEDS_events/.logs.
+# OMOP requires an event's date but not its datetime, so an event without a datetime is timed at the end of its
+# date (23:59:59), as `note`'s datetime_resolver does: the latest time it can have happened, so it is never placed
+# before something it may have followed. The pre-MEDS configs keep each of these date columns.
 _defaults:
   subject_id: $person_id
 
@@ -72,7 +75,7 @@ person:
 observation:
   observation:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"
-    time: $observation_datetime
+    time: $observation_datetime ?? ($observation_date @ 11:59:59 p.m.)
     numeric_value: $value_as_number
     unit: $unit_concept_id
     text_value: $value_as_string
@@ -82,7 +85,7 @@ observation:
 measurement:
   measurement:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"
-    time: $measurement_datetime
+    time: $measurement_datetime ?? ($measurement_date @ 11:59:59 p.m.)
     numeric_value: $value_as_number
     unit: $unit_concept_id
     visit_occurrence_id: $visit_occurrence_id
@@ -91,13 +94,13 @@ measurement:
 visit_occurrence:
   visit:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//start"
-    time: $visit_start_datetime
+    time: $visit_start_datetime ?? ($visit_start_date @ 11:59:59 p.m.)
     visit_occurrence_id: $visit_occurrence_id
     text_value: $care_site_name
     table_name: $table_name
   visit_end:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//end"
-    time: $visit_end_datetime
+    time: $visit_end_datetime ?? ($visit_end_date @ 11:59:59 p.m.)
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
 
@@ -114,20 +117,20 @@ observation_period:
 drug_exposure:
   drug_exposure:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$drug_concept_id ?? 'UNK'}//start"
-    time: $drug_exposure_start_datetime
+    time: $drug_exposure_start_datetime ?? ($drug_exposure_start_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
   drug_exposure_end:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$drug_concept_id ?? 'UNK'}//end"
-    time: $drug_exposure_end_datetime
+    time: $drug_exposure_end_datetime ?? ($drug_exposure_end_date @ 11:59:59 p.m.)
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
 
 specimen:
   specimen:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$specimen_concept_id ?? 'UNK'}"
-    time: $specimen_datetime
+    time: $specimen_datetime ?? ($specimen_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     unit: $unit_concept_id
     table_name: $table_name
@@ -135,13 +138,13 @@ specimen:
 device_exposure:
   device_exposure:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$device_concept_id ?? 'UNK'}//start"
-    time: $device_exposure_start_datetime
+    time: $device_exposure_start_datetime ?? ($device_exposure_start_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
   device_exposure_end:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//end"
-    time: $device_exposure_end_datetime
+    time: $device_exposure_end_datetime ?? ($device_exposure_end_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
@@ -163,12 +166,12 @@ dose_era:
 condition_occurrence:
   condition_occurrence:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//start"
-    time: $condition_start_datetime
+    time: $condition_start_datetime ?? ($condition_start_date @ 11:59:59 p.m.)
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
   condition_end:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//end"
-    time: $condition_end_datetime
+    time: $condition_end_datetime ?? ($condition_end_date @ 11:59:59 p.m.)
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
 
@@ -187,7 +190,7 @@ drug_era:
 procedure_occurrence:
   procedure_occurrence:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"
-    time: $procedure_datetime
+    time: $procedure_datetime ?? ($procedure_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
