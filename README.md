@@ -51,7 +51,7 @@ If your OMOP schema is non-standard (but still approximately OMOP), you should b
 Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.8 supports: its Hydra command line fails on Python 3.14
 ([MEDS_extract#248](https://github.com/mmcdermott/MEDS_extract/issues/248)), and its archive extraction on 3.11.0–3.11.3
 ([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.8.1
-(the first with extension stages, which this ETL is made of) and MEDS-Transforms 0.7, with suMEDS 0.6.2.
+(the first with extension stages, which this ETL is made of) and MEDS-Transforms 0.7, with suMEDS 0.6.11.
 
 First install the package, which brings [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) and
 [suMEDS](https://github.com/rvandewater/SumMEDS):

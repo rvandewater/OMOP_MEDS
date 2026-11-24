@@ -1,26 +1,27 @@
 """The packaged suMEDS rules load in suMEDS by their registered name, `OMOP`.
 
-The runner's enrichment step and `suMEDS-enrich --rules OMOP` find them through this name. suMEDS validates the
-file itself (`sumeds.load_rules` rejects malformed rules); tests/test_run_with_enrichment.py checks what they do
-to the codes the ETL writes.
+suMEDS's `RulesContract` (`sumeds.testing.contracts`) checks that the rules file is packaged, registered under the
+spec's name and loads; tests/test_run_with_enrichment.py checks what the rules do to the codes the ETL writes.
 """
 
-from importlib.resources import files
-from pathlib import Path
-
-from sumeds import load_rules, registered_rules
-
-RULES_FP = Path(__file__).parents[1] / "src" / "OMOP_MEDS" / "sumeds_rules.yaml"
+from sumeds import load_rules
+from sumeds.testing import load_spec, stage_name
+from sumeds.testing.contracts import RulesContract
 
 
-def test_rules_file_is_packaged():
-    assert files("OMOP_MEDS").joinpath("sumeds_rules.yaml").is_file()
+class TestRules(RulesContract):
+    rules_name = "OMOP"
 
-
-def test_rules_are_registered_as_omop():
-    assert "OMOP" in registered_rules()
-    assert registered_rules()["OMOP"] == "OMOP_MEDS:sumeds_rules.yaml"
-    assert load_rules("OMOP") == load_rules(RULES_FP)
+    def test_spec_runs_the_sumeds_post_stages_in_order(self):
+        """Only `sumeds_enrich`, after the codes metadata. suMEDS's unit stages (`sumeds_link_unit_siblings`,
+        `sumeds_normalize_units`) would leave the file as it is: OMOP codes do not end in a unit, and
+        codes.parquet has no `unit` column (an event's unit is its `unit_concept_id`)."""
+        stages = load_spec("OMOP")["etl"]["post_stages"]
+        assert [stage_name(s) for s in stages] == [
+            "omop_codes_metadata",
+            "sumeds_enrich",
+        ]
+        assert stages[-1]["sumeds_enrich"]["rules"] == "OMOP"
 
 
 def test_rules_leave_the_codes_to_the_built_in_layouts():
