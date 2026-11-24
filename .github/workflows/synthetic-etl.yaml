@@ -51,8 +51,9 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --locked
-          # MESSY_synth 0.1.0 is the first release that reads MEDS-Extract 0.8 configs.
-          uv pip install "MESSY_synth==0.1.0"
+          # MESSY_synth 0.1.1 accepts MEDS-Extract <0.10; 0.1.0 required <0.9, so installing it
+          # downgraded the locked MEDS-Extract 0.9 to 0.8, which rejects etl.cleanup_intermediates.
+          uv pip install "MESSY_synth==0.1.1"
 
       - name: Generate and extract synthetic data
         run: |
