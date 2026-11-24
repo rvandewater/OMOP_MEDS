@@ -197,15 +197,17 @@ def get_patient_link(
     ...     "birth_datetime": [None, None]
     ... }
     >>> death_data = {
-    ...     "person_id": [1],
-    ...     "death_datetime": ["2020-01-01 00:00:00"]
+    ...     "person_id": [1, 2],
+    ...     "death_date": ["2020-01-01", "2021-03-04"],
+    ...     "death_datetime": ["2020-01-01 08:30:00", None]
     ... }
     >>> person_df = pl.DataFrame(person_data).lazy()
     >>> death_df = pl.DataFrame(death_data).lazy()
     >>> visit_df = pl.DataFrame({"person_id": [1, 2]}).lazy()
     >>> schema_loader = get_schema_loader(5.3)
     >>> result = get_patient_link(person_df, death_df, visit_df, schema_loader)
-    >>> result_dict = result.collect().to_dict(as_series=False)  # Convert to plain Python dict
+    >>> result.collect().sort("person_id").select("person_id", "date_of_death").rows()
+    [(1, datetime.datetime(2020, 1, 1, 8, 30)), (2, datetime.datetime(2021, 3, 4, 23, 59, 59))]
     """
     person_schema = person_df.collect_schema()
 
@@ -258,28 +260,14 @@ def get_patient_link(
                 schema=death_schema,
             )
         ).lazy()
-    # date_of_death = (
-    #     pl.when(pl.col("death_datetime").is_not_null())
-    #     .then(cast_to_datetime(death_df.collect_schema(), "death_datetime"))
-    #     .otherwise(cast_to_datetime(death_df.collect_schema(), "death_date"))
-    # )
-    death_schema = death_df.collect_schema()
-    if "death_datetime" in death_schema:
-        death_col = "death_datetime"
-    elif "death_date" in death_schema:
-        death_col = "death_date"
-    else:
-        death_col = None
-
-    if death_col is not None:
-        # Use the actual death column if present; otherwise yield None
-        date_of_death = (
-            pl.when(pl.col(death_col).is_not_null())
-            .then(cast_to_datetime(death_schema, death_col))
-            .otherwise(pl.lit(None))
-        )
-    else:
-        date_of_death = pl.lit(None)
+    # OMOP requires death_date but not death_datetime: without a datetime, a death is timed at the end of its date,
+    # like every other event (see event_configs.yaml).
+    date_of_death = build_preferred_event_datetime(
+        death_df.collect_schema(),
+        primary_datetime_col="death_datetime",
+        primary_date_col="death_date",
+        output_col="date_of_death",
+    )
 
     person_df = person_df.with_columns(gender=gender)
     return (
@@ -853,14 +841,21 @@ def set_up_metadata(
     else:
         logger.info("Processing concept_relationship table first...")
         concept_relationship_fp = get_table_path(OMOP_input_dir, "concept_relationship")
-        if not concept_relationship_fp:
-            raise FileNotFoundError(
-                "No concept relationship table found in the input directory."
+        concept_relationship_df = None
+        if concept_relationship_fp:
+            logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
+            concept_relationship_df = load_raw_file(
+                concept_relationship_fp, schema_loader, selector
             )
-        logger.info(f"Loading {str(concept_relationship_fp.resolve())}...")
-        concept_relationship_df = load_raw_file(
-            concept_relationship_fp, schema_loader, selector
-        )
+        if concept_relationship_df is None:
+            # Some exports ship only the concepts they use, without the vocabulary's relationships. The codes
+            # then get no parent codes ("Maps to" targets); everything else is unaffected.
+            logger.warning(
+                "No concept_relationship table found in the input directory: the codes get no parent codes."
+            )
+            concept_relationship_df = pl.LazyFrame(
+                schema=schema_loader.get_polars_schema("concept_relationship")
+            )
         concept_relationship_df.sink_parquet(concept_relationship_out_fp)
 
     # patient_df = patient_df.join(visit_df, on=SUBJECT_ID)

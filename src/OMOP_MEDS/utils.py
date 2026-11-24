@@ -79,6 +79,8 @@ def finish_codes_metadata(
         .join(_concept_metadata(codes_source), on="concept_id", how="left")
         .with_columns(_drop_self_parent(pl.col("parent_codes")))
         .select(CODES_METADATA_COLUMNS)
+        # Group-by and joins return rows in no fixed order; sorted, the same data writes the same file.
+        .sort(["code", "table_name"], nulls_last=True)
     )
     write_codes_metadata(merged, codes_dest)
     logger.info(

@@ -51,7 +51,7 @@ If your OMOP schema is non-standard (but still approximately OMOP), you should b
 Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.9 supports: its Hydra command line fails on Python 3.14
 ([MEDS_extract#248](https://github.com/mmcdermott/MEDS_extract/issues/248)), and its archive extraction on 3.11.0–3.11.3
 ([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.9.2
-and MEDS-Transforms 0.7.3, with suMEDS 0.6.2.
+and MEDS-Transforms 0.7.3, with suMEDS 0.6.11.
 
 First install the package, which brings [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) and
 [suMEDS](https://github.com/rvandewater/SumMEDS):
@@ -250,6 +250,10 @@ We make a few important choices that have impact on your downstream training and
     Watch for potential information leakage. You can change your table configs in
     `configs/pre_MEDS/omop_<version>.yaml` and `event_configs.yaml`.
 - This package is more resource intensive, please adjust your `n_shards` and watch your memory usage.
+- OMOP requires an event's date but not its datetime. An event is timed by its `*_datetime` column, or, when that
+    is empty, at the end of its `*_date` (23:59:59): the latest time it can have happened, so it is never placed
+    before something it may have followed. Deaths and notes are timed the same way. Events of the same code and
+    value on the same date then become identical rows, which MEDS keeps once.
 
 ## Different package versions
 
