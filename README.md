@@ -48,10 +48,10 @@ If your OMOP schema is non-standard (but still approximately OMOP), you should b
 
 ## Setup
 
-Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.8 supports: its Hydra command line fails on Python 3.14
+Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.9 supports: its Hydra command line fails on Python 3.14
 ([MEDS_extract#248](https://github.com/mmcdermott/MEDS_extract/issues/248)), and its archive extraction on 3.11.0–3.11.3
-([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.8.1
-(the first with extension stages, which this ETL is made of) and MEDS-Transforms 0.7, with suMEDS 0.6.2.
+([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.9.2
+and MEDS-Transforms 0.7.3, with suMEDS 0.6.2.
 
 First install the package, which brings [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) and
 [suMEDS](https://github.com/rvandewater/SumMEDS):
@@ -85,9 +85,10 @@ stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
     [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
 Each stage keeps its output under `$MEDS_DIR/<stage>`; `"overrides=['cleanup_intermediates=true']"` deletes
-those once the run has succeeded. (That is the MEDS-Transforms runner's own option; MEDS-Extract 0.8.1's
-`do_cleanup_intermediates=true` is removed in its next release.) A run that is started again resumes, and skips
-the stages it has finished. To convert again from scratch, use a new `output_dir`.
+those once the run has succeeded. (That is the MEDS-Transforms runner's own option. MEDS-Extract 0.9 removed
+`do_cleanup_intermediates=true`, and stops with a message naming the override if it is given.) A run that is
+started again resumes, and skips the stages it has finished, also after a cleanup. To convert again from
+scratch, use a new `output_dir`.
 
 Quote arguments with brackets (`'skip_stages=[sumeds_enrich]'`): shells such as zsh would otherwise expand them.
 
@@ -125,15 +126,17 @@ for name in ("concept", "concept_relationship"):
 
 ### INSPECT and EHRSHOT (Redivis)
 
-[INSPECT](https://som-shahlab.github.io/inspect-website)'s EHR data is released on Redivis as OMOP CDM 5.4
-tables: `person`, `death`, `visit_occurrence`, `visit_detail`, `condition_occurrence`, `procedure_occurrence`,
-`drug_exposure`, `measurement` and `device_exposure`. Download and convert in two commands, so a re-run of the
-conversion never downloads again:
+[INSPECT](https://som-shahlab.github.io/inspect-website)'s EHR data is released on Redivis as OMOP CDM 5.3
+tables, with the OMOP vocabulary (`concept`, `concept_relationship`, ...) included. Download and convert in two
+commands, so a re-run of the conversion never downloads again:
 
-1. Export the tables to `$OMOP_DIR` with MEDS-Extract's `redivis` download source, which writes each table as
-    `<table>.parquet`. Exporting tabular tables (`tables:`) needs a MEDS-Extract release with
-    [MEDS_extract#319](https://github.com/mmcdermott/MEDS_extract/pull/319); until then, export the tables from
-    Redivis yourself into the same layout. With `version:` pinned, a second download reuses what is on disk.
+1. Export the tables to `$OMOP_DIR` with MEDS-Extract's
+    [`redivis` download source](https://github.com/mmcdermott/MEDS_extract/blob/main/src/MEDS_extract/download/README.md),
+    which writes each tabular table as `<table>.parquet` (`tables:` is a list of names, or `'*'` for all). It
+    needs a Redivis API token for an account with INSPECT access, as `api_token:` or `REDIVIS_API_TOKEN`; keep the
+    `,null` default so an unset variable is reported with instructions rather than as an OmegaConf `KeyError`.
+    Pin `version:`: an export is reused on a second download only for a pinned version, since Redivis's current
+    version can change.
 
     ```yaml
     # inspect_download.yaml
@@ -149,25 +152,28 @@ conversion never downloads again:
     ```
 
     ```bash
-    pip install 'MEDS_extract[redivis]'
+    pip install 'OMOP_MEDS[redivis]'
     export REDIVIS_API_TOKEN=... # a token for an account with INSPECT access
     meds-extract-download spec=inspect_download.yaml output_dir=$OMOP_DIR
     ```
 
-2. Add the vocabulary tables, as in [OMOP data without vocabulary tables](#omop-data-without-vocabulary-tables):
-    INSPECT's release has none.
+2. Check that `concept.parquet` and `concept_relationship.parquet` are in `$OMOP_DIR`. INSPECT's export brings
+    them; for an export that lists only the clinical tables, add them as in
+    [OMOP data without vocabulary tables](#omop-data-without-vocabulary-tables).
 
-3. Convert:
+3. Convert, with downloading turned off:
 
     ```bash
-    export OMOP_VERSION=5.4
+    export OMOP_VERSION=5.3
     meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
     	dataset_version=v1.2 "overrides=['etl_metadata.dataset_name=INSPECT']"
     ```
 
 EHRSHOT's [Redivis dataset](https://redivis.com/datasets/53gc-8rhx41kgt) also ships its data in MEDS
-(`EHRSHOT_MEDS.zip`), which needs no conversion, and an OMOP version with the full OMOP tables of the same
-patients, which converts like INSPECT.
+(`EHRSHOT_MEDS.zip`), which needs no conversion: download it with the `redivis` source's `table:` key (a
+file-index table, each file checked against its MD5) and `unarchive: auto`. Its OMOP version has the full OMOP
+tables of the same patients. If those are tabular tables, they convert like INSPECT; if they are files,
+download them with `table:` and point `input_dir` at the OMOP tables.
 
 ### Enrichment, and sites without internet
 
