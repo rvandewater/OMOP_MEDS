@@ -71,24 +71,41 @@ meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMO
 
 `$OMOP_DIR` holds the OMOP CDM tables (CSV, gzipped CSV or Parquet files, or directories of their shards). This
 writes the MEDS dataset to `$MEDS_DIR` (`data/` and `metadata/`, per the
-[MEDS standard](https://medical-event-data-standard.github.io/)). `dataset_version=` and
+[MEDS standard](https://medical-event-data-standard.github.io/)), and by default keeps only that (see
+[Keeping the intermediate outputs](#keeping-the-intermediate-outputs)). `dataset_version=` and
 `etl_metadata.dataset_name` are recorded in `metadata/dataset.json`; without them, a build is named `OMOP` with
 version `unknown:<OMOP_MEDS version>`. The run has three OMOP-specific steps around MEDS-Extract's canonical
 stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
 ([`src/OMOP_MEDS/configs/event_configs.yaml`](src/OMOP_MEDS/configs/event_configs.yaml)):
 
 1. `omop_pre_meds` joins the OMOP tables to their concepts and writes the pre-MEDS tables to
-    `$MEDS_DIR/omop_pre_meds`, where MEDS-Extract reads them. Your OMOP data is never modified.
+    `$MEDS_DIR/omop_pre_meds`, where MEDS-Extract reads them (deleted after the run by default). Your OMOP data is
+    never modified.
 2. `omop_codes_metadata` writes `metadata/codes.parquet` from the source's own vocabulary tables (see
     [Code metadata](#code-metadata-codesparquet)).
 3. `sumeds_enrich` (from suMEDS) adds official vocabulary titles and ancestors to `metadata/codes.parquet` (see
     [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
-Each stage keeps its output under `$MEDS_DIR/<stage>`; `"overrides=['cleanup_intermediates=true']"` deletes
-those once the run has succeeded. (That is the MEDS-Transforms runner's own option. MEDS-Extract 0.9 removed
-`do_cleanup_intermediates=true`, and stops with a message naming the override if it is given.) A run that is
-started again resumes, and skips the stages it has finished, also after a cleanup. To convert again from
-scratch, use a new `output_dir`.
+#### Keeping the intermediate outputs
+
+**By default, a successful run keeps only the MEDS cohort**: `data/` and `metadata/`, with the run's logs in
+`.logs/` and `.meds_extract_run/`. Each stage's working output under `$MEDS_DIR/<stage>`, including the pre-MEDS
+tables in `$MEDS_DIR/omop_pre_meds`, is deleted once the run has succeeded; a failed run keeps everything. To keep
+the intermediate outputs, e.g. to debug a new OMOP export, turn the cleanup off:
+
+```bash
+meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+	"overrides=['cleanup_intermediates=false']"
+```
+
+All overrides go in one list, e.g.
+`"overrides=['cleanup_intermediates=false','etl_metadata.dataset_name=MY_OMOP_DATASET']"`. For good, copy the
+spec and set `cleanup_intermediates: false` in its `etl:` block.
+
+A run that is started again resumes, and skips the stages it has finished, also after a cleanup. To convert again
+from scratch, use a new `output_dir`. (`cleanup_intermediates` is the MEDS-Transforms runner's option, which this
+spec turns on in its `etl:` block. MEDS-Extract 0.9 removed `do_cleanup_intermediates=`, and stops with a message
+naming the override if it is given.)
 
 Quote arguments with brackets (`'skip_stages=[sumeds_enrich]'`): shells such as zsh would otherwise expand them.
 
@@ -300,7 +317,8 @@ notes.
 The `OMOP_MEDS` and `MEDS_extract-OMOP` commands are deprecated and will be removed in the next release. They now
 run `meds-extract-run spec=OMOP` (and print the command), translating the arguments below. Their output stays in
 `$ROOT_OUTPUT_DIR/MEDS_cohort`; the pre-MEDS tables move from `$ROOT_OUTPUT_DIR/pre_MEDS` to
-`$ROOT_OUTPUT_DIR/MEDS_cohort/omop_pre_meds`.
+`$ROOT_OUTPUT_DIR/MEDS_cohort/omop_pre_meds`, and are deleted after a successful run unless
+`do_cleanup_intermediates=False`.
 
 | `OMOP_MEDS` runner                                                                | `meds-extract-run spec=OMOP`                                  |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -314,6 +332,7 @@ run `meds-extract-run spec=OMOP` (and print the command), translating the argume
 | `N_WORKERS=8` (environment)                                                       | `stage_runner_fp=runner.yaml` (see below)                     |
 | `N_SUBJECTS_PER_SHARD=100000` (environment)                                       | `"overrides=['++stage_cfg.n_subjects_per_shard=100000']"`     |
 | `do_overwrite=True`                                                               | a new `output_dir`                                            |
+| `do_cleanup_intermediates=False` (now the default is to clean up)                 | `"overrides=['cleanup_intermediates=false']"`                 |
 
 `OMOP_VERSION` is read as before. The recorded `dataset_version` no longer ends in `:OMOP_<version>`.
 

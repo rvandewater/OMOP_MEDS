@@ -114,6 +114,8 @@ def test_pipeline_options_and_version_stamps():
     assert (
         _pipeline_cfg(dataset_version="v1")["etl_metadata"]["dataset_version"] == "v1"
     )
+    # Only the cohort is kept by default; "overrides=['cleanup_intermediates=false']" keeps the rest.
+    assert cfg["cleanup_intermediates"] is True
 
 
 # --- event config (event_configs.yaml) --------------------------------------------------------------------

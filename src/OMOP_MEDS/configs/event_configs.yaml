@@ -10,6 +10,9 @@ etl:
   # This spec converts any OMOP CDM dataset, so it sets no license or description URI. Name a build with
   # "overrides=['etl_metadata.dataset_name=MY_DATASET']" and dataset_version=MY_VERSION.
   n_subjects_per_shard: 10000
+  # Keep only the MEDS cohort (data/, metadata/): each stage's working output, the pre-MEDS tables among them, is
+  # deleted once the run has succeeded. Keep it with "overrides=['cleanup_intermediates=false']".
+  cleanup_intermediates: true
   # visit_occurrence_id and note_id (as link_id) join events back to their OMOP rows.
   raw_source_id_columns: [visit_occurrence_id, link_id]
   pre_stages:

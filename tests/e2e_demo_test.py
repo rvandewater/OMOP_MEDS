@@ -105,6 +105,12 @@ def test_local_e2e_demo_resources(local_demo_cohort: Path):
         f"Subject splits not found in {metadata_path}; found {all_files}"
     )
 
+    # The spec deletes every stage's working output (pre-MEDS tables included) after a successful run.
+    kept = {p.name for p in local_demo_cohort.iterdir() if not p.name.startswith(".")}
+    assert kept == {"data", "metadata"}, (
+        f"Intermediate outputs left in {local_demo_cohort}: {sorted(kept)}"
+    )
+
 
 def test_local_e2e_demo_events(local_demo_events: pl.DataFrame):
     events = local_demo_events
