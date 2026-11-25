@@ -318,7 +318,7 @@ notes.
 
 ### Upgrading from the `OMOP_MEDS` runner
 
-The `OMOP_MEDS` and `MEDS_extract-OMOP` commands are deprecated and will be removed in the next release. They now
+The `OMOP_MEDS` and `MEDS_extract-OMOP` commands are deprecated and will be removed in 0.7.0. They now
 run `meds-extract-run spec=OMOP` (and print the command), translating the arguments below. Their output stays in
 `$ROOT_OUTPUT_DIR/MEDS_cohort`; the pre-MEDS tables move from `$ROOT_OUTPUT_DIR/pre_MEDS` to
 `$ROOT_OUTPUT_DIR/MEDS_cohort/omop_pre_meds`, and are deleted after a successful run unless
