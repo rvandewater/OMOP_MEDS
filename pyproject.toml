@@ -49,7 +49,7 @@ markers = [
   "synthea: end-to-end run over OHDSI's Synthea27Nj OMOP 5.4 sample; its own CI job",
 ]
 
-# Deprecated: both run `meds-extract-run spec=OMOP` with the old runner's arguments, for one more release.
+# Deprecated: both run `meds-extract-run spec=OMOP` with the old runner's arguments, until 0.7.0.
 [project.scripts]
 MEDS_extract-OMOP = "OMOP_MEDS.__main__:main"
 OMOP_MEDS = "OMOP_MEDS.__main__:main"

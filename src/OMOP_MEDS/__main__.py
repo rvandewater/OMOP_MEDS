@@ -2,7 +2,7 @@
 """Deprecated `OMOP_MEDS` / `MEDS_extract-OMOP` commands: they run `meds-extract-run spec=OMOP`.
 
 The ETL is the MEDS-Extract spec registered as `OMOP`, run with `meds-extract-run` (see the README). These two
-commands only translate the arguments of the old runner for one more release, and will be removed:
+commands only translate the arguments of the old runner, and will be removed in 0.7.0:
 
     OMOP_MEDS raw_input_dir=RAW root_output_dir=ROOT [++prefer_source=True ...]
 
@@ -117,7 +117,7 @@ def main() -> None:
     except ValueError as e:
         sys.exit(f"{Path(sys.argv[0]).name}: {e}")
     print(
-        f"{Path(sys.argv[0]).name} is deprecated and will be removed; it runs:\n"
+        f"{Path(sys.argv[0]).name} is deprecated and will be removed in 0.7.0; it runs:\n"
         f"  meds-extract-run {' '.join(argv)}",
         file=sys.stderr,
     )
