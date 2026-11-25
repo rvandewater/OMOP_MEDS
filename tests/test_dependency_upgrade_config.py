@@ -1,4 +1,4 @@
-"""Guards for the MEDS-Extract (>= 0.8.1) / MEDS-Transforms (>= 0.7) spec and stages this package ships.
+"""Guards for the MEDS-Extract (>= 0.9.2) / MEDS-Transforms (>= 0.7) spec and stages this package ships.
 
 MEDS-Extract 0.7 reworked the pipeline and MESSY config formats; mistakes there either fail late inside a
 stage subprocess or, worse, silently drop events. These tests check the shipped spec against the installed
@@ -114,6 +114,8 @@ def test_pipeline_options_and_version_stamps():
     assert (
         _pipeline_cfg(dataset_version="v1")["etl_metadata"]["dataset_version"] == "v1"
     )
+    # Only the cohort is kept by default; "overrides=['cleanup_intermediates=false']" keeps the rest.
+    assert cfg["cleanup_intermediates"] is True
 
 
 # --- event config (event_configs.yaml) --------------------------------------------------------------------

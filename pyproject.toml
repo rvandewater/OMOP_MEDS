@@ -20,12 +20,13 @@ classifiers = [
 # MEDS-Extract and suMEDS are capped below their next minor: their 0.x minors are breaking (MESSY syntax, runner
 # CLI, rules format), so raise the caps deliberately when migrating. The ETL is the MEDS-Extract spec registered
 # below as `OMOP`, run with `meds-extract-run` (the `[download]` extra fetches the demo, `dataset_key=demo`).
-# MEDS-Extract 0.8.1 runs the spec's extension stages (`etl.pre_stages` / `etl.post_stages`); suMEDS 0.6.11
+# MEDS-Extract 0.9.2 runs the spec's extension stages (`etl.pre_stages` / `etl.post_stages`), cleans up through
+# the MEDS-Transforms runner's `cleanup_intermediates` key, and keeps a cleaned-up run finished; suMEDS 0.6.11
 # registers the `sumeds_enrich` stage, which enriches metadata/codes.parquet, records that in
 # metadata/dataset.json, and soft-fails (e.g. on a server without internet) so the extraction is kept; the
 # tests use its shared contracts (`sumeds.testing.contracts`).
 dependencies = [
-  "MEDS-extract[download]>=0.8.1,<0.9",
+  "MEDS-extract[download]>=0.9.2,<0.10",
   "sumeds>=0.6.11,<0.7",
   "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
   "tqdm"
@@ -39,6 +40,8 @@ tests = ["pytest", "pytest-cov", "hydra-joblib-launcher", "requests"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
 large_data = ["polars[rt64]"]
+# MEDS-Extract's `redivis` download source, for OMOP releases on Redivis such as INSPECT (see the README).
+redivis = ["MEDS-extract[redivis]"]
 
 [tool.pytest.ini_options]
 markers = [

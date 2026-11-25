@@ -406,9 +406,11 @@ def test_batched_pre_meds_output_converts_like_unbatched(tmp_path: Path):
 
     skip = "skip_stages=[sumeds_enrich]"
     run_omop(tmp_path / "unbatched", unbatched_raw, skip)
-    batching = ["++stage_cfg.pre_meds_chunked_tables=[observation]"] + [
-        f"++stage_cfg.{key}={value}" for key, value in BATCH_EVERY_SHARD.items()
-    ]
+    # Keep the pre-MEDS tables, which the spec deletes after a successful run by default.
+    batching = [
+        "cleanup_intermediates=false",
+        "++stage_cfg.pre_meds_chunked_tables=[observation]",
+    ] + [f"++stage_cfg.{key}={value}" for key, value in BATCH_EVERY_SHARD.items()]
     overrides = "overrides=[" + ",".join(f"'{o}'" for o in batching) + "]"
     run_omop(tmp_path / "batched", batched_raw, skip, overrides)
 

@@ -28,7 +28,6 @@ STAGE_OPTIONS = frozenset({*PRE_MEDS_DEFAULTS, *CODES_METADATA_DEFAULTS})
 RUN_OPTIONS = frozenset(
     {
         "dataset_version",
-        "do_cleanup_intermediates",
         "skip_stages",
         "stage_runner_fp",
         "do_profile",
@@ -54,6 +53,13 @@ def translate(args: list[str], env: dict[str, str] | None = None) -> list[str]:
         ...           env={"DATASET_NAME": "DEMO"})
         ['spec=OMOP', 'output_dir=/root/MEDS_cohort', 'dataset_key=demo', 'download_dest_dir=/root/raw_input',
          'skip_stages=[sumeds_enrich]', "overrides=['etl_metadata.dataset_name=DEMO']"]
+
+        The spec deletes the intermediate outputs by default. `do_cleanup_intermediates` becomes the
+        MEDS-Transforms runner's `cleanup_intermediates` key, which `meds-extract-run` takes as an override:
+
+        >>> translate(["root_output_dir=/root", "do_cleanup_intermediates=false"], env={})
+        ['spec=OMOP', 'output_dir=/root/MEDS_cohort', 'do_download=false', 'input_dir=/root/raw_input',
+         "overrides=['cleanup_intermediates=false']"]
         >>> translate(["root_output_dir=/root", "sumeds_args=[--strict]"], env={})
         Traceback (most recent call last):
             ...
@@ -82,6 +88,9 @@ def translate(args: list[str], env: dict[str, str] | None = None) -> list[str]:
         argv.append("skip_stages=[sumeds_enrich]")
     given.pop("do_overwrite", None)  # handled by main()
     overrides = []
+    if "do_cleanup_intermediates" in given:
+        cleanup = _bool(given.pop("do_cleanup_intermediates"))
+        overrides.append(f"cleanup_intermediates={str(cleanup).lower()}")
     if env.get("DATASET_NAME"):
         overrides.append(f"etl_metadata.dataset_name={env['DATASET_NAME']}")
     for key, value in given.items():

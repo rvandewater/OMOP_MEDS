@@ -48,10 +48,10 @@ If your OMOP schema is non-standard (but still approximately OMOP), you should b
 
 ## Setup
 
-Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.8 supports: its Hydra command line fails on Python 3.14
+Requires Python `>=3.11.4,<3.14`, the range MEDS-Extract 0.9 supports: its Hydra command line fails on Python 3.14
 ([MEDS_extract#248](https://github.com/mmcdermott/MEDS_extract/issues/248)), and its archive extraction on 3.11.0–3.11.3
-([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.8.1
-(the first with extension stages, which this ETL is made of) and MEDS-Transforms 0.7, with suMEDS 0.6.11.
+([MEDS_extract#217](https://github.com/mmcdermott/MEDS_extract/issues/217)). The MEDS conversion runs on MEDS-Extract 0.9.2
+and MEDS-Transforms 0.7.3, with suMEDS 0.6.11.
 
 First install the package, which brings [MEDS-Extract](https://github.com/mmcdermott/MEDS_extract) and
 [suMEDS](https://github.com/rvandewater/SumMEDS):
@@ -71,22 +71,41 @@ meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMO
 
 `$OMOP_DIR` holds the OMOP CDM tables (CSV, gzipped CSV or Parquet files, or directories of their shards). This
 writes the MEDS dataset to `$MEDS_DIR` (`data/` and `metadata/`, per the
-[MEDS standard](https://medical-event-data-standard.github.io/)). `dataset_version=` and
+[MEDS standard](https://medical-event-data-standard.github.io/)), and by default keeps only that (see
+[Keeping the intermediate outputs](#keeping-the-intermediate-outputs)). `dataset_version=` and
 `etl_metadata.dataset_name` are recorded in `metadata/dataset.json`; without them, a build is named `OMOP` with
 version `unknown:<OMOP_MEDS version>`. The run has three OMOP-specific steps around MEDS-Extract's canonical
 stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
 ([`src/OMOP_MEDS/configs/event_configs.yaml`](src/OMOP_MEDS/configs/event_configs.yaml)):
 
 1. `omop_pre_meds` joins the OMOP tables to their concepts and writes the pre-MEDS tables to
-    `$MEDS_DIR/omop_pre_meds`, where MEDS-Extract reads them. Your OMOP data is never modified.
+    `$MEDS_DIR/omop_pre_meds`, where MEDS-Extract reads them (deleted after the run by default). Your OMOP data is
+    never modified.
 2. `omop_codes_metadata` writes `metadata/codes.parquet` from the source's own vocabulary tables (see
     [Code metadata](#code-metadata-codesparquet)).
 3. `sumeds_enrich` (from suMEDS) adds official vocabulary titles and ancestors to `metadata/codes.parquet` (see
     [Enriching code metadata with suMEDS](#enriching-code-metadata-with-sumeds)).
 
-Each stage keeps its output under `$MEDS_DIR/<stage>`; `do_cleanup_intermediates=true` deletes those once the
-run has succeeded. A run that is started again resumes, and skips the stages it has finished. To convert again
-from scratch, use a new `output_dir`.
+#### Keeping the intermediate outputs
+
+**By default, a successful run keeps only the MEDS cohort**: `data/` and `metadata/`, with the run's logs in
+`.logs/` and `.meds_extract_run/`. Each stage's working output under `$MEDS_DIR/<stage>`, including the pre-MEDS
+tables in `$MEDS_DIR/omop_pre_meds`, is deleted once the run has succeeded; a failed run keeps everything. To keep
+the intermediate outputs, e.g. to debug a new OMOP export, turn the cleanup off:
+
+```bash
+meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+	"overrides=['cleanup_intermediates=false']"
+```
+
+All overrides go in one list, e.g.
+`"overrides=['cleanup_intermediates=false','etl_metadata.dataset_name=MY_OMOP_DATASET']"`. For good, copy the
+spec and set `cleanup_intermediates: false` in its `etl:` block.
+
+A run that is started again resumes, and skips the stages it has finished, also after a cleanup. To convert again
+from scratch, use a new `output_dir`. (`cleanup_intermediates` is the MEDS-Transforms runner's option, which this
+spec turns on in its `etl:` block. MEDS-Extract 0.9 removed `do_cleanup_intermediates=`, and stops with a message
+naming the override if it is given.)
 
 Quote arguments with brackets (`'skip_stages=[sumeds_enrich]'`): shells such as zsh would otherwise expand them.
 
@@ -96,6 +115,82 @@ To try with the MIMIC-IV OMOP demo dataset (this downloads PhysioNet's ~11 MB pr
 ```bash
 meds-extract-run spec=OMOP output_dir=/path/to/demo_meds dataset_key=demo
 ```
+
+### OMOP data without vocabulary tables
+
+`omop_pre_meds` needs the `concept` and `concept_relationship` tables in `$OMOP_DIR`, and stops with
+`No concept table found in the input directory.` without them. Some releases ship only the clinical tables. Take
+`CONCEPT.csv` and `CONCEPT_RELATIONSHIP.csv` from an [OHDSI Athena](https://athena.ohdsi.org) download instead.
+Athena's files are tab-separated and write dates as `YYYYMMDD`, so convert them to parquet first:
+
+```python
+import polars as pl
+
+for name in ("concept", "concept_relationship"):
+    (
+        pl.scan_csv(
+            f"{ATHENA_DIR}/{name.upper()}.csv",
+            separator="\t",
+            quote_char=None,
+            infer_schema_length=0,
+        )
+        .with_columns(
+            pl.col("valid_start_date", "valid_end_date").str.to_date("%Y%m%d")
+        )
+        .sink_parquet(f"{OMOP_DIR}/{name}.parquet")
+    )
+```
+
+### INSPECT and EHRSHOT (Redivis)
+
+[INSPECT](https://som-shahlab.github.io/inspect-website)'s EHR data is released on Redivis as OMOP CDM 5.3
+tables, with the OMOP vocabulary (`concept`, `concept_relationship`, ...) included. Download and convert in two
+commands, so a re-run of the conversion never downloads again:
+
+1. Export the tables to `$OMOP_DIR` with MEDS-Extract's
+    [`redivis` download source](https://github.com/mmcdermott/MEDS_extract/blob/main/src/MEDS_extract/download/README.md),
+    which writes each tabular table as `<table>.parquet` (`tables:` is a list of names, or `'*'` for all). It
+    needs a Redivis API token for an account with INSPECT access, as `api_token:` or `REDIVIS_API_TOKEN`; keep the
+    `,null` default so an unset variable is reported with instructions rather than as an OmegaConf `KeyError`.
+    Pin `version:`: an export is reused on a second download only for a pinned version, since Redivis's current
+    version can change.
+
+    ```yaml
+    # inspect_download.yaml
+    sources:
+      dataset_version: v1.2
+      dataset:
+        - type: redivis
+          organization: shahlab
+          dataset: inspect_ehr:dzc6
+          version: ${sources.dataset_version}
+          api_token: ${oc.env:REDIVIS_API_TOKEN,null}
+          tables: '*'
+    ```
+
+    ```bash
+    pip install 'OMOP_MEDS[redivis]'
+    export REDIVIS_API_TOKEN=... # a token for an account with INSPECT access
+    meds-extract-download spec=inspect_download.yaml output_dir=$OMOP_DIR
+    ```
+
+2. Check that `concept.parquet` and `concept_relationship.parquet` are in `$OMOP_DIR`. INSPECT's export brings
+    them; for an export that lists only the clinical tables, add them as in
+    [OMOP data without vocabulary tables](#omop-data-without-vocabulary-tables).
+
+3. Convert, with downloading turned off:
+
+    ```bash
+    export OMOP_VERSION=5.3
+    meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMOP_DIR \
+    	dataset_version=v1.2 "overrides=['etl_metadata.dataset_name=INSPECT']"
+    ```
+
+EHRSHOT's [Redivis dataset](https://redivis.com/datasets/53gc-8rhx41kgt) also ships its data in MEDS
+(`EHRSHOT_MEDS.zip`), which needs no conversion: download it with the `redivis` source's `table:` key (a
+file-index table, each file checked against its MD5) and `unarchive: auto`. Its OMOP version has the full OMOP
+tables of the same patients. If those are tabular tables, they convert like INSPECT; if they are files,
+download them with `table:` and point `input_dir` at the OMOP tables.
 
 ### Enrichment, and sites without internet
 
@@ -226,7 +321,8 @@ notes.
 The `OMOP_MEDS` and `MEDS_extract-OMOP` commands are deprecated and will be removed in the next release. They now
 run `meds-extract-run spec=OMOP` (and print the command), translating the arguments below. Their output stays in
 `$ROOT_OUTPUT_DIR/MEDS_cohort`; the pre-MEDS tables move from `$ROOT_OUTPUT_DIR/pre_MEDS` to
-`$ROOT_OUTPUT_DIR/MEDS_cohort/omop_pre_meds`.
+`$ROOT_OUTPUT_DIR/MEDS_cohort/omop_pre_meds`, and are deleted after a successful run unless
+`do_cleanup_intermediates=False`.
 
 | `OMOP_MEDS` runner                                                                | `meds-extract-run spec=OMOP`                                  |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -240,6 +336,7 @@ run `meds-extract-run spec=OMOP` (and print the command), translating the argume
 | `N_WORKERS=8` (environment)                                                       | `stage_runner_fp=runner.yaml` (see below)                     |
 | `N_SUBJECTS_PER_SHARD=100000` (environment)                                       | `"overrides=['++stage_cfg.n_subjects_per_shard=100000']"`     |
 | `do_overwrite=True`                                                               | a new `output_dir`                                            |
+| `do_cleanup_intermediates=False` (now the default is to clean up)                 | `"overrides=['cleanup_intermediates=false']"`                 |
 
 `OMOP_VERSION` is read as before. The recorded `dataset_version` no longer ends in `:OMOP_<version>`.
 
