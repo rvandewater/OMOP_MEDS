@@ -54,11 +54,11 @@ class TestEnrichment(EnrichmentContract):
     def test_enrichment_extends_exactly_the_pack_codes_and_keeps_the_omop_columns(
         self, plain_output: Path, enriched_output: Path
     ):
-        """Keyed by (code, table_name): the same code can come from several OMOP tables."""
+        """Keyed by code: one row per code, whichever OMOP tables it comes from."""
 
-        def rows(output: Path) -> dict[tuple[str, str | None], dict]:
+        def rows(output: Path) -> dict[str, dict]:
             table = pq.read_table(output / "metadata" / "codes.parquet")
-            return {(r["code"], r["table_name"]): r for r in table.to_pylist()}
+            return {r["code"]: r for r in table.to_pylist()}
 
         plain, enriched = rows(plain_output), rows(enriched_output)
         assert enriched.keys() == plain.keys()
@@ -66,8 +66,8 @@ class TestEnrichment(EnrichmentContract):
         for key, before in plain.items():
             after = enriched[key]
             if len(after["parent_codes"] or []) > len(before["parent_codes"] or []):
-                extended.add(key[0])
-            for column in ("occurrence_count", "concept_id", "vocabulary_id"):
+                extended.add(key)
+            for column in ("tables", "occurrence_count", "concept_id", "vocabulary_id"):
                 assert after[column] == before[column], (key, column)
         # Exactly the codes of the packs: the chart codes, and the RACE codes whose parent is in a pack.
         assert extended == {
@@ -97,8 +97,7 @@ class TestEnrichment(EnrichmentContract):
         ]
         assert enrich_main(retry) == 0
 
-        key = ["code", "table_name"]
-        enriched = pl.read_parquet(root / "metadata" / "codes.parquet").sort(key)
+        enriched = pl.read_parquet(root / "metadata" / "codes.parquet").sort("code")
         assert enriched.equals(
-            pl.read_parquet(enriched_output / "metadata" / "codes.parquet").sort(key)
+            pl.read_parquet(enriched_output / "metadata" / "codes.parquet").sort("code")
         )

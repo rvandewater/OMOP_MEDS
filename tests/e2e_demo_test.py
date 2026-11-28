@@ -136,6 +136,7 @@ def test_local_e2e_demo_codes_metadata_covers_every_code(
     codes = pl.read_parquet(local_demo_cohort / "metadata" / "codes.parquet")
 
     assert set(codes["code"]) == set(local_demo_events["code"])
+    assert codes.height == codes["code"].n_unique()
 
 
 def test_local_e2e_demo_codes_metadata_is_valid_and_described(local_demo_cohort: Path):
@@ -144,7 +145,7 @@ def test_local_e2e_demo_codes_metadata_is_valid_and_described(local_demo_cohort:
     codes = pl.from_arrow(codes_table)
     # Observation codes are vocabulary_id//concept_code (mapped and source concept); the demo concept
     # table holds the MIMIC-IV local concepts, which must be described.
-    observation = codes.filter(pl.col("table_name") == "observation")
+    observation = codes.filter(pl.col("tables").list.contains("observation"))
     assert observation["description"].is_not_null().sum() > 0
 
 
