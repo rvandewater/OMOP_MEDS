@@ -38,6 +38,10 @@ PRE_MEDS_DEFAULTS: dict[str, Any] = {
     "omop_version": None,
     # Use the source concept rather than the mapped (standard) concept of tables that have both.
     "prefer_source": False,
+    # Treat a `*_datetime` of exactly 00:00:00 as an unknown time, as the CDM's general conventions fill it: the event
+    # is timed at the end of its date (23:59:59), a visit start at its start (00:00). False keeps midnights as
+    # they are, for sources whose midnights are real.
+    "midnight_is_unknown_time": True,
     # Keep only persons with at least one visit.
     "join_on_visit": False,
     # Convert only the first N persons (0: all), for debugging.

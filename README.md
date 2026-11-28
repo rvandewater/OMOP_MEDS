@@ -250,10 +250,21 @@ We make a few important choices that have impact on your downstream training and
     Watch for potential information leakage. You can change your table configs in
     `configs/pre_MEDS/omop_<version>.yaml` and `event_configs.yaml`.
 - This package is more resource intensive, please adjust your `n_shards` and watch your memory usage.
-- OMOP requires an event's date but not its datetime. An event is timed by its `*_datetime` column, or, when that
-    is empty, at the end of its `*_date` (23:59:59): the latest time it can have happened, so it is never placed
-    before something it may have followed. Deaths and notes are timed the same way. Events of the same code and
-    value on the same date then become identical rows, which MEDS keeps once.
+- OMOP requires an event's date but not its datetime, and the CDM gives two conventions for an unknown time of day:
+    its [general conventions](https://ohdsi.github.io/CommonDataModel/dataModelConventions.html) choose 00:00:00,
+    its [field-level conventions](https://ohdsi.github.io/CommonDataModel/cdm54.html) leave `*_datetime` NULL.
+    OMOP_MEDS treats both as unknown, so it covers sources that follow either. An event is timed by its
+    `*_datetime` column, unless that is empty or exactly 00:00:00: the time is then unknown, and the event is timed
+    at the end of its `*_date` (23:59:59), the latest time it can have happened, so it never leaks into a prediction
+    made earlier that day. This holds for point events, every interval end, era starts and ends, deaths and notes.
+    Visit and observation-period starts with an unknown time are timed at the start of their date (00:00) instead,
+    so an admission stays before that day's events: an early anchor gives a prediction less information, never
+    more. An observation period from 00:00 on its first date to 23:59:59 on its last holds every event of those days,
+    as the CDM requires ("no record can be outside a valid OBSERVATION_PERIOD"). `MEDS_BIRTH` is unchanged:
+    [THEMIS](https://ohdsi.github.io/Themis/missing_birthdatetime.html) sets an unknown birth time to midnight.
+    `meds_etl_omop` keeps midnight times as they are. Turn the midnight handling off with `midnight_is_unknown_time`
+    (see [Pre-MEDS settings](#pre-meds-settings)). Events of the same code and value on the same date then become
+    identical rows, which MEDS keeps once.
 
 ## Different package versions
 
@@ -296,6 +307,13 @@ meds-extract-run spec=OMOP output_dir=$MEDS_DIR do_download=false input_dir=$OMO
 - `limit_subjects`: Limit the number of subjects to process.
 - `prefer_source`: Set to `true` to prefer source concepts over mapped concepts.
 - `join_on_visit`: Set to `true` to keep only persons with at least one visit.
+- `midnight_is_unknown_time` (default `true`): a `*_datetime` of exactly 00:00:00 is an unknown time, as the CDM's
+    general conventions fill it, and is timed like an empty one (see
+    [Differences with the original meds_etl_omop](#differences-with-the-original-meds_etl_omop)). A real event at
+    midnight then moves to 23:59:59 the same day. CDM-compliant sources that leave unknown times NULL, and
+    ICU-charted data with real midnight times, such as MIMIC-IV (about 8% of the observation times of its public OMOP
+    demo are exactly midnight), may want `false`. Midnight-filled events of such a source then sort before the rest
+    of their day and can leak into predictions made that day.
 - `tables_to_ignore`: Tables that are not converted, without a warning.
 
 Pre-meds batching settings. This is relevant if (some of) your input tables are very large, and you want to process
@@ -520,6 +538,20 @@ The following is an example of how the data then looks like:
 In this case it will prefer the `xtn_note_last_edit_datetime` column for the datetime of the event (if it is in fact later in time),
 which can help to prevent information leakage in some cases, but it will fall back to `note_datetime`/`note_date` if the override column is not available.
 See `build_preferred_event_datetime` function in the code for more details on how this works.
+
+A note whose `note_datetime` is exactly midnight has an unknown time (`midnight_is_unknown_time`, on by default): it
+is timed at 23:59:59 on its `note_date`, and its last edit overrides that only when it is later.
+
+Unknown times have prior art. [meds_etl](https://github.com/Medical-Event-Data-Standard/meds_etl)'s
+[`cast_to_datetime`](https://github.com/Medical-Event-Data-Standard/meds_etl/blob/ab66a41/src/meds_etl/omop.py#L119-L142)
+moves only values without a time part to 23:59:59 and keeps midnight datetimes, as OMOP_MEDS did before 0.7.0.
+[FEMR](https://github.com/som-shahlab/femr)'s Stanford post-ETL pipeline
+([`post_etl_pipelines/stanford.py`](https://github.com/som-shahlab/femr/blob/a67aad8/src/femr/post_etl_pipelines/stanford.py#L46-L70),
+which made the EHRSHOT MEDS release) runs, in order,
+[`move_visit_start_to_first_event_start`](https://github.com/som-shahlab/femr/blob/a67aad8/src/femr/transforms/stanford.py),
+which moves a midnight visit start to the visit's first event later that day, and then `move_to_day_end`, which
+moves every event still at midnight to the end of its day. OMOP_MEDS keeps unknown visit starts at 00:00 instead:
+moving them needs a group-by over `visit_occurrence_id` across every table. That is a known refinement.
 
 ## Particularities
 
