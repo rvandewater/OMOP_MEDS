@@ -7,6 +7,8 @@
 #   output_data_cols: columns kept in the pre-MEDS output. A listed column missing from the input is skipped
 #     without a warning, so use the CDM 5.3 field names; tests/test_omop_versions.py checks them.
 #   concept_cols: columns kept from the concept join.
+#   concept_lookup_cols: `<x>_concept_id: concept_code | concept_name`; adds that field of the concept as
+#     `<x>_concept_code` or `<x>_concept_name` (null for concept 0 or a concept missing from the vocabulary).
 #   datetime_resolver: builds `preferred_time` from a primary and an optional later (last-edit) timestamp.
 # Output data cols should never contain case_id or patient_id.
 person:
@@ -51,9 +53,12 @@ observation:
       "visit_detail_id",
       "observation_source_value",
       "observation_source_concept_id",
-      #        "unit_source_value",
+      "unit_source_value",
       #        "qualifier_source_value",
     ]
+  concept_lookup_cols:
+    unit_concept_id: concept_code
+    value_as_concept_id: concept_name
   concept_cols:
     [
       "vocabulary_id",
@@ -83,9 +88,12 @@ measurement:
       #        "visit_detail_id",
       #        "measurement_source_value",
       #        "measurement_source_concept_id",
-      #        "unit_source_value",
+      "unit_source_value",
       #        "value_source_value",
     ]
+  concept_lookup_cols:
+    unit_concept_id: concept_code
+    value_as_concept_id: concept_name
   concept_cols:
     [
       "vocabulary_id",
@@ -190,6 +198,8 @@ specimen:
       "anatomic_site_source_value",
       "disease_status_source_value",
     ]
+  concept_lookup_cols:
+    unit_concept_id: concept_code
   concept_cols: []
 
 device_exposure:
@@ -230,6 +240,8 @@ dose_era:
       "dose_era_start_date",
       "dose_era_end_date",
     ]
+  concept_lookup_cols:
+    unit_concept_id: concept_code
   concept_cols: ["vocabulary_id", "concept_code"]
 #note_nlp:
 #    reference_cols: ["note_type_concept_id" ] # TODO check if correct join column

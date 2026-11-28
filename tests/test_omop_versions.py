@@ -66,6 +66,7 @@ def _configured_columns(block: dict) -> set[str]:
     return {
         *(block.get("reference_cols") or []),
         *(block.get("output_data_cols") or []),
+        *(block.get("concept_lookup_cols") or {}),
         *resolver.values(),
     }
 

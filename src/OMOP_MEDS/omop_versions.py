@@ -22,7 +22,13 @@ __all__ = [
 
 SUPPORTED_OMOP_VERSIONS = SUPPORTED_VERSIONS
 TABLE_BLOCK_KEYS = frozenset(
-    {"reference_cols", "output_data_cols", "concept_cols", "datetime_resolver"}
+    {
+        "reference_cols",
+        "output_data_cols",
+        "concept_cols",
+        "concept_lookup_cols",
+        "datetime_resolver",
+    }
 )
 
 
