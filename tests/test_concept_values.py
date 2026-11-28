@@ -65,13 +65,16 @@ def test_concept_lookups_of_each_versions_blocks(version):
         "dose_era": {"unit_concept_id": "concept_code"},
     }
     concept_df = CONCEPTS.lazy().with_columns(pl.col("concept_id").cast(pl.Int64))
-    person_df = pl.LazyFrame({"person_id": [1]}, schema={"person_id": pl.Int64})
+    person_df = pl.LazyFrame(
+        {"person_id": [1, 2, 3, 4]}, schema={"person_id": pl.Int64}
+    )
 
     for table, table_lookups in lookups.items():
         block = CONFIGS[version][table]
         # Concept known, 0 (no concept), null and missing from the vocabulary.
         df = pl.LazyFrame(
-            {"person_id": [1] * 4}
+            # One person per row, to restore the row order after the joins.
+            {"person_id": [1, 2, 3, 4]}
             | dict.fromkeys(block["reference_cols"], [None] * 4)
             | {
                 col: [KNOWN[field][0], 0, None, UNKNOWN]
@@ -81,7 +84,11 @@ def test_concept_lookups_of_each_versions_blocks(version):
                 [*block["reference_cols"], *table_lookups], pl.Int64
             ),
         )
-        out = join_concept(table, **block)(df, concept_df, person_df).collect()
+        out = (
+            join_concept(table, **block)(df, concept_df, person_df)
+            .collect()
+            .sort("person_id")
+        )
 
         for col, field in table_lookups.items():
             name = f"{col.removesuffix('_concept_id')}_{field}"

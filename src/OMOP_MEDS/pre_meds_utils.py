@@ -476,9 +476,9 @@ def join_concept_lookups(
         >>> concept_df = pl.LazyFrame({"concept_id": [8840], "concept_code": ["mg/dL"], "concept_name": ["mg"]})
         >>> out = join_concept_lookups(
         ...     df, concept_df, {"unit_concept_id": "concept_code", "value_as_concept_id": "concept_name"}
-        ... ).collect()
+        ... ).collect().sort("unit_concept_id", nulls_last=True)
         >>> out["unit_concept_code"].to_list(), out["value_as_concept_name"].null_count()
-        (['mg/dL', None, None, None], 4)
+        ([None, None, 'mg/dL', None], 4)
         >>> out["unit_source_value"].dtype, out["unit_source_value"].null_count()
         (String, 4)
     """
