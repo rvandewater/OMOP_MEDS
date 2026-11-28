@@ -148,6 +148,9 @@ def test_e2e_synthea(tmp_path: Path, omop_version: str):
     assert dataset["dataset_version"] == "5.4"
     # Enriched, or soft-failed (e.g. GitHub unreachable): either way the run succeeds and says so.
     assert dataset["sumeds_enrichment"]["rules"] == "OMOP"
+    # Recorded by omop_codes_metadata and kept by sumeds_enrich, which runs after it.
+    assert dataset["etl_name"] == "OMOP_MEDS"
+    assert dataset["omop_meds"]["omop_version"] == omop_version
 
     data_files = sorted((cohort / "data").rglob("*.parquet"))
     assert data_files, f"No MEDS data shards under {cohort / 'data'}"

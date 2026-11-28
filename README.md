@@ -74,9 +74,27 @@ writes the MEDS dataset to `$MEDS_DIR` (`data/` and `metadata/`, per the
 [MEDS standard](https://medical-event-data-standard.github.io/)), and by default keeps only that (see
 [Keeping the intermediate outputs](#keeping-the-intermediate-outputs)). `dataset_version=` and
 `etl_metadata.dataset_name` are recorded in `metadata/dataset.json`; without them, a build is named `OMOP` with
-version `unknown:<OMOP_MEDS version>`. The run has three OMOP-specific steps around MEDS-Extract's canonical
-stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
-([`src/OMOP_MEDS/configs/event_configs.yaml`](src/OMOP_MEDS/configs/event_configs.yaml)):
+version `<cdm_release_date>:<OMOP_MEDS version>` (the input's `cdm_source` release), or
+`unknown:<OMOP_MEDS version>` without one. `dataset.json` also records what built the dataset beyond what the
+OMOP_MEDS version implies: `etl_name` is `OMOP_MEDS` and `etl_version` its version, and an `omop_meds` block holds
+
+- the `omop_pre_meds` options but the batching ones (`omop_version`, resolved; `prefer_source`, `join_on_visit`,
+    `limit_subjects`), with `tables_to_ignore` as its difference from the default (`tables_to_ignore_added`,
+    `tables_to_ignore_removed`);
+- the input's tables by name (`tables_converted`, `tables_present_not_converted`), `missing_vocabulary_tables`
+    (without `concept_relationship`, codes have no "Maps to" parents), and `cdm_source_name`,
+    `cdm_source_abbreviation`, `cdm_release_date`, `cdm_version` and `vocabulary_version` from `cdm_source` (the
+    vocabulary version, else, from the `vocabulary` table; of several `cdm_source` rows, the first);
+- `splits`: the split fractions, `seed`, `n_subjects_per_shard` and `external_splits` (whether external splits were
+    given);
+- `custom_config: true` and `config_sha256`, only when the spec or a pre-MEDS config is not the packaged one;
+- `omop_meds_version`, `meds_extract_version`, `meds_transforms_version` and `athena_fallback` (whether
+    `athena_csv_dir` was set).
+
+Empty values, paths and row counts are not recorded.
+
+The run has three OMOP-specific steps around MEDS-Extract's canonical stages (`src/OMOP_MEDS/stages.py`), declared
+in the spec's `etl:` block ([`src/OMOP_MEDS/configs/event_configs.yaml`](src/OMOP_MEDS/configs/event_configs.yaml)):
 
 1. `omop_pre_meds` joins the OMOP tables to their concepts and writes the pre-MEDS tables to
     `$MEDS_DIR/omop_pre_meds`, where MEDS-Extract reads them (deleted after the run by default). Your OMOP data is

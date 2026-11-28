@@ -9,6 +9,8 @@ import pytest
 from meds import CodeMetadataSchema
 from omop_run import run_omop
 
+from OMOP_MEDS import __version__
+
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 
 # test_e2e downloads from PhysioNet; above the 25-minute download budget, inside the 35-minute CI job timeout.
@@ -94,6 +96,42 @@ def test_local_e2e_demo_resources(local_demo_cohort: Path):
     assert dataset_metadata.exists(), (
         f"Dataset metadata not found in {metadata_path}; found {all_files}"
     )
+    dataset = json.loads(dataset_metadata.read_text())
+    assert (dataset["etl_name"], dataset["etl_version"]) == ("OMOP_MEDS", __version__)
+    settings = dataset["omop_meds"]
+    assert settings["omop_meds_version"] == __version__
+    assert settings["omop_version"] == "5.3"
+    assert settings["prefer_source"] is False
+    assert settings["join_on_visit"] is False
+    assert settings["athena_fallback"] is False
+    assert settings["meds_transforms_version"]
+    assert not any(k.startswith("pre_meds_") for k in settings)
+    # The demo input: no cdm_source or vocabulary table (so no release to name the build), the packaged spec
+    # and default split settings; the fixture adds a concept_relationship table.
+    assert dataset["dataset_version"] == f"unknown:{__version__}"
+    assert settings["tables_converted"] == [
+        "death",
+        "note",
+        "observation",
+        "person",
+        "visit_occurrence",
+    ]
+    assert settings["splits"] == {
+        "split_fracs": {"train": 0.8, "tuning": 0.1, "held_out": 0.1},
+        "seed": 1,
+        "n_subjects_per_shard": 10_000,
+        "external_splits": False,
+    }
+    for absent in (
+        "tables_present_not_converted",
+        "missing_vocabulary_tables",
+        "tables_to_ignore_added",
+        "tables_to_ignore_removed",
+        "custom_config",
+        "cdm_release_date",
+        "vocabulary_version",
+    ):
+        assert absent not in settings, absent
 
     codes_metadata = metadata_path / "codes.parquet"
     assert codes_metadata.exists(), (

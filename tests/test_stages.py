@@ -5,26 +5,36 @@ some OMOP tables; `omop_codes_metadata` and `sumeds_enrich` run after MEDS-Extra
 tests/test_run_with_enrichment.py).
 """
 
+import importlib.metadata
 import json
 import os
 import shutil
 import subprocess
+from base64 import urlsafe_b64encode
+from hashlib import sha256
+from importlib.metadata import version
 from pathlib import Path
+from types import SimpleNamespace
 
 import polars as pl
 import pytest
 from e2e_demo_test import _stage_local_demo_omop
+from meds import DatasetMetadataSchema
 from MEDS_extract.config import MessyConfig
 from omegaconf import OmegaConf
 from omop_run import SCRIPTS_DIR, run_omop
 
 import OMOP_MEDS.pre_meds
+from OMOP_MEDS import EVENT_CFG, PRE_MEDS_COMMON_CFG, __version__
 from OMOP_MEDS.pre_meds import main as pre_meds_main
 from OMOP_MEDS.stages import (
+    CDM_SOURCE_FIELDS,
     PRE_MEDS_DEFAULTS,
     PRE_MEDS_STAGE,
+    SETTINGS_FILE,
     _pre_meds,
     pre_meds_config,
+    record_provenance,
 )
 
 SPEC_TABLES = sorted(MessyConfig.load("OMOP").needed_source_columns())
@@ -180,6 +190,8 @@ def test_deprecated_runner_command_runs_the_spec(raw: Path, tmp_path: Path):
     dataset = json.loads((cohort / "metadata" / "dataset.json").read_text())
     assert dataset["dataset_name"] == "OLD_RUNNER_NAME"
     assert "sumeds_enrichment" not in dataset
+    assert dataset["etl_name"] == "OMOP_MEDS"
+    assert dataset["omop_meds"]["limit_subjects"] == 10
 
 
 def test_deprecated_runner_command_rejects_removed_options(tmp_path: Path):
@@ -209,3 +221,240 @@ def test_deprecated_runner_argument_translation():
     )
     assert result.attempted >= 3
     assert result.failed == 0
+
+
+# Synthetic OMOP metadata tables (no real source).
+CDM_SOURCE = (
+    "cdm_source_name,cdm_source_abbreviation,cdm_release_date,cdm_version,vocabulary_version\n"
+    "Synthetic,SYN,2024-01-31,v5.4,v5.0 31-JAN-24\n"
+)
+VOCABULARY = (
+    "vocabulary_id,vocabulary_name,vocabulary_reference,vocabulary_version,vocabulary_concept_id\n"
+    "LOINC,LOINC,loinc.org,2.77,0\n"
+    "None,OMOP Standardized Vocabularies,OMOP,v5.0 31-AUG-24,0\n"
+)
+
+
+def _settings(tmp_path: Path, monkeypatch, tables: dict[str, str], **cfg) -> dict:
+    """The settings `omop_pre_meds` records for synthetic input `tables` (name -> CSV text), with a person table."""
+    monkeypatch.setattr(OMOP_MEDS.pre_meds, "main", lambda cfg: None)
+    (tmp_path / "raw").mkdir(parents=True)
+    for name, text in {"person": "person_id\n", **tables}.items():
+        (tmp_path / "raw" / f"{name}.csv").write_text(text)
+    stage_cfg = OmegaConf.merge(_stage_cfg(tmp_path), cfg)
+    _pre_meds(stage_cfg)
+    return json.loads((tmp_path / "out" / PRE_MEDS_STAGE / SETTINGS_FILE).read_text())
+
+
+def test_pre_stage_records_the_run_not_the_package_defaults(
+    tmp_path: Path, monkeypatch, caplog
+):
+    monkeypatch.setenv("OMOP_VERSION", "5.4")
+    ignored = PRE_MEDS_DEFAULTS["tables_to_ignore"]
+    tables = {
+        "death": "person_id\n",
+        "note_nlp": "note_nlp_id\n",
+        "concept": "concept_id\n",
+        "cdm_source": CDM_SOURCE + CDM_SOURCE.splitlines()[1] + "\n",
+        "vocabulary": VOCABULARY,
+    }
+    split_overrides = {
+        "n_subjects_per_shard": 7,
+        "external_splits_json_fp": str(tmp_path / "splits.json"),
+    }
+    settings = _settings(
+        tmp_path,
+        monkeypatch,
+        tables,
+        stage_cfg={
+            "prefer_source": True,
+            "tables_to_ignore": [t for t in ignored if t != "cost"] + ["specimen"],
+        },
+        stages=["omop_pre_meds", {"split_and_shard_subjects": split_overrides}],
+        seed=3,
+    )
+
+    expected = {
+        "omop_meds_version": __version__,
+        "omop_version": "5.4",
+        "prefer_source": True,
+        "join_on_visit": False,
+        "tables_to_ignore_added": ["specimen"],
+        "tables_to_ignore_removed": ["cost"],
+        "tables_converted": ["death", "person"],
+        "tables_present_not_converted": ["cdm_source", "note_nlp", "vocabulary"],
+        "missing_vocabulary_tables": ["concept_relationship"],
+        "cdm_source_name": "Synthetic",
+        "cdm_source_abbreviation": "SYN",
+        "cdm_release_date": "2024-01-31",
+        "cdm_version": "v5.4",
+        "vocabulary_version": "v5.0 31-JAN-24",
+        "splits": {
+            "split_fracs": {"train": 0.8, "tuning": 0.1, "held_out": 0.1},
+            "seed": 3,
+            "n_subjects_per_shard": 7,
+            "external_splits": True,
+        },
+    }
+    assert {k: settings.get(k) for k in expected} == expected
+    # Nothing else but options at their values: no batching options, defaults, packaged config hash or paths.
+    assert set(settings) - set(expected) <= set(PRE_MEDS_DEFAULTS) - {
+        "tables_to_ignore"
+    }
+    assert not any(k.startswith("pre_meds_") for k in settings)
+    assert str(tmp_path) not in json.dumps(settings)
+    assert "cdm_source table has more than one row" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "tables, expected",
+    [
+        (
+            {
+                "cdm_source": "cdm_source_name,cdm_release_date\nSynthetic,2024-01-31\n",
+                "vocabulary": VOCABULARY,
+            },
+            {
+                "cdm_source_name": "Synthetic",
+                "cdm_release_date": "2024-01-31",
+                "vocabulary_version": "v5.0 31-AUG-24",
+            },
+        ),
+        ({"vocabulary": VOCABULARY}, {"vocabulary_version": "v5.0 31-AUG-24"}),
+        ({}, {}),
+    ],
+)
+def test_the_vocabulary_version_falls_back_to_the_vocabulary_table(
+    tmp_path: Path, monkeypatch, tables: dict, expected: dict
+):
+    settings = _settings(tmp_path, monkeypatch, tables)
+
+    assert {k: v for k, v in settings.items() if k in CDM_SOURCE_FIELDS} == expected
+
+
+def test_only_a_custom_spec_is_recorded_by_its_hash(tmp_path: Path, monkeypatch):
+    spec = OmegaConf.load(str(EVENT_CFG))
+    OmegaConf.save(spec, tmp_path / "copy.yaml")
+    spec.etl.n_subjects_per_shard = 7
+    OmegaConf.save(spec, tmp_path / "custom.yaml")
+
+    copied = _settings(
+        tmp_path / "a", monkeypatch, {}, MESSY_config_fp=str(tmp_path / "copy.yaml")
+    )
+    custom = _settings(
+        tmp_path / "b", monkeypatch, {}, MESSY_config_fp=str(tmp_path / "custom.yaml")
+    )
+
+    assert "custom_config" not in copied and "config_sha256" not in copied
+    assert custom["custom_config"] is True
+    assert len(custom["config_sha256"]) == 64
+
+
+def test_an_installed_config_that_differs_from_its_wheel_record_is_custom(
+    tmp_path: Path, monkeypatch
+):
+    common = Path(str(PRE_MEDS_COMMON_CFG)).resolve()
+    installed = urlsafe_b64encode(sha256(common.read_bytes()).digest()).rstrip(b"=")
+
+    def wheel_recording(value: str):
+        file = SimpleNamespace(
+            hash=SimpleNamespace(mode="sha256", value=value), locate=lambda: common
+        )
+        return lambda name: SimpleNamespace(files=[file])
+
+    monkeypatch.setattr(
+        importlib.metadata, "distribution", wheel_recording(installed.decode())
+    )
+    assert "custom_config" not in _settings(tmp_path / "a", monkeypatch, {})
+    monkeypatch.setattr(importlib.metadata, "distribution", wheel_recording("edited"))
+    assert _settings(tmp_path / "b", monkeypatch, {})["custom_config"] is True
+
+
+def _dataset_json(cohort: Path, dataset_version: str = "1") -> Path:
+    fp = cohort / "metadata" / "dataset.json"
+    fp.parent.mkdir(parents=True)
+    fp.write_text(
+        json.dumps(
+            {
+                "dataset_name": "D",
+                "dataset_version": dataset_version,
+                "etl_name": "MEDS_transforms",
+                "etl_version": "0.7.3",
+                "meds_version": "0.4.1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "sumeds_enrichment": {"rules": "OMOP"},
+            }
+        )
+    )
+    return fp
+
+
+def test_provenance_is_recorded_keeping_the_other_keys_idempotently(tmp_path: Path):
+    fp = _dataset_json(tmp_path / "cohort")
+    pre_MEDS_dir = tmp_path / PRE_MEDS_STAGE
+    pre_MEDS_dir.mkdir()
+    (pre_MEDS_dir / SETTINGS_FILE).write_text(
+        json.dumps({"omop_meds_version": "0.0.1", "omop_version": "5.5"})
+    )
+
+    record_provenance(tmp_path / "cohort", pre_MEDS_dir, athena_fallback=True)
+    first = fp.read_text()
+    record_provenance(tmp_path / "cohort", pre_MEDS_dir, athena_fallback=True)
+
+    assert fp.read_text() == first
+    dataset = json.loads(first)
+    DatasetMetadataSchema.validate(dataset)
+    assert (dataset["dataset_name"], dataset["created_at"]) == (
+        "D",
+        "2026-01-01T00:00:00+00:00",
+    )
+    assert dataset["sumeds_enrichment"] == {"rules": "OMOP"}
+    assert (dataset["etl_name"], dataset["etl_version"]) == ("OMOP_MEDS", __version__)
+    assert dataset["omop_meds"] == {
+        "omop_meds_version": "0.0.1",
+        "omop_version": "5.5",
+        "meds_extract_version": version("MEDS_extract"),
+        "meds_transforms_version": version("MEDS_transforms"),
+        "athena_fallback": True,
+    }
+    assert sorted(p.name for p in fp.parent.iterdir()) == ["dataset.json"]
+
+
+def test_provenance_without_settings_records_the_versions(tmp_path: Path, caplog):
+    fp = _dataset_json(tmp_path)
+
+    record_provenance(tmp_path, tmp_path / PRE_MEDS_STAGE)
+
+    assert SETTINGS_FILE in caplog.text
+    assert set(json.loads(fp.read_text())["omop_meds"]) == {
+        "omop_meds_version",
+        "meds_extract_version",
+        "meds_transforms_version",
+        "athena_fallback",
+    }
+
+
+def test_provenance_without_dataset_json_warns_and_skips(tmp_path: Path, caplog):
+    record_provenance(tmp_path, tmp_path / PRE_MEDS_STAGE)
+
+    assert "dataset.json" in caplog.text
+    assert not (tmp_path / "metadata").exists()
+
+
+@pytest.mark.parametrize(
+    "given, expected",
+    [("unknown:0.6.0", "2024-01-31:0.6.0"), ("unknown", "unknown"), ("1.0", "1.0")],
+)
+def test_without_a_dataset_version_the_cdm_release_names_the_build(
+    tmp_path: Path, given: str, expected: str
+):
+    fp = _dataset_json(tmp_path, dataset_version=given)
+    (tmp_path / PRE_MEDS_STAGE).mkdir()
+    (tmp_path / PRE_MEDS_STAGE / SETTINGS_FILE).write_text(
+        json.dumps({"cdm_release_date": "2024-01-31"})
+    )
+
+    for _ in range(2):
+        record_provenance(tmp_path, tmp_path / PRE_MEDS_STAGE)
+
+    assert json.loads(fp.read_text())["dataset_version"] == expected
