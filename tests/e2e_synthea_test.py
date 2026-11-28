@@ -35,8 +35,8 @@ E2E_TIMEOUT_S = 10 * 60
 
 N_SUBJECTS = 28
 N_DEATHS = 3
-# Identical under MEDS-Extract 0.6.2 and 0.8.0.
-N_EVENTS = 27_056
+# Identical under MEDS-Extract 0.6.2 and 0.8.0 before visit_detail events (27_056).
+N_EVENTS = 30_638
 # Visits by type, from `visit_concept_id` (9201 Inpatient, 9202 Outpatient, 9203 Emergency Room). Their
 # `visit_source_concept_id` is 0, so a source-only concept lookup would code every visit as
 # `OMOP_visit_occurrence//UNK`.
@@ -168,6 +168,14 @@ def test_e2e_synthea(tmp_path: Path, omop_version: str):
         for visit_type, n in N_VISITS_BY_TYPE.items()
         for boundary in ("start", "end")
     }
+    # Synthea writes one visit_detail segment per visit, coded like it but kept apart by the prefix.
+    detail_codes = dict(
+        events.filter(pl.col("table_name") == "visit_detail")
+        .group_by("code")
+        .len()
+        .iter_rows()
+    )
+    assert detail_codes == {f"VISIT_DETAIL//{c}": n for c, n in visit_codes.items()}
     prefixes = set(events["code_prefix"].unique().to_list())
     assert EXPECTED_CODE_PREFIXES <= prefixes, (
         f"missing: {EXPECTED_CODE_PREFIXES - prefixes}"

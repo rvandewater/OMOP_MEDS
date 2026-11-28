@@ -379,9 +379,12 @@ def main(cfg: DictConfig) -> None:
     # Cache care_site lookup once per run; False means unavailable and skip subsequent attempts.
     care_site_lookup: pl.LazyFrame | bool | None = None
 
-    def maybe_join_visit_occurrence_care_site(table_df: pl.LazyFrame) -> pl.LazyFrame:
+    # Tables whose events carry the care site's name as `text_value`.
+    care_site_tables = ("visit_occurrence", "visit_detail")
+
+    def maybe_join_care_site(table_df: pl.LazyFrame) -> pl.LazyFrame:
         """
-        Joins care_site_name from care_site table to visit_occurrence if care_site_id is present and care_site table is available. Caches the care_site lookup for efficiency.
+        Joins care_site_name from care_site table to a visit or visit_detail table if care_site_id is present and care_site table is available. Caches the care_site lookup for efficiency.
         """
         nonlocal care_site_lookup
 
@@ -482,8 +485,8 @@ def main(cfg: DictConfig) -> None:
                 start=1,
             ):
                 processed_df = fn(df, concept_df, patient_df)
-                if tbl_prefix == "visit_occurrence":
-                    processed_df = maybe_join_visit_occurrence_care_site(processed_df)
+                if tbl_prefix in care_site_tables:
+                    processed_df = maybe_join_care_site(processed_df)
 
                 processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
                 part_fp = temp_out_dir / f"part_{batch_idx:05d}.parquet"
@@ -528,8 +531,8 @@ def main(cfg: DictConfig) -> None:
                     f"Skipping {tbl_prefix} as it is empty after preprocessing (potentially due to filtering subjects)."
                 )
                 continue
-            if tbl_prefix == "visit_occurrence":
-                processed_df = maybe_join_visit_occurrence_care_site(processed_df)
+            if tbl_prefix in care_site_tables:
+                processed_df = maybe_join_care_site(processed_df)
 
             processed_df = processed_df.with_columns(table_name=pl.lit(tbl_prefix))
             if processed_df.limit(1).collect().is_empty():
@@ -561,8 +564,8 @@ def main(cfg: DictConfig) -> None:
             selector
         )
         processed_df = functions[table](empty, concept_df, patient_df)
-        if table == "visit_occurrence":
-            processed_df = maybe_join_visit_occurrence_care_site(processed_df)
+        if table in care_site_tables:
+            processed_df = maybe_join_care_site(processed_df)
         processed_df.with_columns(table_name=pl.lit(table)).sink_parquet(
             MEDS_input_dir / f"{table}.parquet"
         )

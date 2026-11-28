@@ -218,3 +218,19 @@ note:
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
     link_id: $note_id
+
+# Segments of a visit, such as ICU stays and ward transfers. visit_detail_concept_id takes the same Visit concepts
+# as visit_concept_id, so the VISIT_DETAIL prefix keeps a transfer to an inpatient unit (IP) apart from an
+# inpatient admission (Visit//IP//start).
+visit_detail:
+  visit_detail:
+    code: f"VISIT_DETAIL//{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//start"
+    time: $visit_detail_start_datetime ?? ($visit_detail_start_date @ 11:59:59 p.m.)
+    visit_occurrence_id: $visit_occurrence_id
+    text_value: $care_site_name
+    table_name: $table_name
+  visit_detail_end:
+    code: f"VISIT_DETAIL//{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//end"
+    time: $visit_detail_end_datetime ?? ($visit_detail_end_date @ 11:59:59 p.m.)
+    visit_occurrence_id: $visit_occurrence_id
+    table_name: $table_name

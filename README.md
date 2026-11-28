@@ -524,7 +524,11 @@ See `build_preferred_event_datetime` function in the code for more details on ho
 ## Particularities
 
 - Care site is added to the visit as text
-- Add support for care_site table (visit_detail)
+- `visit_detail` segments of a visit (ICU stays, ward transfers) become `VISIT_DETAIL//<vocabulary_id>//<concept_code>//start`
+    and `//end` events, e.g. `VISIT_DETAIL//Visit//OMOP4822460//start` for an ICU stay (concept 32037). The prefix
+    keeps a segment apart from a visit, as both use the same Visit concepts: a transfer to an inpatient unit is
+    `VISIT_DETAIL//Visit//IP//start`, an inpatient admission `Visit//IP//start`. The start event has the care site's
+    `care_site_name` as `text_value` (the `care_site_id` when there is no `care_site` table), as visits do.
 
 ## Citation
 
