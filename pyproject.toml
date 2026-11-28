@@ -25,10 +25,13 @@ classifiers = [
 # registers the `sumeds_enrich` stage, which enriches metadata/codes.parquet, records that in
 # metadata/dataset.json, and soft-fails (e.g. on a server without internet) so the extraction is kept; the
 # tests use its shared contracts (`sumeds.testing.contracts`).
+# Polars >= 2.1: earlier versions (1.x and 2.0) stream a left join whose key column is entirely null pathologically
+# slowly, e.g. the concept join on the source concept ids of an export that has none (INSPECT's visit_detail, 1M
+# rows: more than 20 minutes on 1.41, under a second on 2.1). MEDS-Transforms caps Polars below 3.
 dependencies = [
   "MEDS-extract[download]>=0.9.2,<0.10",
   "sumeds>=0.6.11,<0.7",
-  "hydra-core", "loguru", "polars>=1.26", "omop_schema>=0.1.0", "meds~=0.4.1",
+  "hydra-core", "loguru", "polars>=2.1", "omop_schema>=0.1.0", "meds~=0.4.1",
   "tqdm"
 ]
 
@@ -39,7 +42,7 @@ dev = ["pre-commit<4", "mdformat-admon"]
 tests = ["pytest", "pytest-cov", "hydra-joblib-launcher", "requests"]
 local_parallelism = ["hydra-joblib-launcher"]
 slurm_parallelism = ["hydra-submitit-launcher"]
-large_data = ["polars[rt64]"]
+large_data = ["polars[rt64]>=2.1"]
 # MEDS-Extract's `redivis` download source, for OMOP releases on Redivis such as INSPECT (see the README).
 redivis = ["MEDS-extract[redivis]"]
 
