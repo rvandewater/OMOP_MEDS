@@ -294,6 +294,7 @@ def join_concept(
     reference_cols: str | list[str] | None = None,
     output_data_cols: list[str] | None = None,
     concept_cols: list[str] | None = None,
+    concept_lookup_cols: dict[str, str] | None = None,
     prefer_source: bool = False,
 ) -> Callable[[pl.LazyFrame, pl.LazyFrame], pl.LazyFrame]:
     """Returns a function that joins a dataframe to the `patient` table and adds pseudotimes.
@@ -305,6 +306,8 @@ def join_concept(
         reference_cols: list of all columns that link to the concept_id
         concept_cols: list of all columns that are included in the concept table and
         should be added to the output
+        concept_lookup_cols: `{<x>_concept_id: concept_code | concept_name}`; adds that field of the concept
+            as the column `<x>_concept_code` or `<x>_concept_name` (see `join_concept_lookups`).
         prefer_source: If True, prefer the source concept over the mapped concept.
     Returns:
         Function that expects the raw data stored in the `table_name` table and the joined output of the
@@ -346,7 +349,8 @@ def join_concept(
     if isinstance(reference_cols, str):
         reference_cols = [reference_cols]
 
-    base_output_cols = list(output_data_cols)
+    concept_lookup_cols = dict(concept_lookup_cols or {})
+    base_output_cols = [*output_data_cols, *concept_lookup_names(concept_lookup_cols)]
     base_concept_cols = list(concept_cols)
 
     def fn(
@@ -374,6 +378,7 @@ def join_concept(
         # df = df.with_columns("preferred_vocabulary_name", pl.lit(None))
         # Keep only the persons that are in the patient table
         df = df.join(person_df, on=SUBJECT_ID, how="semi")
+        df = join_concept_lookups(df, concept_df, concept_lookup_cols)
         if len(reference_cols) > 0:
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64).replace(0, None))
             if len(reference_cols) == 1:
@@ -442,6 +447,60 @@ def join_concept(
         return df.select(to_select)
 
     return fn
+
+
+def concept_lookup_names(lookups: dict[str, str]) -> list[str]:
+    """The columns `join_concept_lookups` adds: `<x>_concept_id: <field>` adds `<x>_<field>`.
+
+    Examples:
+        >>> concept_lookup_names({"unit_concept_id": "concept_code", "value_as_concept_id": "concept_name"})
+        ['unit_concept_code', 'value_as_concept_name']
+    """
+    return [
+        f"{col.removesuffix('_concept_id')}_{field}" for col, field in lookups.items()
+    ]
+
+
+def join_concept_lookups(
+    df: pl.LazyFrame, concept_df: pl.LazyFrame, lookups: dict[str, str]
+) -> pl.LazyFrame:
+    """Adds the `concept_code` or `concept_name` of each `*_concept_id` column in `lookups`.
+
+    A concept ID that is 0, null or not in `concept_df` gives null, and so does a column missing from `df`, so
+    that event configs can fall back to the source value `<x>_source_value`. A single input file need not have
+    every CDM column, so that fallback is added as null when `df` lacks it. `concept_id` is the concept table's
+    primary key, so each left join keeps the row count; it reads only two columns of `concept_df`.
+
+    Examples:
+        >>> df = pl.LazyFrame({"unit_concept_id": [8840, 0, None, 9]})
+        >>> concept_df = pl.LazyFrame({"concept_id": [8840], "concept_code": ["mg/dL"], "concept_name": ["mg"]})
+        >>> out = join_concept_lookups(
+        ...     df, concept_df, {"unit_concept_id": "concept_code", "value_as_concept_id": "concept_name"}
+        ... ).collect()
+        >>> out["unit_concept_code"].to_list(), out["value_as_concept_name"].null_count()
+        (['mg/dL', None, None, None], 4)
+        >>> out["unit_source_value"].dtype, out["unit_source_value"].null_count()
+        (String, 4)
+    """
+    schema = df.collect_schema()
+    for (col, field), out in zip(lookups.items(), concept_lookup_names(lookups)):
+        if (source := f"{col.removesuffix('_concept_id')}_source_value") not in schema:
+            df = df.with_columns(pl.lit(None, pl.String).alias(source))
+        if col not in schema:
+            df = df.with_columns(pl.lit(None, pl.String).alias(out))
+            continue
+        right = concept_df.select(
+            pl.col("concept_id").cast(pl.Int64).alias("_lookup_id"),
+            pl.col(field).cast(pl.String).alias(out),
+        )
+        df = (
+            df.with_columns(
+                pl.col(col).cast(pl.Int64).replace(0, None).alias("_lookup_id")
+            )
+            .join(right, on="_lookup_id", how="left")
+            .drop("_lookup_id")
+        )
+    return df
 
 
 def col_selector(

@@ -80,8 +80,8 @@ observation:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"
     time: $observation_datetime ?? ($observation_date @ 11:59:59 p.m.)
     numeric_value: $value_as_number
-    unit: $unit_concept_id
-    text_value: $value_as_string
+    unit: $unit_concept_code ?? $unit_source_value
+    text_value: $value_as_string ?? $value_as_concept_name
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
 
@@ -90,7 +90,8 @@ measurement:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"
     time: $measurement_datetime ?? ($measurement_date @ 11:59:59 p.m.)
     numeric_value: $value_as_number
-    unit: $unit_concept_id
+    unit: $unit_concept_code ?? $unit_source_value
+    text_value: $value_as_concept_name
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
 
@@ -135,7 +136,7 @@ specimen:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$specimen_concept_id ?? 'UNK'}"
     time: $specimen_datetime ?? ($specimen_date @ 11:59:59 p.m.)
     numeric_value: $quantity
-    unit: $unit_concept_id
+    unit: $unit_concept_code ?? $unit_source_value
     table_name: $table_name
 
 device_exposure:
@@ -157,13 +158,13 @@ dose_era:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//start"
     time: $dose_era_start_date
     numeric_value: $dose_value
-    unit: $unit_concept_id
+    unit: $unit_concept_code
     table_name: $table_name
   dose_era_end:
     code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//end"
     time: $dose_era_end_date
     numeric_value: $dose_value
-    unit: $unit_concept_id
+    unit: $unit_concept_code
     table_name: $table_name
 
 condition_occurrence:
