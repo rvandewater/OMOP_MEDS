@@ -45,14 +45,16 @@ sources:
 # component nulls the whole code and the row is dropped. Without the fallback, observations and visits whose
 # concept cannot be resolved would be dropped, reported only in the per-stage logs under
 # MEDS_cohort/convert_to_MEDS_events/.logs.
-# OMOP requires an event's date but not its datetime, and fills an unknown time of day with 00:00:00. A time is
-# unknown when its `*_datetime` is empty or exactly midnight (`omop_pre_meds` nulls midnights, unless
+# OMOP requires an event's date but not its datetime. For an unknown time of day, the CDM's general conventions
+# choose 00:00:00 and its field-level conventions leave `*_datetime` NULL. A time is unknown when its `*_datetime`
+# is empty or exactly midnight, which covers sources that follow either (`omop_pre_meds` nulls midnights, unless
 # midnight_is_unknown_time=false). An event with an unknown time is timed at the end of its date (23:59:59), as
 # `note`'s datetime_resolver does: the latest time it can have happened, so it never leaks into the rest of its
 # day. This holds for point events, every interval end, era starts and ends, deaths and notes. The starts of the
 # intervals that anchor the others, visits and observation periods, are timed at the start of their date (00:00)
 # instead, so an admission stays before that day's events: an early anchor gives a prediction less information,
-# never more. MEDS_BIRTH is unchanged. The pre-MEDS configs keep each of these date columns.
+# never more, and an observation period holds every event of its first and last day. MEDS_BIRTH is unchanged:
+# THEMIS sets an unknown birth time to midnight. The pre-MEDS configs keep each of these date columns.
 _defaults:
   subject_id: $person_id
 

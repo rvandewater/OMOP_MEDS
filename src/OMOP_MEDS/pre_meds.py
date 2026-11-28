@@ -209,13 +209,13 @@ def main(cfg: DictConfig) -> None:
             "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
             " This has major implications for downstream analysis."
         )
-    # OMOP fills an unknown time of day with 00:00:00; such times are nulled so that each event falls back to its
+    # The CDM's general conventions fill an unknown time of day with 00:00:00; such times are nulled so that each event falls back to its
     # date at the end (or, for visit starts, the start) of the day. Off for sources whose midnights are real.
     midnight_is_unknown_time = bool(cfg.get("midnight_is_unknown_time", True))
     if not midnight_is_unknown_time:
         logger.warning(
             "midnight_is_unknown_time=False: times of exactly 00:00:00 are kept. If the source fills unknown "
-            "times with midnight, as the OMOP CDM convention does, those events leak into the rest of their day."
+            "times with midnight, as the OMOP CDM's general conventions do, those events leak into the rest of their day."
         )
     MEDS_input_dir = Path(cfg.pre_MEDS_dir)
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)

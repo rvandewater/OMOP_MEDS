@@ -132,7 +132,7 @@ Preserve these invariants:
 - Do not silently drop supported OMOP tables. Missing input tables can be skipped with warnings; unexpected present-but-unhandled tables should remain visible in logs.
 - Preserve `table_name` in pre-MEDS outputs used by event conversion.
 - Notes use `preferred_time` so last-edit timestamps can prevent temporal leakage. Do not regress note datetime handling.
-- A time is unknown when its `*_datetime` is empty or exactly 00:00:00 (the OMOP CDM fills unknown times with midnight; `midnight_is_unknown_time`, default true). An unknown time falls back to the end of its date (23:59:59), except visit and observation-period starts, which fall back to the start (00:00), and `MEDS_BIRTH`, which is unchanged. Keep tests around this behavior (`tests/test_date_only_events.py`, `tests/test_unknown_midnight.py`).
+- A time is unknown when its `*_datetime` is empty or exactly 00:00:00 (the CDM's general conventions fill unknown times with midnight, its field-level conventions leave them NULL; `midnight_is_unknown_time`, default true). An unknown time falls back to the end of its date (23:59:59), except visit and observation-period starts, which fall back to the start (00:00), and `MEDS_BIRTH`, which is unchanged (THEMIS sets an unknown birth time to midnight). Keep tests around this behavior (`tests/test_date_only_events.py`, `tests/test_unknown_midnight.py`).
 - Visit events may include `care_site_name` when `care_site` is available. Missing `care_site` should not break the run.
 
 ## Polars and performance rules

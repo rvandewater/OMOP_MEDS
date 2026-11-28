@@ -60,7 +60,7 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
 def null_unknown_midnight(df: pl.LazyFrame) -> pl.LazyFrame:
     """Null every `*_datetime` at exactly 00:00:00, so that the event's date fallback times it instead.
 
-    The OMOP CDM fills an unknown time of day with midnight. Left as is, such an event would sort before
+    The OMOP CDM's general conventions fill an unknown time of day with midnight. Left as is, such an event would sort before
     everything else on its date and leak into predictions made earlier that day. Text columns (CSV extension
     columns outside the CDM schema) are parsed first; a date-only text value is a midnight, so it is nulled too.
 

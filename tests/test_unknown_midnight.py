@@ -1,10 +1,10 @@
-"""Midnight-filled `*_datetime` values: the OMOP CDM fills an unknown time of day with 00:00:00 (#54).
+"""Midnight-filled `*_datetime` values: the OMOP CDM's general conventions fill an unknown time with 00:00:00 (#54).
 
 Such a time is unknown, like an empty one: the event is timed at the end of its date (23:59:59), a visit start at
 its start (00:00), so that it never leaks into predictions made earlier that day.
 """
 
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 
 import polars as pl
@@ -73,7 +73,8 @@ def _set(column: str, values: dict[int, str | None]) -> pl.Expr:
 
 
 def _stage_with_midnights(raw: Path) -> Path:
-    """The demo, with a null and a midnight visit start, a midnight visit end and notes at midnight."""
+    """The demo, with a null and a midnight visit start, a midnight visit end, notes at midnight and an
+    observation period per person from the first to the last date of their visits and observations."""
     _stage_demo_as("5.4", raw)
     visits = pl.read_csv(raw / "visit_occurrence.csv", infer_schema=False)
     visits.with_columns(
@@ -99,6 +100,24 @@ def _stage_with_midnights(raw: Path) -> Path:
         ),
         _set("xtn_note_last_edit_date", {0: None, 1: "2023-01-03", 2: "2023-01-03"}),
     ).write_csv(raw / "note.csv")
+
+    dates = [
+        pl.read_csv(raw / f"{table}.csv", infer_schema=False).select(
+            "person_id", pl.col(column).alias("date")
+        )
+        for table, column in (
+            ("observation", "observation_date"),
+            ("visit_occurrence", "visit_start_date"),
+            ("visit_occurrence", "visit_end_date"),
+        )
+    ]
+    pl.concat(dates).group_by("person_id").agg(
+        observation_period_start_date=pl.col("date").min(),
+        observation_period_end_date=pl.col("date").max(),
+    ).sort("person_id").with_columns(
+        observation_period_id=pl.int_range(1, pl.len() + 1),
+        period_type_concept_id=pl.lit(32817),
+    ).write_csv(raw / "observation_period.csv")
     return raw
 
 
@@ -125,9 +144,12 @@ def runs(tmp_path_factory) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
 
 
 IS_MIDNIGHT = pl.col("time").dt.time() == pl.time(0)
-VISIT_START = (pl.col("table_name") == "visit_occurrence") & pl.col(
-    "code"
-).str.ends_with("//start")
+STARTS = pl.col("code").str.ends_with("//start")
+VISIT_START = (pl.col("table_name") == "visit_occurrence") & STARTS
+#: The starts of the intervals that anchor the other events stay at the start of their day.
+ANCHOR_START = (
+    pl.col("table_name").is_in(["visit_occurrence", "observation_period"]) & STARTS
+)
 
 
 def test_midnight_times_move_to_the_end_of_their_day(runs):
@@ -136,14 +158,14 @@ def test_midnight_times_move_to_the_end_of_their_day(runs):
     assert off.filter((pl.col("code") == "MEDS_DEATH") & IS_MIDNIGHT).height > 0
     assert (
         off.filter(
-            ~VISIT_START & IS_MIDNIGHT & pl.col("code").str.ends_with("//end")
+            ~ANCHOR_START & IS_MIDNIGHT & pl.col("code").str.ends_with("//end")
         ).height
         > 0
     )
 
-    # Every event is the same, but for its time: a midnight one is at 23:59:59, except births and visit starts.
-    # Notes resolve their time from their last edit too; see below.
-    keep_midnight = (pl.col("code") == "MEDS_BIRTH") | VISIT_START
+    # Every event is the same, but for its time: a midnight one is at 23:59:59, except births and the starts of
+    # visits and observation periods. Notes resolve their time from their last edit too; see below.
+    keep_midnight = (pl.col("code") == "MEDS_BIRTH") | ANCHOR_START
     expected = off.filter(pl.col("table_name") != "note").with_columns(
         time=pl.when(IS_MIDNIGHT & ~keep_midnight)
         .then(pl.col("time") + END_OF_DAY)
@@ -207,3 +229,25 @@ def test_births_are_unchanged(runs):
     ]
     assert births[0].height > 0
     assert births[0].equals(births[1])
+
+
+def test_observation_periods_hold_every_event_of_their_first_and_last_day(runs):
+    """No record can be outside a valid observation period (OMOP CDM): a period starts at 00:00 on its first date
+    and ends at 23:59:59 on its last, so it holds that day's events at any time of day."""
+    _, on, _ = runs
+    period = on.filter(pl.col("table_name") == "observation_period")
+    bounds = period.group_by("subject_id").agg(
+        start=pl.col("time").filter(STARTS).min(),
+        end=pl.col("time").filter(~STARTS).max(),
+    )
+    assert bounds.height > 0
+    assert (bounds["start"].dt.time() == time(0)).all()
+    assert (bounds["end"].dt.time() == time(23, 59, 59)).all()
+    # The periods span the persons' visits and observations, so those events all lie inside them.
+    inside = on.filter(
+        pl.col("table_name").is_in(["visit_occurrence", "observation"])
+    ).join(bounds, on="subject_id")
+    assert inside.height > 0
+    assert inside.filter(
+        (pl.col("time") < pl.col("start")) | (pl.col("time") > pl.col("end"))
+    ).is_empty()
