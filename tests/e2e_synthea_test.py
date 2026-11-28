@@ -191,9 +191,9 @@ def test_e2e_synthea(tmp_path: Path, omop_version: str):
     CodeMetadataSchema.validate(codes_table)
     codes = pl.from_arrow(codes_table)
     assert set(codes["code"]) == set(events["code"])
-    undescribed = codes.filter(pl.col("description").is_null())
-    assert set(undescribed["table_name"]) <= {
+    undescribed = codes.filter(pl.col("description").is_null()).explode("tables")
+    assert set(undescribed["tables"]) <= {
         "person",
         "person_death",
         "observation_period",
-    }, undescribed.group_by("table_name").len().rows()
+    }, undescribed.group_by("tables").len().rows()

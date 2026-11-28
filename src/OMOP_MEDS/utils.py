@@ -22,7 +22,7 @@ ARROW_STRING_TYPES = {
 RESERVED_SPEC_KEYS = frozenset({"etl", "sources"})
 CODES_METADATA_COLUMNS = [
     "code",
-    "table_name",
+    "tables",
     "occurrence_count",
     "base_code",
     "vocabulary_id",
@@ -41,7 +41,8 @@ def finish_codes_metadata(
     Each code is linked to the OMOP concept it was built from (see `code_concept_links`) and gets that
     concept's `concept_name` as description and, as parent codes, the `vocabulary_id//concept_code` of
     every concept it "Maps to" in the source `concept_relationship` table (`extract_codes_metadata`).
-    Codes are listed once per table they occur in, with their occurrence count.
+    Each code is listed once, with its occurrence count over all tables and the sorted names of the tables
+    it occurs in (`tables`; null for codes without a `table_name`, such as literal codes).
 
     Returns:
         The path of the written file, or None when the pre-MEDS concept metadata is missing.
@@ -60,27 +61,25 @@ def finish_codes_metadata(
     collected = (
         pl.scan_parquet(MEDS_cohort_dir / "data/**/*.parquet")
         .select(["code", "table_name"])
-        .group_by(["code", "table_name"])
-        .agg(pl.len().alias("occurrence_count"))
+        .group_by("code")
+        .agg(
+            pl.len().alias("occurrence_count"),
+            pl.col("table_name").drop_nulls().unique().sort().alias("tables"),
+        )
         .collect()
         .with_columns(
-            pl.col("code").str.replace(r"(//start|//end)$", "").alias("base_code")
+            pl.when(pl.col("tables").list.len() > 0).then(pl.col("tables")),
+            pl.col("code").str.replace(r"(//start|//end)$", "").alias("base_code"),
         )
     )
     links = code_concept_links(pre_MEDS_dir, OmegaConf.load(event_cfg_path))
-    table_key = pl.col("table_name").fill_null("")
     merged = (
-        collected.with_columns(table_key.alias("_table_key"))
-        .join(
-            links.with_columns(table_key.alias("_table_key")).drop("table_name"),
-            on=["code", "_table_key"],
-            how="left",
-        )
+        collected.join(links, on="code", how="left")
         .join(_concept_metadata(codes_source), on="concept_id", how="left")
         .with_columns(_drop_self_parent(pl.col("parent_codes")))
         .select(CODES_METADATA_COLUMNS)
         # Group-by and joins return rows in no fixed order; sorted, the same data writes the same file.
-        .sort(["code", "table_name"], nulls_last=True)
+        .sort("code")
     )
     write_codes_metadata(merged, codes_dest)
     logger.info(
@@ -92,43 +91,48 @@ def finish_codes_metadata(
 
 
 def code_concept_links(pre_MEDS_dir: Path, event_cfg) -> pl.DataFrame:
-    """Returns the OMOP concept each event code stands for, as `code`, `table_name`, `concept_id`.
+    """Returns the OMOP concept each event code stands for, as `code`, `concept_id`: one row per code.
 
-    The codes are rendered with the event config's own code templates on the pre-MEDS tables, so the link
-    holds whatever the template's concept component is: `preferred_concept_name`, which is a
-    `concept_code` for tables joined on a mapped and a source concept but a `concept_id` for tables
-    joined on one (its concept is the pre-MEDS `preferred_concept_id`), or a raw `*_concept_id` column.
-    Joining the metadata on the code string instead would key both kinds by `concept_id` and miss, or
-    mislabel, every `concept_code` code. Templates without a concept column (e.g. `GENDER//{$gender}`) and
-    literal codes are not linked.
+    The codes are rendered with the event config's own code templates on the pre-MEDS tables, and each is
+    linked to the concept behind its concept component: the pre-MEDS `preferred_concept_id` for
+    `preferred_concept_name` (the concept's `concept_code`, or `<column>:<ids>` in an
+    `OMOP_<table>//...` code for a concept missing from the concept table), or a raw `*_concept_id`
+    column. Matching the code string against `vocabulary_id//concept_code` instead would miss those
+    fallback codes and the raw `concept_id` ones. A code that several tables emit (e.g. `drug_era` and
+    `drug_exposure`) is linked once; one that stands for several concepts gets the lowest `concept_id`,
+    with a warning. Templates without a concept column (e.g. `GENDER//{$gender}`) and literal codes are
+    not linked.
 
     Examples:
         >>> import tempfile
+        >>> code = 'f"{$preferred_vocabulary_name}//{$preferred_concept_name}"'
         >>> event_cfg = {
         ...     "subject_id_col": "person_id",
-        ...     "measurement": {"measurement": {
-        ...         "code": 'f"{$preferred_vocabulary_name}//{$preferred_concept_name}"',
-        ...         "time": "$measurement_datetime", "table_name": "$table_name"}},
+        ...     "measurement": {"measurement": {"code": code, "time": "$measurement_datetime"}},
+        ...     "observation": {"observation": {"code": code, "time": "$observation_datetime"}},
         ...     "drug_era": {"drug_era": {
         ...         "code": 'f"{$preferred_vocabulary_name}//{$preferred_concept_name}//start"',
-        ...         "time": "$drug_era_start_date", "table_name": "$table_name"}},
+        ...         "time": "$drug_era_start_date"}},
         ...     "person_birth_death": {"death": {"code": "MEDS_DEATH", "time": "$date_of_death"}},
         ... }
         >>> with tempfile.TemporaryDirectory() as d:
         ...     pl.DataFrame({
         ...         "preferred_vocabulary_name": ["LOINC", "OMOP_measurement"],
-        ...         "preferred_concept_name": ["718-7", "measurement_concept_id:3000963,0"],
-        ...         "preferred_concept_id": [3000963, 3000963],
-        ...         "table_name": ["measurement", "measurement"],
+        ...         "preferred_concept_name": ["718-7", "measurement_concept_id:2000000001,0"],
+        ...         "preferred_concept_id": [3000963, 2000000001],
         ...     }).write_parquet(Path(d) / "measurement.parquet")
         ...     pl.DataFrame({
+        ...         "preferred_vocabulary_name": ["LOINC"],
+        ...         "preferred_concept_name": ["718-7"],
+        ...         "preferred_concept_id": [3000963],
+        ...     }).write_parquet(Path(d) / "observation.parquet")
+        ...     pl.DataFrame({
         ...         "preferred_vocabulary_name": ["RxNorm"],
-        ...         "preferred_concept_name": [1125315],
+        ...         "preferred_concept_name": ["161"],
         ...         "preferred_concept_id": [1125315],
-        ...         "table_name": ["drug_era"],
         ...     }).write_parquet(Path(d) / "drug_era.parquet")
         ...     code_concept_links(Path(d), event_cfg).sort("code").rows()
-        [('LOINC//718-7', 'measurement', 3000963), ('OMOP_measurement//measurement_concept_id:3000963,0', 'measurement', 3000963), ('RxNorm//1125315//start', 'drug_era', 1125315)]
+        [('LOINC//718-7', 3000963), ('OMOP_measurement//measurement_concept_id:2000000001,0', 2000000001), ('RxNorm//161//start', 1125315)]
     """
     links = []
     for table, events in event_cfg.items():
@@ -156,34 +160,28 @@ def code_concept_links(pre_MEDS_dir: Path, event_cfg) -> pl.DataFrame:
                     f"{sorted(needed)} (re-run pre-MEDS with do_overwrite=True)."
                 )
                 continue
-            table_name = event.get("table_name")
             links.append(
                 df.select(
                     code=code.polars_expr,
-                    table_name=(
-                        Parser.expr_to_polars(str(table_name))
-                        if table_name is not None
-                        else pl.lit(None, dtype=pl.String)
-                    ).cast(pl.String),
                     concept_id=pl.col(concept_col).cast(pl.Int64),
                 )
                 .drop_nulls(["code", "concept_id"])
                 .unique()
             )
-    schema = {"code": pl.String, "table_name": pl.String, "concept_id": pl.Int64}
+    schema = {"code": pl.String, "concept_id": pl.Int64}
     if not links:
         return pl.DataFrame(schema=schema)
     links = (
         pl.concat(links)
-        .group_by("code", "table_name")
+        .group_by("code")
         .agg(pl.col("concept_id").min(), pl.col("concept_id").n_unique().alias("n"))
         .collect(engine="streaming")
     )
     n_ambiguous = links.filter(pl.col("n") > 1).height
     if n_ambiguous:
         logger.warning(
-            f"{n_ambiguous} codes stand for more than one concept (same vocabulary_id and concept_code); "
-            "they are linked to the lowest concept_id."
+            f"{n_ambiguous} codes stand for more than one concept (e.g. the same vocabulary_id and "
+            "concept_code); they are linked to the lowest concept_id."
         )
     return links.select(list(schema))
 

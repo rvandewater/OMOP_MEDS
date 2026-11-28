@@ -428,8 +428,8 @@ be functional. We also include a small sample of synthetic (LLM-generated) data 
 
 ## Code metadata (`codes.parquet`)
 
-`metadata/codes.parquet` lists every code in the data, once per OMOP table it comes from (`table_name`,
-`occurrence_count`), and links it to the OMOP concept it was built from (`concept_id`). Codes from tables
+`metadata/codes.parquet` lists every code in the data once, with its `occurrence_count` and the OMOP tables it
+comes from (`tables`), and links it to the OMOP concept it was built from (`concept_id`). Codes from tables
 with a mapped and a source concept (observation, measurement, visit occurrence, condition and procedure
 occurrences, and device exposure end) end in the concept's `concept_code`, e.g. `LOINC//718-7`; the other
 tables end in its `concept_id`. From the source database's own vocabulary tables, each code gets:
