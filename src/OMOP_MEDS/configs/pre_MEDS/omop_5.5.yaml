@@ -371,7 +371,7 @@ procedure_occurrence:
     ]
 
 note:
-  reference_cols: ["note_type_concept_id"] # TODO check if correct join column
+  reference_cols: ["note_class_concept_id", "note_type_concept_id"]
   output_data_cols:
     [
       "note_id",

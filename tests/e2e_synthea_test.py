@@ -168,6 +168,23 @@ def test_e2e_synthea(tmp_path: Path, omop_version: str):
         for visit_type, n in N_VISITS_BY_TYPE.items()
         for boundary in ("start", "end")
     }
+    # Drug and condition codes end in the concept_code (e.g. RxNorm's), never in the OMOP concept_id.
+    concept = pl.read_csv(raw_input_dir / "concept.csv", infer_schema_length=0)
+    vocabulary_codes = set(
+        concept.select(pl.concat_str("vocabulary_id", "concept_code", separator="//"))
+        .to_series()
+        .to_list()
+    )
+    concept_codes = set(
+        events.filter(
+            pl.col("table_name").is_in(["drug_exposure", "drug_era", "condition_era"])
+        )["code"]
+        .str.replace(r"//(start|end)$", "")
+        .to_list()
+    )
+    assert concept_codes and concept_codes <= vocabulary_codes, sorted(
+        concept_codes - vocabulary_codes
+    )[:10]
     prefixes = set(events["code_prefix"].unique().to_list())
     assert EXPECTED_CODE_PREFIXES <= prefixes, (
         f"missing: {EXPECTED_CODE_PREFIXES - prefixes}"
@@ -184,9 +201,8 @@ def test_e2e_synthea(tmp_path: Path, omop_version: str):
         f"events without a time: {untimed - STATIC_CODE_PREFIXES}"
     )
 
-    # Synthea ships the concepts its tables use, so every code built from a concept is described, both those
-    # ending in a concept_code (observation, measurement, ...) and those ending in a concept_id (eras,
-    # drug exposures). Only literal codes and concepts missing from its concept table stay undescribed.
+    # Synthea ships the concepts its tables use, so every code built from a concept is described. Only
+    # literal codes and concepts missing from its concept table stay undescribed.
     codes_table = pq.read_table(metadata / "codes.parquet")
     CodeMetadataSchema.validate(codes_table)
     codes = pl.from_arrow(codes_table)

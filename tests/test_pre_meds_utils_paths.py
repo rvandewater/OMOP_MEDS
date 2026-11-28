@@ -152,6 +152,7 @@ CONCEPTS = pl.LazyFrame(
         "concept_id": [10, 20],
         "vocabulary_id": ["LOINC", "SNOMED"],
         "concept_name": ["Heart rate", "Fever"],
+        "concept_code": ["8867-4", "386661006"],
     }
 )
 PERSONS = pl.LazyFrame({SUBJECT_ID: [1, 2]})
@@ -199,15 +200,15 @@ def test_join_concept_with_a_single_reference_column_given_as_str():
         "preferred_concept_id",
     ]
     # Concept id 0 means "no concept": it is nulled, joins nothing, and the vocabulary falls back to the
-    # table-specific OMOP_<table> name. With one reference column the code ends in the concept_id itself,
-    # which is also the concept the code metadata is joined on.
+    # table-specific OMOP_<table> name. With one reference column the code ends in the concept_code, as
+    # with two, and the concept the code metadata is joined on is the concept_id.
     assert out.select(
         "concept_name",
         "preferred_concept_name",
         "preferred_vocabulary_name",
         "preferred_concept_id",
     ).rows() == [
-        ("Heart rate", 10, "LOINC", 10),
+        ("Heart rate", "8867-4", "LOINC", 10),
         (None, None, "OMOP_observation", None),
     ]
 

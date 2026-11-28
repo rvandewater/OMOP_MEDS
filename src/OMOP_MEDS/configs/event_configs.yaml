@@ -19,8 +19,8 @@ etl:
     - omop_pre_meds
   post_stages:
     - omop_codes_metadata
-    # Rules registered by this package (src/OMOP_MEDS/sumeds_rules.yaml). No Athena source: suMEDS matches
-    # code strings, and many OMOP codes end in a concept_id (see the README).
+    # Rules registered by this package (src/OMOP_MEDS/sumeds_rules.yaml). No Athena source (see the
+    # README).
     - sumeds_enrich:
         rules: OMOP
 
@@ -119,20 +119,20 @@ observation_period:
 
 drug_exposure:
   drug_exposure:
-    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$drug_concept_id ?? 'UNK'}//start"
+    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//start"
     time: $drug_exposure_start_datetime ?? ($drug_exposure_start_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
   drug_exposure_end:
-    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$drug_concept_id ?? 'UNK'}//end"
+    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//end"
     time: $drug_exposure_end_datetime ?? ($drug_exposure_end_date @ 11:59:59 p.m.)
     visit_occurrence_id: $visit_occurrence_id
     table_name: $table_name
 
 specimen:
   specimen:
-    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$specimen_concept_id ?? 'UNK'}"
+    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}"
     time: $specimen_datetime ?? ($specimen_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     unit: $unit_concept_id
@@ -140,7 +140,7 @@ specimen:
 
 device_exposure:
   device_exposure:
-    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$device_concept_id ?? 'UNK'}//start"
+    code: f"{$preferred_vocabulary_name ?? 'UNK'}//{$preferred_concept_name ?? 'UNK'}//start"
     time: $device_exposure_start_datetime ?? ($device_exposure_start_date @ 11:59:59 p.m.)
     numeric_value: $quantity
     visit_occurrence_id: $visit_occurrence_id

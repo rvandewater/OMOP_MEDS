@@ -430,9 +430,11 @@ be functional. We also include a small sample of synthetic (LLM-generated) data 
 
 `metadata/codes.parquet` lists every code in the data, once per OMOP table it comes from (`table_name`,
 `occurrence_count`), and links it to the OMOP concept it was built from (`concept_id`). Codes from tables
-with a mapped and a source concept (observation, measurement, visit occurrence, condition and procedure
-occurrences, and device exposure end) end in the concept's `concept_code`, e.g. `LOINC//718-7`; the other
-tables end in its `concept_id`. From the source database's own vocabulary tables, each code gets:
+with a concept column end in the concept's `concept_code`, e.g. `LOINC//718-7` (notes are coded by their note
+class, falling back to the note type); only `RACE//` and `ETHNICITY//` end in a `concept_id`. A concept missing
+from the `concept` table gives a code starting with `OMOP_<table>//`, which names its column and `concept_id`, and
+no concept at all (null or 0) gives `OMOP_<table>//UNK`. From the source database's own vocabulary tables, each
+code gets:
 
 - `description`: the `concept_name` in the `concept` table;
 - `parent_codes`: the `vocabulary_id//concept_code` of every concept it "Maps to" in `concept_relationship`.
@@ -481,18 +483,19 @@ meds-extract-run spec=OMOP ... "overrides=['++stage_cfg.loinc_hierarchy=true']"
 suMEDS validates every code that ends in a `concept_code` of a pack vocabulary. It adds the official title where
 the code has none, and the code's vocabulary ancestors to `parent_codes`, after the "Maps to" parents from the ETL.
 It also looks up those parents and appends their ancestors. Every added parent is named in `parent_names`, a map
-from code to name. Nothing the ETL wrote is changed. A code ending in a `concept_id` is never matched itself, as no
-concept id of these vocabularies looks like one of their codes. For OMOP data this mostly means the ancestors of the ICD-10-PCS and ICD-9 procedure codes of
+from code to name. Nothing the ETL wrote is changed. A code of a concept missing from the `concept` table starts
+with `OMOP_<table>//` and is never matched. For OMOP data this mostly means the ancestors of the ICD-10-PCS and ICD-9 procedure codes of
 `procedure_occurrence`; conditions, drugs and measurements are mostly SNOMED, RxNorm and LOINC, which the source
 `concept` table already describes. On a credentialed OMOP CDM 5.4 extract, 4,396 of its 56,992 codes (3,682
 ICD-10-PCS and 714 ICD-9 procedure codes) gained 23,491 parents. Synthea27Nj and the MIMIC-IV demo have no such
 codes, so the packs add nothing to them, except LOINC Parts to 139 Synthea27Nj codes with `--loinc-hierarchy`.
 
 suMEDS's own Athena option (`athena_csv`) would add Athena's `CONCEPT_ANCESTOR` ancestors for every vocabulary,
-but the spec does not set it, and it is not recommended: suMEDS matches code strings, so a code ending in a `concept_id` matches the
-concept whose `concept_code` is that number, a different concept. In Synthea27Nj, `RxNorm//1154062//start`
-(concept 1154062, a fentanyl patch) matches RxNorm code 1154062 (an aspirin / butalbital product) and gets its
-ancestors. `athena_csv_dir` (above) looks codes up by `concept_id` instead.
+but the spec does not set it. suMEDS matches code strings, which finds the right concept since 0.7.0, as every
+code built from a concept ends in its `concept_code`. Up to 0.6, drug exposures and eras ended in the `concept_id`,
+which matched a different concept: in Synthea27Nj, `RxNorm//1154062//start` (concept 1154062, a fentanyl patch)
+matched RxNorm code 1154062 (an aspirin / butalbital product). `athena_csv_dir` (above) looks codes up by
+`concept_id`.
 
 ## Advanced datetime resolution
 

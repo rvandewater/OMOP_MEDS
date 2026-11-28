@@ -87,7 +87,7 @@ def _write_dataset(root: Path) -> tuple[Path, Path]:
                 "OMOP_measurement//measurement_concept_id:60,61",
                 "VOC//20//start",
                 "VOC//20//end",
-                "VOC//40//start",
+                "VOC//D40//start",
                 "VOC//20",
                 "MEDS_BIRTH",
             ],
@@ -127,11 +127,11 @@ def test_codes_are_described_by_the_concept_they_were_built_from(tmp_path):
     assert lab["occurrence_count"] == 2
     # Every "Maps to" target in the concept table, in one list; the missing target 31 is skipped.
     assert lab["parent_codes"] == ["STD//S30"]
-    # concept_id-keyed codes (drug_era, drug_exposure's raw drug_concept_id): concept 20 and 40.
+    # A concept_id-keyed code (as drug_era had up to 0.6) is linked to concept 20; drug_exposure to 40.
     for suffix in ("//start", "//end"):
         drug = rows[f"VOC//20{suffix}", "drug_era"]
         assert (drug["concept_id"], drug["description"]) == (20, "Drug twenty")
-    assert rows["VOC//40//start", "drug_exposure"]["description"] == "Drug forty"
+    assert rows["VOC//D40//start", "drug_exposure"]["description"] == "Drug forty"
     # A custom concept whose only "Maps to" target is missing from the source concept table.
     local = rows["LOCAL//L1", "measurement"]
     assert (local["description"], local["parent_codes"]) == ("Local lab", None)
