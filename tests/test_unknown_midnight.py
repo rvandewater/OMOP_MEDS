@@ -76,17 +76,12 @@ def _stage_with_midnights(raw: Path) -> Path:
     """The demo, with a null and a midnight visit start, a midnight visit end and notes at midnight."""
     _stage_demo_as("5.4", raw)
     visits = pl.read_csv(raw / "visit_occurrence.csv", infer_schema=False)
-    start = pl.col("visit_start_date") + " 00:00:00"
-    end = pl.col("visit_end_date") + " 00:00:00"
     visits.with_columns(
-        visit_start_datetime=pl.when(pl.int_range(pl.len()) == 0)
-        .then(None)
-        .when(pl.int_range(pl.len()) == 1)
-        .then(start)
-        .otherwise(pl.col("visit_start_datetime")),
-        visit_end_datetime=pl.when(pl.int_range(pl.len()) == 1)
-        .then(end)
-        .otherwise(pl.col("visit_end_datetime")),
+        _set(
+            "visit_start_datetime",
+            {0: None, 1: f"{visits['visit_start_date'][1]} 00:00:00"},
+        ),
+        _set("visit_end_datetime", {1: f"{visits['visit_end_date'][1]} 00:00:00"}),
     ).write_csv(raw / "visit_occurrence.csv")
 
     # Three notes at midnight: without a last edit, last edited the next morning, and last edited that day.
