@@ -54,7 +54,7 @@ def test_every_datetime_time_falls_back_to_its_date_at_the_end_of_the_day(versio
             event,
         )
         checked += 1
-    assert checked == 12
+    assert checked == 14
 
 
 def _events(cohort: Path) -> pl.DataFrame:
