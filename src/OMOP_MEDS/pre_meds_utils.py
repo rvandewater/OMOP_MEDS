@@ -376,44 +376,35 @@ def join_concept(
         df = df.join(person_df, on=SUBJECT_ID, how="semi")
         if len(reference_cols) > 0:
             df = df.with_columns(pl.col(reference_cols).cast(pl.Int64).replace(0, None))
-            if len(reference_cols) == 1:
+            clean_item = ""
+            for item in reference_cols:
+                table_names = table_name.split("_")
+                clean_item = item
+                for part in table_names:
+                    clean_item = clean_item.replace(part, "")
+                clean_item = clean_item.lstrip("_")
+                # Remove the table name prefix
                 df = df.join(
                     concept_df,
-                    left_on=reference_cols,
+                    left_on=item,
                     right_on="concept_id",
                     how="left",
+                    suffix=f"_{clean_item}",
                 )
-                df = df.with_columns(
-                    pl.col(reference_cols).alias("preferred_concept_name"),
-                    pl.col("vocabulary_id").alias("preferred_vocabulary_name"),
-                    pl.col(reference_cols[0]).alias("preferred_concept_id"),
-                )
-            else:
-                clean_item = ""
-                for item in reference_cols:
-                    table_names = table_name.split("_")
-                    clean_item = item
-                    for part in table_names:
-                        clean_item = clean_item.replace(part, "")
-                    clean_item = clean_item.lstrip("_")
-                    # Remove the table name prefix
-                    df = df.join(
-                        concept_df,
-                        left_on=item,
-                        right_on="concept_id",
-                        how="left",
-                        suffix=f"_{clean_item}",
-                    )
-                # Determine the concept id for the codes
-                df = determine_concept_id(
-                    df,
-                    original_concept_id_cols=reference_cols,
-                    mapped_concept_col="concept_code",
-                    mapped_vocab_col="vocabulary_id",
-                    source_concept_col=f"concept_code_{clean_item}",
-                    source_vocab_col=f"vocabulary_id_{clean_item}",
-                    prefer_source=prefer_source,
-                )
+            # With one reference column, its concept is both the "mapped" and the "source" one.
+            source = "" if len(reference_cols) == 1 else f"_{clean_item}"
+            # Determine the concept code for the codes
+            df = determine_concept_id(
+                df,
+                original_concept_id_cols=reference_cols,
+                mapped_concept_col="concept_code",
+                mapped_vocab_col="vocabulary_id",
+                source_concept_col=f"concept_code{source}",
+                source_vocab_col=f"vocabulary_id{source}",
+                # prefer_source reorders a mapped/source pair only, not e.g. note class and type.
+                prefer_source=prefer_source
+                and reference_cols[-1].endswith("_source_concept_id"),
+            )
         # df_collected = df.collect()
         selected_cols = [*base_output_cols, *base_concept_cols]
         schema_names = set(df.collect_schema().names())

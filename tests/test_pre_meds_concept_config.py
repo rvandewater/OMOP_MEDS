@@ -59,19 +59,25 @@ def _block(table: str, version: str) -> dict:
 
 CONCEPTS = pl.LazyFrame(
     {
-        "concept_id": [9202, 3012888, 2000000001],
-        "concept_name": ["Outpatient Visit", "Diastolic blood pressure", "Local code"],
-        "vocabulary_id": ["Visit", "LOINC", "LOCAL"],
-        "concept_code": ["OP", "8462-4", "BP-DIA"],
+        "concept_id": [9202, 3012888, 2000000001, 4000, 4001],
+        "concept_name": [
+            "Outpatient Visit",
+            "Diastolic blood pressure",
+            "Local code",
+            "Progress note",
+            "EHR note",
+        ],
+        "vocabulary_id": ["Visit", "LOINC", "LOCAL", "LOINC", "Note Type"],
+        "concept_code": ["OP", "8462-4", "BP-DIA", "11506-3", "NT-EHR"],
     }
 )
 PERSONS = pl.LazyFrame({SUBJECT_ID: [1]})
 
 
 def _resolve(table: str, version: str, rows: dict, prefer_source: bool = False):
-    fn = join_concept(
-        table_name=table, **_block(table, version), prefer_source=prefer_source
-    )
+    block = _block(table, version)
+    block.pop("datetime_resolver", None)
+    fn = join_concept(table_name=table, **block, prefer_source=prefer_source)
     out = fn(
         pl.LazyFrame({SUBJECT_ID: [1] * len(next(iter(rows.values()))), **rows}),
         CONCEPTS,
@@ -112,3 +118,22 @@ def test_observation_prefers_mapped_concept_unless_prefer_source(
     }
 
     assert _resolve("observation", version, rows, prefer_source) == [expected]
+
+
+@pytest.mark.parametrize("version", OMOP_VERSIONS)
+@pytest.mark.parametrize(
+    ("class_id", "prefer_source", "expected"),
+    [
+        (4000, False, ("LOINC", "11506-3")),
+        # The note type (its provenance, e.g. EHR) only stands in when the class is unknown.
+        (0, False, ("Note Type", "NT-EHR")),
+        (999, False, ("Note Type", "NT-EHR")),
+        # Class and type are not a mapped/source pair, so prefer_source does not reorder them.
+        (4000, True, ("LOINC", "11506-3")),
+    ],
+    ids=["class", "class_0", "class_not_in_vocabulary", "prefer_source"],
+)
+def test_note_is_coded_by_its_class(version, class_id, prefer_source, expected):
+    rows = {"note_class_concept_id": [class_id], "note_type_concept_id": [4001]}
+
+    assert _resolve("note", version, rows, prefer_source) == [expected]
