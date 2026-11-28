@@ -9,22 +9,27 @@ import json
 import os
 import shutil
 import subprocess
+from importlib.metadata import version
 from pathlib import Path
 
 import polars as pl
 import pytest
 from e2e_demo_test import _stage_local_demo_omop
+from meds import DatasetMetadataSchema
 from MEDS_extract.config import MessyConfig
 from omegaconf import OmegaConf
 from omop_run import SCRIPTS_DIR, run_omop
 
 import OMOP_MEDS.pre_meds
+from OMOP_MEDS import __version__
 from OMOP_MEDS.pre_meds import main as pre_meds_main
 from OMOP_MEDS.stages import (
     PRE_MEDS_DEFAULTS,
     PRE_MEDS_STAGE,
+    SETTINGS_FILE,
     _pre_meds,
     pre_meds_config,
+    record_provenance,
 )
 
 SPEC_TABLES = sorted(MessyConfig.load("OMOP").needed_source_columns())
@@ -180,6 +185,8 @@ def test_deprecated_runner_command_runs_the_spec(raw: Path, tmp_path: Path):
     dataset = json.loads((cohort / "metadata" / "dataset.json").read_text())
     assert dataset["dataset_name"] == "OLD_RUNNER_NAME"
     assert "sumeds_enrichment" not in dataset
+    assert dataset["etl_name"] == "OMOP_MEDS"
+    assert dataset["omop_meds"]["limit_subjects"] == 10
 
 
 def test_deprecated_runner_command_rejects_removed_options(tmp_path: Path):
@@ -209,3 +216,92 @@ def test_deprecated_runner_argument_translation():
     )
     assert result.attempted >= 3
     assert result.failed == 0
+
+
+def test_pre_stage_writes_its_settings_without_paths_or_batching(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.setattr(OMOP_MEDS.pre_meds, "main", lambda cfg: None)
+    monkeypatch.setenv("OMOP_VERSION", "5.4")
+
+    _pre_meds(_stage_cfg(tmp_path, prefer_source=True))
+
+    settings = json.loads(
+        (tmp_path / "out" / PRE_MEDS_STAGE / SETTINGS_FILE).read_text()
+    )
+    assert settings["omop_meds_version"] == __version__
+    assert (settings["omop_version"], settings["prefer_source"]) == ("5.4", True)
+    assert settings["tables_to_ignore"] == PRE_MEDS_DEFAULTS["tables_to_ignore"]
+    assert not any(k.startswith("pre_meds_") for k in settings)
+    assert str(tmp_path) not in json.dumps(settings)
+
+
+def _dataset_json(cohort: Path) -> Path:
+    fp = cohort / "metadata" / "dataset.json"
+    fp.parent.mkdir(parents=True)
+    fp.write_text(
+        json.dumps(
+            {
+                "dataset_name": "D",
+                "dataset_version": "1",
+                "etl_name": "MEDS_transforms",
+                "etl_version": "0.7.3",
+                "meds_version": "0.4.1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "sumeds_enrichment": {"rules": "OMOP"},
+            }
+        )
+    )
+    return fp
+
+
+def test_provenance_is_recorded_keeping_the_other_keys_idempotently(tmp_path: Path):
+    fp = _dataset_json(tmp_path / "cohort")
+    pre_MEDS_dir = tmp_path / PRE_MEDS_STAGE
+    pre_MEDS_dir.mkdir()
+    (pre_MEDS_dir / SETTINGS_FILE).write_text(
+        json.dumps({"omop_meds_version": "0.0.1", "omop_version": "5.5"})
+    )
+
+    record_provenance(tmp_path / "cohort", pre_MEDS_dir, athena_fallback=True)
+    first = fp.read_text()
+    record_provenance(tmp_path / "cohort", pre_MEDS_dir, athena_fallback=True)
+
+    assert fp.read_text() == first
+    dataset = json.loads(first)
+    DatasetMetadataSchema.validate(dataset)
+    assert (dataset["dataset_name"], dataset["created_at"]) == (
+        "D",
+        "2026-01-01T00:00:00+00:00",
+    )
+    assert dataset["sumeds_enrichment"] == {"rules": "OMOP"}
+    assert (dataset["etl_name"], dataset["etl_version"]) == ("OMOP_MEDS", __version__)
+    assert dataset["omop_meds"] == {
+        "omop_meds_version": "0.0.1",
+        "omop_version": "5.5",
+        "meds_extract_version": version("MEDS_extract"),
+        "meds_transforms_version": version("MEDS_transforms"),
+        "athena_fallback": True,
+    }
+    assert sorted(p.name for p in fp.parent.iterdir()) == ["dataset.json"]
+
+
+def test_provenance_without_settings_records_the_versions(tmp_path: Path, caplog):
+    fp = _dataset_json(tmp_path)
+
+    record_provenance(tmp_path, tmp_path / PRE_MEDS_STAGE)
+
+    assert SETTINGS_FILE in caplog.text
+    assert set(json.loads(fp.read_text())["omop_meds"]) == {
+        "omop_meds_version",
+        "meds_extract_version",
+        "meds_transforms_version",
+        "athena_fallback",
+    }
+
+
+def test_provenance_without_dataset_json_warns_and_skips(tmp_path: Path, caplog):
+    record_provenance(tmp_path, tmp_path / PRE_MEDS_STAGE)
+
+    assert "dataset.json" in caplog.text
+    assert not (tmp_path / "metadata").exists()

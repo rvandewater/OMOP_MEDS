@@ -18,7 +18,9 @@ code metadata code is imported when a stage runs.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 PRE_MEDS_STAGE = "omop_pre_meds"
 CODES_METADATA_STAGE = "omop_codes_metadata"
+#: Written by `omop_pre_meds` into its output dir: the OMOP_MEDS version and the options that built the pre-MEDS
+#: tables, which `omop_codes_metadata` records in `metadata/dataset.json`.
+SETTINGS_FILE = "omop_meds_settings.json"
 
 #: Options of `omop_pre_meds`. Set them in the spec (`- omop_pre_meds: {prefer_source: true}`) or for one run
 #: with `"overrides=['++stage_cfg.prefer_source=true']"`.
@@ -136,6 +141,29 @@ def _pre_meds(cfg: DictConfig) -> None:
             **options,
         )
     )
+    _write_settings(out_dir, options)
+
+
+def _write_settings(out_dir: Path, options: dict[str, Any]) -> None:
+    """Write `SETTINGS_FILE`: the OMOP_MEDS version and every option but batching, with the resolved OMOP version.
+
+    Batching (`pre_meds_*`) does not change the output; every other option, including ones added later, is
+    recorded. The options hold no paths.
+    """
+    from . import __version__, dataset_info
+    from .omop_versions import normalize_omop_version
+
+    settings = {k: v for k, v in options.items() if not k.startswith("pre_meds_")}
+    settings["omop_version"] = normalize_omop_version(
+        settings.get("omop_version") or dataset_info.omop_version
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / SETTINGS_FILE).write_text(
+        json.dumps(
+            {"omop_meds_version": __version__, **settings},
+            default=lambda v: OmegaConf.to_container(v, resolve=True),
+        )
+    )
 
 
 def _codes_metadata(cfg: DictConfig) -> None:
@@ -163,6 +191,68 @@ def _codes_metadata(cfg: DictConfig) -> None:
         enrich_codes_metadata_with_athena(
             codes_fp, pre_MEDS_dir, Path(athena_csv_dir).expanduser()
         )
+    record_provenance(cohort_dir, pre_MEDS_dir, athena_fallback=bool(athena_csv_dir))
+
+
+def record_provenance(
+    cohort_dir: Path, pre_MEDS_dir: Path, athena_fallback: bool = False
+) -> None:
+    """Record in `metadata/dataset.json` which OMOP_MEDS version and settings built the dataset.
+
+    MEDS-Extract names MEDS-Transforms as the ETL; this sets `etl_name`/`etl_version` to OMOP_MEDS and adds an
+    `omop_meds` block: the settings `omop_pre_meds` wrote (`SETTINGS_FILE`), the MEDS-Extract and MEDS-Transforms
+    versions, and whether the Athena fallback was used (never its path). Other keys are kept, and a re-run gives
+    the same file.
+
+    Examples:
+        >>> import tempfile
+        >>> from OMOP_MEDS import __version__
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     fp = Path(d, "metadata", "dataset.json")
+        ...     fp.parent.mkdir()
+        ...     _ = fp.write_text(json.dumps({"dataset_name": "X", "etl_name": "MEDS_transforms"}))
+        ...     record_provenance(Path(d), Path(d, PRE_MEDS_STAGE))
+        ...     dataset = json.loads(fp.read_text())
+        >>> dataset["dataset_name"], dataset["etl_name"], dataset["etl_version"] == __version__
+        ('X', 'OMOP_MEDS', True)
+        >>> sorted(dataset["omop_meds"])
+        ['athena_fallback', 'meds_extract_version', 'meds_transforms_version', 'omop_meds_version']
+    """
+    from importlib.metadata import version
+
+    from meds import DatasetMetadataSchema, dataset_metadata_filepath
+
+    from . import __version__
+
+    dataset_fp = cohort_dir / dataset_metadata_filepath
+    if not dataset_fp.is_file():
+        logger.warning(
+            f"No {dataset_fp}: the OMOP_MEDS version and settings are not recorded."
+        )
+        return
+    settings_fp = pre_MEDS_dir / SETTINGS_FILE
+    if settings_fp.is_file():
+        record = json.loads(settings_fp.read_text())
+    else:
+        logger.warning(
+            f"No {settings_fp} from {PRE_MEDS_STAGE}: recording the versions only."
+        )
+        record = {"omop_meds_version": __version__}
+    record |= {
+        "meds_extract_version": version("MEDS_extract"),
+        "meds_transforms_version": version("MEDS_transforms"),
+        "athena_fallback": athena_fallback,
+    }
+    dataset = json.loads(dataset_fp.read_text())
+    dataset |= {
+        "etl_name": "OMOP_MEDS",
+        "etl_version": __version__,
+        "omop_meds": record,
+    }
+    DatasetMetadataSchema.validate(dataset)
+    tmp_fp = dataset_fp.with_name(f".{dataset_fp.name}.tmp")
+    tmp_fp.write_text(json.dumps(dataset))
+    os.replace(tmp_fp, dataset_fp)
 
 
 pre_meds_stage = Stage.register(

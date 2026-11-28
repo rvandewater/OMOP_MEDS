@@ -9,6 +9,8 @@ import pytest
 from meds import CodeMetadataSchema
 from omop_run import run_omop
 
+from OMOP_MEDS import __version__
+
 DEMO_RESOURCES_DIR = Path(__file__).resolve().parent / "demo_resources"
 
 # test_e2e downloads from PhysioNet; above the 25-minute download budget, inside the 35-minute CI job timeout.
@@ -94,6 +96,16 @@ def test_local_e2e_demo_resources(local_demo_cohort: Path):
     assert dataset_metadata.exists(), (
         f"Dataset metadata not found in {metadata_path}; found {all_files}"
     )
+    dataset = json.loads(dataset_metadata.read_text())
+    assert (dataset["etl_name"], dataset["etl_version"]) == ("OMOP_MEDS", __version__)
+    settings = dataset["omop_meds"]
+    assert settings["omop_meds_version"] == __version__
+    assert settings["omop_version"] == "5.3"
+    assert settings["prefer_source"] is False
+    assert settings["join_on_visit"] is False
+    assert settings["athena_fallback"] is False
+    assert settings["meds_transforms_version"]
+    assert not any(k.startswith("pre_meds_") for k in settings)
 
     codes_metadata = metadata_path / "codes.parquet"
     assert codes_metadata.exists(), (

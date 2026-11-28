@@ -74,8 +74,12 @@ writes the MEDS dataset to `$MEDS_DIR` (`data/` and `metadata/`, per the
 [MEDS standard](https://medical-event-data-standard.github.io/)), and by default keeps only that (see
 [Keeping the intermediate outputs](#keeping-the-intermediate-outputs)). `dataset_version=` and
 `etl_metadata.dataset_name` are recorded in `metadata/dataset.json`; without them, a build is named `OMOP` with
-version `unknown:<OMOP_MEDS version>`. The run has three OMOP-specific steps around MEDS-Extract's canonical
-stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
+version `unknown:<OMOP_MEDS version>`. `dataset.json` also records which build made the dataset: `etl_name` is
+`OMOP_MEDS` and `etl_version` its version, and an `omop_meds` block holds the `omop_pre_meds` options that change the
+output (`omop_version`, resolved; `prefer_source`, `join_on_visit`, `limit_subjects`, `tables_to_ignore`, ...; not
+the batching options), `omop_meds_version`, `meds_extract_version`, `meds_transforms_version` and
+`athena_fallback` (whether `athena_csv_dir` was set). No paths are recorded. The run has three OMOP-specific steps
+around MEDS-Extract's canonical stages (`src/OMOP_MEDS/stages.py`), declared in the spec's `etl:` block
 ([`src/OMOP_MEDS/configs/event_configs.yaml`](src/OMOP_MEDS/configs/event_configs.yaml)):
 
 1. `omop_pre_meds` joins the OMOP tables to their concepts and writes the pre-MEDS tables to
