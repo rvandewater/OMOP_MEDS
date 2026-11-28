@@ -57,6 +57,38 @@ def cast_to_datetime(schema: Any, column: str, move_to_end_of_day: bool = False)
         # raise RuntimeError("Unknown how to handle date type? " + schema[column] + " " + column)
 
 
+def null_unknown_midnight(df: pl.LazyFrame) -> pl.LazyFrame:
+    """Null every `*_datetime` at exactly 00:00:00, so that the event's date fallback times it instead.
+
+    The OMOP CDM fills an unknown time of day with midnight. Left as is, such an event would sort before
+    everything else on its date and leak into predictions made earlier that day. Text columns (CSV extension
+    columns outside the CDM schema) are parsed first; a date-only text value is a midnight, so it is nulled too.
+
+    Examples:
+        >>> from datetime import datetime
+        >>> df = pl.LazyFrame({
+        ...     "x_datetime": [datetime(2020, 1, 1), datetime(2020, 1, 1, 0, 0, 1), None],
+        ...     "x_ext_datetime": ["2020-01-01 00:00:00", "2020-01-01 13:00:00", "2020-01-01"],
+        ...     "x_date": [datetime(2020, 1, 1).date()] * 3,
+        ... })
+        >>> null_unknown_midnight(df).collect().to_dict(as_series=False)  # doctest: +NORMALIZE_WHITESPACE
+        {'x_datetime': [None, datetime.datetime(2020, 1, 1, 0, 0, 1), None],
+         'x_ext_datetime': [None, datetime.datetime(2020, 1, 1, 13, 0), None],
+         'x_date': [datetime.date(2020, 1, 1), datetime.date(2020, 1, 1), datetime.date(2020, 1, 1)]}
+    """
+    schema = df.collect_schema()
+    columns = {
+        c: cast_to_datetime(schema, c)
+        for c, dtype in schema.items()
+        if c.endswith("_datetime")
+        and (dtype == pl.Utf8 or isinstance(dtype, pl.Datetime))
+    }
+    return df.with_columns(
+        pl.when(time.dt.time() != pl.time(0)).then(time).alias(c)
+        for c, time in columns.items()
+    )
+
+
 def build_preferred_event_datetime(
     schema: Any,
     primary_datetime_col: Optional[str] = None,
@@ -761,6 +793,7 @@ def set_up_metadata(
     limit,
     schema_loader: OMOPSchemaBase,
     selector: SelectorType,
+    midnight_is_unknown_time: bool = True,
 ) -> tuple[pl.LazyFrame, pl.LazyFrame]:
     person_out_fp = MEDS_input_dir / "person_birth_death.parquet"
     concept_out_fp = MEDS_input_dir / "concept.parquet"
@@ -809,6 +842,8 @@ def set_up_metadata(
         death_in_fp = get_table_path(OMOP_input_dir, "death")
         if death_in_fp:
             death_df = load_raw_file(death_in_fp, schema_loader, selector)
+            if midnight_is_unknown_time:
+                death_df = null_unknown_midnight(death_df)
         else:
             death_df = None
 

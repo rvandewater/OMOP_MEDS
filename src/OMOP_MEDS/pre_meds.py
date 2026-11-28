@@ -32,6 +32,7 @@ from .pre_meds_utils import (
     set_up_metadata,
     extract_nlp_features,
     build_preferred_event_datetime,
+    null_unknown_midnight,
 )
 from .pre_meds_data_loader import ShardedTableDataLoader
 from tqdm import tqdm
@@ -208,6 +209,14 @@ def main(cfg: DictConfig) -> None:
             "Preferring source values over mapped values when available (e.g., Epic over LOINC)."
             " This has major implications for downstream analysis."
         )
+    # OMOP fills an unknown time of day with 00:00:00; such times are nulled so that each event falls back to its
+    # date at the end (or, for visit starts, the start) of the day. Off for sources whose midnights are real.
+    midnight_is_unknown_time = bool(cfg.get("midnight_is_unknown_time", True))
+    if not midnight_is_unknown_time:
+        logger.warning(
+            "midnight_is_unknown_time=False: times of exactly 00:00:00 are kept. If the source fills unknown "
+            "times with midnight, as the OMOP CDM convention does, those events leak into the rest of their day."
+        )
     MEDS_input_dir = Path(cfg.pre_MEDS_dir)
     MEDS_input_dir.mkdir(parents=True, exist_ok=True)
     migrate_legacy_batched_outputs(MEDS_input_dir)
@@ -258,10 +267,24 @@ def main(cfg: DictConfig) -> None:
             **preprocessor_cfg,
             prefer_source=cfg.prefer_source,
         )
+        if midnight_is_unknown_time:
+            # Before the datetime resolver, so that a note at midnight falls back to the end of its date, and its
+            # last edit overrides that only when later.
+            functions[table_name] = wrap_with_null_unknown_midnight(
+                functions[table_name]
+            )
         if datetime_resolver_cfg is not None:
             functions[table_name] = wrap_with_datetime_resolver(
                 functions[table_name], datetime_resolver_cfg
             )
+
+    def wrap_with_null_unknown_midnight(base_fn):
+        def fn(
+            df: pl.LazyFrame, concept_df: pl.LazyFrame, person_df: pl.LazyFrame
+        ) -> pl.LazyFrame:
+            return base_fn(null_unknown_midnight(df), concept_df, person_df)
+
+        return fn
 
     def wrap_with_datetime_resolver(
         base_fn,
@@ -374,6 +397,7 @@ def main(cfg: DictConfig) -> None:
         schema_loader=schema_loader,
         selector=selector,
         join_on_visit=cfg.join_on_visit,
+        midnight_is_unknown_time=midnight_is_unknown_time,
     )
 
     # Cache care_site lookup once per run; False means unavailable and skip subsequent attempts.
